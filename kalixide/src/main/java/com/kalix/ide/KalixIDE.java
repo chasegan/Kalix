@@ -1,5 +1,7 @@
 package com.kalix.ide;
 
+import com.kalix.ide.linter.parsing.INIModelParser;
+import com.kalix.ide.parametersheet.ParameterSheetWindow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
@@ -11,9 +13,13 @@ import com.kalix.ide.cli.ProcessExecutor;
 import com.kalix.ide.components.AutoHidingProgressBar;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.dialogs.PreferencesDialog;
+import com.kalix.ide.diff.DiffWindow;
+import com.kalix.ide.filedialog.KalixFileDialog;
+import com.kalix.ide.flowviz.FlowVizWindow;
 import com.kalix.ide.io.CompressedCsvFormat;
 import com.kalix.ide.linter.LinterPreferencesPanel;
 import com.kalix.ide.linter.SchemaManager;
+import com.kalix.ide.document.DataDocument;
 import com.kalix.ide.document.DocumentManager;
 import com.kalix.ide.document.DocumentWorkspaceView;
 import com.kalix.ide.document.ErrorLogDocument;
@@ -45,8 +51,10 @@ import com.kalix.ide.preferences.ui.SystemPreferencePage;
 import com.kalix.ide.preferences.ui.ThemePreferencePage;
 import com.kalix.ide.rendering.NodeLabelMode;
 import com.kalix.ide.themes.NodeTheme;
+import com.kalix.ide.themes.ThemePreferences;
 import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.utils.ErrorLog;
+import com.kalix.ide.utils.FileManagerLauncher;
 import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.utils.TerminalActions;
 import com.kalix.ide.utils.ThemeUtils;
@@ -79,20 +87,36 @@ import javax.swing.JToolBar;
 import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
 import javax.swing.UnsupportedLookAndFeelException;
+import javax.swing.event.HyperlinkEvent;
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.Desktop;
+import java.awt.Toolkit;
+import java.awt.datatransfer.StringSelection;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import javax.swing.AbstractAction;
 import javax.swing.ActionMap;
 import javax.swing.InputMap;
 import javax.swing.KeyStroke;
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
+import java.util.function.Supplier;
 import java.util.prefs.Preferences;
 
 /**
@@ -125,8 +149,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     // Cached views of the active document, refreshed when the active document changes.
     private MapPanel mapPanel;
     private EnhancedTextEditor textEditor;
-    private java.util.function.Supplier<com.kalix.ide.linter.parsing.INIModelParser.ParsedModel> modelSupplier;
-    private com.kalix.ide.parametersheet.ParameterSheetWindow parameterSheetWindow;
+    private Supplier<INIModelParser.ParsedModel> modelSupplier;
+    private ParameterSheetWindow parameterSheetWindow;
     private WorkspacePanel workspacePanel;
     private ProjectTreePanel projectTreePanel;
     private DocumentTabPane documentTabPane;
@@ -294,13 +318,13 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
         // The file dialogs' sidebar shares the File menu's navigation memory: recent
         // folders, plus the folders recent files live in. One list, not two.
-        com.kalix.ide.filedialog.KalixFileDialog.setRecentFoldersProvider(() -> {
-            java.util.LinkedHashSet<java.nio.file.Path> recents = new java.util.LinkedHashSet<>();
+        KalixFileDialog.setRecentFoldersProvider(() -> {
+            LinkedHashSet<Path> recents = new LinkedHashSet<>();
             for (String p : recentFoldersManager.getRecentFiles()) {
-                recents.add(java.nio.file.Path.of(p));
+                recents.add(Path.of(p));
             }
             for (String p : recentFilesManager.getRecentFiles()) {
-                java.nio.file.Path parent = java.nio.file.Path.of(p).getParent();
+                Path parent = Path.of(p).getParent();
                 if (parent != null) {
                     recents.add(parent);
                 }
@@ -310,7 +334,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
         // Renames made inside a file dialog re-point open editor tabs, exactly as the
         // project tree's renames do.
-        com.kalix.ide.filedialog.KalixFileDialog.setPathMovedListener(
+        KalixFileDialog.setPathMovedListener(
             (oldPath, newPath) -> relinkOpenDocuments(oldPath.toFile(), newPath.toFile()));
     }
 
@@ -521,7 +545,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         if (map != null) {
             // Map appearance from saved preferences (follow mode resolves to the
             // application theme's linked node palette).
-            map.setNodeTheme(com.kalix.ide.themes.ThemePreferences.effectiveNodeTheme());
+            map.setNodeTheme(ThemePreferences.effectiveNodeTheme());
             map.setShowGridlines(PreferenceKeys.MAP_SHOW_GRIDLINES.get());
             map.setLabelMode(NodeLabelMode.saved());
             map.setTrackpadNavigation(PreferenceKeys.MAP_TRACKPAD_NAVIGATION.get());
@@ -618,7 +642,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         String activeName = activeFile != null ? activeFile.getName() : "Active editor";
         // referenceModel = left, thisModel = right (see DiffWindow): selected file on the left,
         // the editor's current text on the right.
-        new com.kalix.ide.diff.DiffWindow(
+        new DiffWindow(
             active.getText(), fileText,
             "Compare: " + file.getName() + " vs active editor",
             file.getName(), activeName);
@@ -639,7 +663,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             return;
         }
         // referenceModel = left, thisModel = right (see DiffWindow).
-        new com.kalix.ide.diff.DiffWindow(
+        new DiffWindow(
             rightText, leftText,
             "Compare: " + left.getName() + " vs " + right.getName(),
             left.getName(), right.getName());
@@ -652,16 +676,15 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             // raw compressed bytes could only produce an encoding error or garbage.
             // Bounded by the same in-memory limit the data viewer honours.
             if (CompressedCsvFormat.isCompressedSourceResult(file.getName())) {
-                throw new java.io.IOException(CompressedCsvFormat.COMPRESSED_SOURCE_RESULT_NOT_SUPPORTED);
+                throw new IOException(CompressedCsvFormat.COMPRESSED_SOURCE_RESULT_NOT_SUPPORTED);
             }
             if (CompressedCsvFormat.isCompressedCsv(file.getName())) {
-                long limit = com.kalix.ide.preferences.PreferenceKeys
-                    .DATAVIEW_COMPRESSED_CSV_MEMORY_LIMIT_MB.get() * 1024L * 1024L;
+                long limit = PreferenceKeys.DATAVIEW_COMPRESSED_CSV_MEMORY_LIMIT_MB.get() * 1024L * 1024L;
                 return new String(CompressedCsvFormat.decompressBounded(file, limit),
-                    java.nio.charset.StandardCharsets.UTF_8);
+                    StandardCharsets.UTF_8);
             }
-            return java.nio.file.Files.readString(file.toPath());
-        } catch (java.io.IOException ex) {
+            return Files.readString(file.toPath());
+        } catch (IOException ex) {
             String message = "Could not read \"" + file.getName() + "\": " + ex.getMessage();
             DialogUtils.showError(this, message, "Compare");
             return null;
@@ -690,14 +713,14 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      * silently resurrected the old file name.
      */
     private void relinkOpenDocuments(File oldPath, File newPath) {
-        java.nio.file.Path oldP = oldPath.toPath().toAbsolutePath().normalize();
+        Path oldP = oldPath.toPath().toAbsolutePath().normalize();
         boolean relinked = false;
         for (KalixDocument document : documentManager.getDocuments()) {
             File backing = document.getFile();
             if (backing == null) {
                 continue;
             }
-            java.nio.file.Path p = backing.toPath().toAbsolutePath().normalize();
+            Path p = backing.toPath().toAbsolutePath().normalize();
             File remapped;
             if (p.equals(oldP)) {
                 remapped = newPath;
@@ -744,7 +767,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      * the active one — is auto-reloaded on external changes.
      */
     private void refreshWatchedFiles() {
-        java.util.List<File> files = new java.util.ArrayList<>();
+        List<File> files = new ArrayList<>();
         for (KalixDocument document : documentManager.getDocuments()) {
             if (document.getFile() != null) {
                 files.add(document.getFile());
@@ -1010,9 +1033,9 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         });
 
         // Handle window closing to ensure proper cleanup
-        addWindowListener(new java.awt.event.WindowAdapter() {
+        addWindowListener(new WindowAdapter() {
             @Override
-            public void windowClosing(java.awt.event.WindowEvent e) {
+            public void windowClosing(WindowEvent e) {
                 exitApplication();
             }
         });
@@ -1261,7 +1284,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     @Override
     public void openFolder() {
         File current = projectTreePanel.getRootFile();
-        com.kalix.ide.filedialog.KalixFileDialog.chooseFolder(this)
+        KalixFileDialog.chooseFolder(this)
             .title("Open Folder")
             .startIn(current != null ? current.getParentFile() : null)
             .show()
@@ -1414,7 +1437,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     @Override
     public void exitApplication() {
         // Check for unsaved changes in every open document before exiting.
-        for (KalixDocument document : new java.util.ArrayList<>(documentManager.getDocuments())) {
+        for (KalixDocument document : new ArrayList<>(documentManager.getDocuments())) {
             if (!checkUnsavedChanges(document,
                     "You have unsaved changes in \"%s\".\n\nDo you want to save your changes before closing?")) {
                 return; // User cancelled the exit
@@ -1601,7 +1624,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
     @Override
     public void flowViz() {
-        com.kalix.ide.flowviz.FlowVizWindow.createNewWindow();
+        FlowVizWindow.createNewWindow();
     }
 
     @Override
@@ -1619,7 +1642,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         if (document == null) {
             return;
         }
-        parameterSheetWindow = new com.kalix.ide.parametersheet.ParameterSheetWindow(
+        parameterSheetWindow = new ParameterSheetWindow(
             this, document.getModelSupplier(), document.getEditor());
         parameterSheetWindow.setVisible(true);
     }
@@ -1642,10 +1665,10 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
         // Add hyperlink click listener
         editorPane.addHyperlinkListener(e -> {
-            if (e.getEventType() == javax.swing.event.HyperlinkEvent.EventType.ACTIVATED) {
+            if (e.getEventType() == HyperlinkEvent.EventType.ACTIVATED) {
                 try {
-                    if (java.awt.Desktop.isDesktopSupported()) {
-                        java.awt.Desktop.getDesktop().browse(e.getURL().toURI());
+                    if (Desktop.isDesktopSupported()) {
+                        Desktop.getDesktop().browse(e.getURL().toURI());
                     }
                 } catch (Exception ex) {
                     updateStatusError("Error opening website: " + ex.getMessage());
@@ -1659,10 +1682,10 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     @Override
     public void openWebsite() {
         try {
-            if (java.awt.Desktop.isDesktopSupported()) {
-                java.awt.Desktop desktop = java.awt.Desktop.getDesktop();
-                if (desktop.isSupported(java.awt.Desktop.Action.BROWSE)) {
-                    desktop.browse(java.net.URI.create(AppConstants.APP_WEBSITE_URL));
+            if (Desktop.isDesktopSupported()) {
+                Desktop desktop = Desktop.getDesktop();
+                if (desktop.isSupported(Desktop.Action.BROWSE)) {
+                    desktop.browse(URI.create(AppConstants.APP_WEBSITE_URL));
                     updateStatus("Opening Kalix development website");
                 } else {
                     updateStatus("Browser not supported - website: " + AppConstants.APP_WEBSITE_URL);
@@ -1685,7 +1708,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             toggleGridlines(showGridlines);
 
             // Update node theme (follow mode resolves to the application theme's)
-            setNodeTheme(com.kalix.ide.themes.ThemePreferences.effectiveNodeTheme());
+            setNodeTheme(ThemePreferences.effectiveNodeTheme());
 
             // Sync toolbar button state
             syncToggleButtonStates();
@@ -1693,7 +1716,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
         Runnable onFlowVizPreferencesChanged = () -> {
             // Update all open FlowViz windows with new preferences
-            for (com.kalix.ide.flowviz.FlowVizWindow window : com.kalix.ide.flowviz.FlowVizWindow.getOpenWindows()) {
+            for (FlowVizWindow window : FlowVizWindow.getOpenWindows()) {
                 window.reloadPreferences();
             }
         };
@@ -1814,7 +1837,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     public void searchModel() {
         // A read-only data tab's editor is a hidden empty buffer: its Find would
         // always report "not found". Route to the data views' unified Find.
-        if (documentManager.getActiveDocument() instanceof com.kalix.ide.document.DataDocument dd
+        if (documentManager.getActiveDocument() instanceof DataDocument dd
                 && dd.routesFindToDataView()) {
             dd.showDataFind();
             return;
@@ -1824,7 +1847,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     
     @Override
     public void findNext() {
-        if (documentManager.getActiveDocument() instanceof com.kalix.ide.document.DataDocument dd
+        if (documentManager.getActiveDocument() instanceof DataDocument dd
                 && dd.routesFindToDataView()) {
             dd.repeatDataFind(true);
             return;
@@ -1834,7 +1857,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
     @Override
     public void findPrevious() {
-        if (documentManager.getActiveDocument() instanceof com.kalix.ide.document.DataDocument dd
+        if (documentManager.getActiveDocument() instanceof DataDocument dd
                 && dd.routesFindToDataView()) {
             dd.repeatDataFind(false);
             return;
@@ -1844,7 +1867,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
     @Override
     public void showFindReplaceDialog() {
-        if (documentManager.getActiveDocument() instanceof com.kalix.ide.document.DataDocument dd
+        if (documentManager.getActiveDocument() instanceof DataDocument dd
                 && dd.routesFindToDataView()) {
             dd.showDataFind(); // nothing to replace in a read-only view
             updateStatus("Read-only — Find opened (no replacing)");
@@ -2030,8 +2053,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         File currentFile = fileOperations.getCurrentFile();
         if (currentFile != null) {
             String path = currentFile.getAbsolutePath();
-            java.awt.datatransfer.StringSelection selection = new java.awt.datatransfer.StringSelection(path);
-            java.awt.Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, null);
+            StringSelection selection = new StringSelection(path);
+            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, null);
             updateStatus("Copied: " + path);
         } else {
             updateStatus("No model file is currently open");
@@ -2058,7 +2081,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         }
 
         try {
-            com.kalix.ide.utils.FileManagerLauncher.openFileManagerAt(targetDirectory);
+            FileManagerLauncher.openFileManagerAt(targetDirectory);
 
             // Show success message
             String dirPath = targetDirectory != null ? targetDirectory.getAbsolutePath() : System.getProperty("user.home");
@@ -2159,15 +2182,15 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         try {
             // Read template from resources
             String templateContent;
-            try (java.io.InputStream is = getClass().getResourceAsStream("/CLAUDE.md")) {
+            try (InputStream is = getClass().getResourceAsStream("/CLAUDE.md")) {
                 if (is == null) {
                     throw new RuntimeException("Template file not found in resources");
                 }
-                templateContent = new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                templateContent = new String(is.readAllBytes(), StandardCharsets.UTF_8);
             }
 
             // Write to target file
-            java.nio.file.Files.writeString(targetFile.toPath(), templateContent, java.nio.charset.StandardCharsets.UTF_8);
+            Files.writeString(targetFile.toPath(), templateContent, StandardCharsets.UTF_8);
 
             updateStatus(fileName + " created in: " + targetDirectory.getAbsolutePath());
 
@@ -2329,7 +2352,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // String.format/printf in the app locale-independent (a comma-decimal OS
         // locale would otherwise corrupt model files and CSV output). The DISPLAY
         // locale (dialog button labels etc.) is deliberately left as the user's own.
-        java.util.Locale.setDefault(java.util.Locale.Category.FORMAT, java.util.Locale.ROOT);
+        Locale.setDefault(Locale.Category.FORMAT, Locale.ROOT);
 
         // Initialize Windows-specific integration (AppUserModelID for taskbar pinning)
         // Must be called early, before any UI is created
