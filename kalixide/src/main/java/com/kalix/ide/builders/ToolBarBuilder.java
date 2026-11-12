@@ -3,7 +3,6 @@ package com.kalix.ide.builders;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.icons.KalixIcon;
-import com.kalix.ide.rendering.NodeLabelMode;
 import com.kalix.ide.utils.ThemeUtils;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
@@ -47,22 +46,17 @@ public class ToolBarBuilder {
         public final JToggleButton fileTreeToggleButton;
         public final JToggleButton lintingToggleButton;
         public final JToggleButton autoReloadToggleButton;
-        public final JToggleButton gridlinesToggleButton;
-        public final JToggleButton labelsToggleButton;
         public final JButton backButton;
         public final JButton forwardButton;
 
         public ToolBarComponents(JToolBar toolBar, JToggleButton fileTreeToggleButton,
                                  JToggleButton lintingToggleButton,
-                                 JToggleButton autoReloadToggleButton, JToggleButton gridlinesToggleButton,
-                                 JToggleButton labelsToggleButton,
+                                 JToggleButton autoReloadToggleButton,
                                  JButton backButton, JButton forwardButton) {
             this.toolBar = toolBar;
             this.fileTreeToggleButton = fileTreeToggleButton;
             this.lintingToggleButton = lintingToggleButton;
             this.autoReloadToggleButton = autoReloadToggleButton;
-            this.gridlinesToggleButton = gridlinesToggleButton;
-            this.labelsToggleButton = labelsToggleButton;
             this.backButton = backButton;
             this.forwardButton = forwardButton;
         }
@@ -206,16 +200,12 @@ public class ToolBarBuilder {
         // Create and store toggle buttons
         JToggleButton lintingButton = createLintingToggleButton();
         JToggleButton autoReloadButton = createAutoReloadToggleButton();
-        JToggleButton gridlinesButton = createGridToggleButton();
-        JToggleButton labelsButton = createLabelsToggleButton();
 
         toolBar.add(lintingButton);
         toolBar.add(autoReloadButton);
-        toolBar.add(gridlinesButton);
-        toolBar.add(labelsButton);
 
         return new ToolBarComponents(toolBar, fileTreeButton, lintingButton, autoReloadButton,
-            gridlinesButton, labelsButton, backButton, forwardButton);
+            backButton, forwardButton);
     }
 
     /**
@@ -453,88 +443,6 @@ public class ToolBarBuilder {
         autoReloadButton.getAccessibleContext().setAccessibleName("Toggle Auto-reload");
 
         return autoReloadButton;
-    }
-
-    /**
-     * Creates a toggle button for gridlines with theme-aware border icon.
-     *
-     * @return Configured JToggleButton for gridlines
-     */
-    private JToggleButton createGridToggleButton() {
-        // Create border-none icon
-        FontIcon icon = FontIcon.of(FontAwesomeSolid.BORDER_NONE, AppConstants.TOOLBAR_ICON_SIZE);
-        Color iconColor = getThemeAwareIconColor();
-        icon.setIconColor(iconColor);
-
-        JToggleButton gridButton = new JToggleButton(icon);
-        gridButton.setFocusPainted(false);
-
-        // Set initial state
-        boolean gridVisible = callbacks.isGridlinesVisible();
-        gridButton.setSelected(gridVisible);
-        gridButton.setToolTipText(gridVisible
-            ? "Gridlines visible - click to hide"
-            : "Gridlines hidden - click to show");
-
-        // Add action listener
-        gridButton.addActionListener(e -> {
-            boolean newState = !callbacks.isGridlinesVisible();
-            callbacks.toggleGridlines(newState);
-            gridButton.setSelected(newState);
-            gridButton.setToolTipText(newState
-                ? "Gridlines visible - click to hide"
-                : "Gridlines hidden - click to show");
-        });
-
-        // Set accessible name for screen readers
-        gridButton.getAccessibleContext().setAccessibleName("Toggle Gridlines");
-
-        return gridButton;
-    }
-
-    /**
-     * Creates the node-label button. One button cycles the three {@link NodeLabelMode}s
-     * (names, aka, hidden): it is selected while labels are drawn, and its icon says
-     * which text — the tag for names, the "A" for akas. Mirrors
-     * {@link #createGridToggleButton()} in shape and state source.
-     *
-     * @return Configured JToggleButton for node labels
-     */
-    private JToggleButton createLabelsToggleButton() {
-        JToggleButton labelsButton = new JToggleButton();
-        labelsButton.setFocusPainted(false);
-
-        applyLabelMode(labelsButton, callbacks.getLabelMode());
-
-        labelsButton.addActionListener(e -> {
-            NodeLabelMode next = callbacks.getLabelMode().next();
-            callbacks.setLabelMode(next);
-            applyLabelMode(labelsButton, next);
-        });
-
-        // Set accessible name for screen readers
-        labelsButton.getAccessibleContext().setAccessibleName("Node labels");
-
-        return labelsButton;
-    }
-
-    /** Sets the button's icon, selection and tooltip to match {@code mode}. */
-    public static void applyLabelMode(JToggleButton labelsButton, NodeLabelMode mode) {
-        FontIcon icon = FontIcon.of(mode == NodeLabelMode.AKA ? FontAwesomeSolid.FONT : FontAwesomeSolid.TAG,
-                AppConstants.TOOLBAR_ICON_SIZE);
-        icon.setIconColor(getThemeAwareIconColor());
-        labelsButton.setIcon(icon);
-        labelsButton.setSelected(mode.drawsLabels());
-        labelsButton.setToolTipText(labelModeTooltip(mode));
-    }
-
-    /** The current mode and what the next click does, e.g. "Node labels: akas only - click to hide". */
-    private static String labelModeTooltip(NodeLabelMode mode) {
-        return switch (mode) {
-            case NAMES -> "Node labels: names - click to show akas only";
-            case AKA -> "Node labels: akas only - click to hide";
-            case HIDDEN -> "Node labels: hidden (shown on hover) - click to show names";
-        };
     }
 
 }

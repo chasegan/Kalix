@@ -24,7 +24,8 @@ import java.awt.event.ComponentEvent;
  * {@link #doLayout()} <em>before</em> the split lays out its children, so the
  * contextual view's first non-zero bounds are already at the shared width.
  * {@code MapPanel} completes a deferred zoom-to-fit synchronously in
- * {@code setBounds}; applying the divider only after a default first layout would
+ * {@code setBounds}, which {@code MapView} calls in the same layout pass, below its
+ * toolbar; applying the divider only after a default first layout would
  * complete that fit at a wrong, transient width — and flash the region open when it
  * is restored collapsed.
  */

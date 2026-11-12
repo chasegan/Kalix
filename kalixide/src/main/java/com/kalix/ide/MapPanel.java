@@ -45,6 +45,11 @@ import com.kalix.ide.constants.UIConstants;
 
 public class MapPanel extends JPanel {
 
+    /** Bound property fired by {@link #setShowGridlines}. */
+    public static final String SHOW_GRIDLINES_PROPERTY = "showGridlines";
+    /** Bound property fired by {@link #setLabelMode}. */
+    public static final String LABEL_MODE_PROPERTY = "labelMode";
+
     /**
      * The rotation cursor, drawn once on first use.
      *
@@ -699,8 +704,10 @@ public class MapPanel extends JPanel {
      * @param showGridlines true to show gridlines, false to hide them
      */
     public void setShowGridlines(boolean showGridlines) {
+        boolean old = this.showGridlines;
         this.showGridlines = showGridlines;
         repaint();
+        firePropertyChange(SHOW_GRIDLINES_PROPERTY, old, showGridlines);
     }
     
     /**
@@ -717,11 +724,13 @@ public class MapPanel extends JPanel {
      * node can always be identified without changing mode.
      */
     public void setLabelMode(NodeLabelMode labelMode) {
+        NodeLabelMode old = this.labelMode;
         this.labelMode = labelMode;
         // A mode change makes any pending hover reveal meaningless, and a mode that
         // reveals must not inherit a hover computed under one that did not.
         this.hoveredNodeName = null;
         repaint();
+        firePropertyChange(LABEL_MODE_PROPERTY, old, labelMode);
     }
 
     /** The text drawn under each node. */

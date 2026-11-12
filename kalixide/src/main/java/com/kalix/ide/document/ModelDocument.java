@@ -1,6 +1,7 @@
 package com.kalix.ide.document;
 
 import com.kalix.ide.MapPanel;
+import com.kalix.ide.MapView;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelChangeEvent;
 
@@ -22,6 +23,7 @@ public class ModelDocument extends KalixDocument {
 
     private final HydrologicalModel model;
     private final MapPanel mapPanel;
+    private final MapView mapView;
 
     /** Node count at the last model change, used to auto-zoom on the 0 -&gt; &gt;0 transition. */
     private int previousNodeCount = 0;
@@ -41,6 +43,7 @@ public class ModelDocument extends KalixDocument {
         // map-side collaborators (text sync, clipboard, context menu, search)
         // are wired inside, symmetrically and exactly once.
         this.mapPanel = new MapPanel(model, getEditor());
+        this.mapView = new MapView(mapPanel);
         // Wire map panel to editor for the "Show on Map" context menu action.
         getEditor().setMapPanel(mapPanel);
         // Per-document auto-zoom: fit the view when the model first gains nodes.
@@ -57,10 +60,15 @@ public class ModelDocument extends KalixDocument {
         return mapPanel;
     }
 
-    /** A model's contextual view is its map. */
+    @Override
+    public MapView getMapView() {
+        return mapView;
+    }
+
+    /** A model's contextual view is its map, under the map's toolbar. */
     @Override
     public Component getContextView() {
-        return mapPanel;
+        return mapView;
     }
 
     /**

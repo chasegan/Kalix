@@ -167,8 +167,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     // Toolbar toggle buttons (stored for state synchronization)
     private JToggleButton fileTreeToggleButton;
     private JToggleButton autoReloadToggleButton;
-    private JToggleButton gridlinesToggleButton;
-    private JToggleButton labelsToggleButton;
 
     // Navigation buttons (stored for state synchronization)
     private JButton backButton;
@@ -549,6 +547,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             map.setLabelMode(NodeLabelMode.saved());
             map.setTrackpadNavigation(PreferenceKeys.MAP_TRACKPAD_NAVIGATION.get());
         }
+        MapView mapView = document.getMapView();
+        if (mapView != null) {
+            // The map toolbar's toggles apply to every open map and are saved.
+            mapView.setDisplayActions(this::toggleGridlines, this::setLabelMode);
+        }
 
         if (document.isModel()) {
             // Model-editing features, each bound to this document's own model and
@@ -788,8 +791,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         toolBar = components.toolBar;
         fileTreeToggleButton = components.fileTreeToggleButton;
         autoReloadToggleButton = components.autoReloadToggleButton;
-        gridlinesToggleButton = components.gridlinesToggleButton;
-        labelsToggleButton = components.labelsToggleButton;
         backButton = components.backButton;
         forwardButton = components.forwardButton;
         add(toolBar, BorderLayout.NORTH);
@@ -963,18 +964,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             autoReloadToggleButton.setToolTipText(autoReloadEnabled
                 ? "Auto-reload enabled - click to disable"
                 : "Auto-reload disabled - click to enable");
-        }
-
-        if (gridlinesToggleButton != null) {
-            boolean gridlinesVisible = isGridlinesVisible();
-            gridlinesToggleButton.setSelected(gridlinesVisible);
-            gridlinesToggleButton.setToolTipText(gridlinesVisible
-                ? "Gridlines visible - click to hide"
-                : "Gridlines hidden - click to show");
-        }
-
-        if (labelsToggleButton != null) {
-            ToolBarBuilder.applyLabelMode(labelsToggleButton, getLabelMode());
         }
     }
 
@@ -1952,8 +1941,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             }); // a failure is reported by StdioTaskManager before the future completes
     }
     
-    @Override
-    public void toggleGridlines(boolean showGridlines) {
+    private void toggleGridlines(boolean showGridlines) {
         // Apply to every open document's map so background tabs stay consistent.
         for (KalixDocument document : documentManager.getDocuments()) {
             MapPanel map = document.getMapPanel();
@@ -1965,8 +1953,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         PreferenceKeys.MAP_SHOW_GRIDLINES.set(showGridlines);
     }
 
-    @Override
-    public void setLabelMode(NodeLabelMode mode) {
+    private void setLabelMode(NodeLabelMode mode) {
         // Apply to every open document's map so background tabs stay consistent.
         for (KalixDocument document : documentManager.getDocuments()) {
             MapPanel map = document.getMapPanel();
@@ -1990,22 +1977,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     @Override
     public boolean isShowHiddenFiles() {
         return PreferenceKeys.TREE_SHOW_HIDDEN_FILES.get();
-    }
-
-    @Override
-    public boolean isGridlinesVisible() {
-        // Falls back to the saved preference before any document/map exists (toolbar build).
-        return mapPanel != null
-            ? mapPanel.isShowGridlines()
-            : PreferenceKeys.MAP_SHOW_GRIDLINES.get();
-    }
-
-    @Override
-    public NodeLabelMode getLabelMode() {
-        // Falls back to the saved preference before any document/map exists (toolbar build).
-        return mapPanel != null
-            ? mapPanel.getLabelMode()
-            : NodeLabelMode.saved();
     }
 
     @Override
@@ -2295,8 +2266,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             toolBar = components.toolBar;
             fileTreeToggleButton = components.fileTreeToggleButton;
             autoReloadToggleButton = components.autoReloadToggleButton;
-            gridlinesToggleButton = components.gridlinesToggleButton;
-            labelsToggleButton = components.labelsToggleButton;
             backButton = components.backButton;
             forwardButton = components.forwardButton;
             setupNavigationStateListener();
