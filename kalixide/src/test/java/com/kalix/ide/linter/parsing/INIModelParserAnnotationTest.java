@@ -201,4 +201,13 @@ class INIModelParserAnnotationTest {
         assertEquals(1, issues.size(), issues.toString());
         assertEquals(INIModelParser.RULE_MALFORMED_SECTION_HEADER, issues.get(0).ruleName());
     }
+
+    @Test
+    void repeatedClusterLineAboveAMalformedHeaderNamesNoSection() {
+        List<SyntaxIssue> issues = issues("#@cluster = farm\n#@cluster = farm\n[node.a\n");
+        SyntaxIssue repeat = issues.stream()
+                .filter(issue -> issue.ruleName().equals(INIModelParser.RULE_ANNOTATION_DUPLICATE_CLUSTER))
+                .findFirst().orElseThrow();
+        assertEquals("Duplicate annotation 'cluster' (also on line 1); the last one counts", repeat.message());
+    }
 }

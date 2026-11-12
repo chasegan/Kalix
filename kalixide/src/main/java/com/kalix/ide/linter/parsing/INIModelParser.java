@@ -411,8 +411,9 @@ public class INIModelParser {
                 }
                 mention = invalid == null ? p : null;
                 if (earlierCluster > 0) {
+                    String on = sectionName == null ? "" : " on [" + sectionName + "]";
                     model.getSyntaxIssues().add(new SyntaxIssue(p.lineNumber(),
-                        "Duplicate annotation '" + key + "' on [" + sectionName + "] (also on line "
+                        "Duplicate annotation '" + key + "'" + on + " (also on line "
                             + earlierCluster + "); the last one counts",
                         RULE_ANNOTATION_DUPLICATE_CLUSTER));
                 }
