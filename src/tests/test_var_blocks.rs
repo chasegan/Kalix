@@ -1,11 +1,13 @@
 //! Tests for the `[var.*]` model-variable section (structured_expressions_design.md §9).
 //!
 //! Unlike `[fn]` and `[table.*]` (passive — looked up, may sit anywhere), a
-//! `[var.*]` block is **active**: it executes at its file position among the
-//! node sections, in the flow phase, top-to-bottom within the block. Each
-//! `key = expression` line publishes the data-cache series `var.<block>.<key>`,
-//! computed exactly once per timestep, readable anywhere, offset-addressable,
-//! and recordable in `[outputs]` like any node output.
+//! `[var.*]` block is **active**: it executes at its file position, in the
+//! phase its `phase` key names (flow by default, walking the file top-down;
+//! order, walking it bottom-up; or the ras slot at the top of the step), keys
+//! top-to-bottom within the block. Each `key = expression` line publishes the
+//! data-cache series `var.<block>.<key>`, computed exactly once per timestep,
+//! readable anywhere, offset-addressable, and recordable in `[outputs]` like
+//! any node output.
 //!
 //! These tests drive whole models from INI strings and hand-compute every
 //! expectation. The reference smoke model runs 2020-01-30 .. 2020-02-03 (5
@@ -14,7 +16,8 @@
 //! `[10, 20, 30, 40, 50]` with no data file needed (`sim.step` is 0-based).
 
 use crate::io::ini_model_io::IniModelIO;
-use crate::model::Model;
+use crate::misc::configuration::SaveMethod;
+use crate::model::{Model, VarPhase};
 
 /// Load a model expected to fail at parse/load, returning the error text.
 /// (`Model` is not `Debug`, so `Result::expect_err` cannot be used.)
@@ -327,28 +330,47 @@ var.accounting.prev_headroom
         &[-999.0, 90.0, 70.0, 70.0, 30.0], "prev_headroom");
 }
 
-// ============================================================================
-// 7. Phase handling.
-// ============================================================================
-
-/// `phase = order` is designed but unimplemented — rejected at load.
+/// A node above a var block may read it at an offset: the reference registers
+/// the series before the block defines it, which is not a duplicate.
 #[test]
-fn phase_order_is_rejected() {
+fn node_above_var_reads_it_at_an_offset() {
     let ini = "\
 [kalix]
 start = 2020-01-30
 end = 2020-02-03
 
+[node.headwater]
+loc = 0, 0
+type = inflow
+inflow = (sim.step + 1) * 10
+ds_1 = gauge
+
+[node.gauge]
+loc = 0, 10
+type = gauge
+reference_flow = var.calc.x[-1, 0]
+ds_1 = sink
+
 [var.calc]
-phase = order
-x = 1
+x = node.headwater.ds_1
+
+[node.sink]
+loc = 0, 20
+type = blackhole
+
+[outputs]
+node.gauge.reference_flow
 ";
-    let err = load_err(ini);
-    assert!(err.contains("not yet implemented"),
-        "phase = order should be rejected as unimplemented: {err}");
+    let model = run_model(ini);
+    assert_series(&series(&model, "node.gauge.reference_flow"),
+        &[0.0, 10.0, 20.0, 30.0, 40.0], "node.gauge.reference_flow");
 }
 
-/// A phase value that is neither `flow` nor `order` is an invalid-phase error.
+// ============================================================================
+// 7. Phase handling.
+// ============================================================================
+
+/// A phase value that is not `flow`, `ras` or `order` is an invalid-phase error.
 #[test]
 fn phase_bogus_is_rejected() {
     let ini = "\
@@ -431,15 +453,10 @@ bad.key = 1
         "a dotted key name should be rejected: {err}");
 }
 
-// NOTE on duplicate-series collision (test-plan item 8): no constructible case
-// was found. Two keys `x` in one `[var.a]` section are silently collapsed by
-// the INI parser's IndexMap before the var arm ever sees them (keys are unique
-// per section). Two *different* blocks cannot collide because their series are
-// namespaced by block name (`var.a.x` vs `var.b.x`). A var series could only
-// collide with a pre-existing series of the identical `var.<block>.<key>` name,
-// which nothing else in the model produces. The load arm's duplicate guard
-// (`get_existing_series_idx(...).is_some()`) is therefore real but unreachable
-// from INI; no test asserts it.
+// NOTE on duplicate series (test-plan item 8): the var arm has no duplicate
+// check. Block names and keys are lowercase bare names, and the INI parser
+// refuses a repeated section or key, so two defs cannot share a series. A
+// reference from above registers `var.<block>.<key>` first; the block adopts it.
 
 // ============================================================================
 // 9. Forward offset on a var is a load error.
@@ -897,6 +914,8 @@ var.assessment.x
 ";
     let err = run_err(ini);
     assert!(err.contains("no value yet"), "unexpected: {err}");
+    assert!(err.contains("Var block: '[var.assessment]'"), "context should name the block: {err}");
+    assert!(err.contains("Phase: ras"), "context should name the ras slot: {err}");
 }
 
 /// Placement is validated: an assessment block below the first node is a
@@ -1005,4 +1024,468 @@ saw_fire = ras.credit.fired
     // Var above the section: the read is of a value not yet written — loud.
     let err = run_err(&format!("{head}\n{var_block}\n{section}\n{tail}"));
     assert!(err.contains("no value yet"), "unexpected: {err}");
+    assert!(err.contains("Var block: '[var.watch]'"), "context should name the block: {err}");
+
+    // A run error inside a section names the section
+    let bad_section = section.replace("credit(5)", "credit(node.headwater.ds_1)");
+    let err = run_err(&format!("{head}\n{bad_section}\n{tail}"));
+    assert!(err.contains("no value yet"), "unexpected: {err}");
+    assert!(err.contains("Ras section: '[ras.credit]'") && err.contains("Phase: ras"),
+        "context should name the section: {err}");
+}
+
+// ============================================================================
+// 10. phase = order: file position in the order phase, walked bottom-up
+// ============================================================================
+
+/// A regulated reach: a dam supplies an order_control, then a user ordering a
+/// constant 5, then a gauge. `{ctrl}` is the order_control's order line and
+/// `{mid}` / `{low}` are spliced in above and below the user.
+fn order_rig(ctrl: &str, mid: &str, low: &str) -> String {
+    format!("\
+[kalix]
+start = 2020-01-30
+end = 2020-02-03
+
+[node.dam]
+loc = 0, 0
+type = storage
+initial_volume = 2000
+dimensions = 0, 0, 0, 0, 1, 10000, 0, 0, 1.1, 10001, 0, 10000, 1.2, 10002, 0, 10000
+ds_1 = ctrl
+
+[node.ctrl]
+loc = 0, 10
+type = order_control
+{ctrl}
+ds_1 = user
+
+{mid}
+
+[node.user]
+loc = 0, 20
+type = regulated_user
+order = 5
+ds_1 = gauge
+
+{low}
+
+[node.gauge]
+loc = 0, 30
+type = gauge
+
+[outputs]
+node.ctrl.set_order
+")
+}
+
+/// An order var between two nodes reads the node below it bare (its order is
+/// already placed) and is read bare by the node above it, the same step.
+#[test]
+fn order_phase_var_reads_below_and_feeds_above() {
+    let mid = "[var.o]\nphase = order\nx = node.user.order * 2";
+    let model = run_model(&order_rig("set_order = var.o.x", mid, ""));
+    assert_series(&series(&model, "var.o.x"), &[10.0; 5], "doubled user order");
+    assert_series(&series(&model, "node.ctrl.set_order"), &[10.0; 5], "ctrl reads var bare");
+}
+
+/// The order phase walks up the file, so a var cannot read a node above it
+/// bare: that node has not run yet. The usual loud unwritten-value error.
+/// (`ds_1_order` is written in the ctrl's order phase; `set_order` in its flow phase.)
+#[test]
+fn order_phase_var_cannot_read_above_bare() {
+    let mid = "[var.o]\nphase = order\nx = node.ctrl.ds_1_order";
+    let err = run_err(&order_rig("set_order = 1", mid, ""));
+    assert!(err.contains("no value yet"), "unexpected: {err}");
+    // The error names the var block, not the last node the walk visited
+    assert!(err.contains("Var block: '[var.o]'"), "context should name the block: {err}");
+}
+
+/// A run error inside a flow-phase block names the block too: here [var.a]
+/// reads [var.b], which sits below it and has not run yet this step.
+#[test]
+fn flow_phase_var_error_names_the_block() {
+    let ini = "\
+[kalix]
+start = 2020-01-30
+end = 2020-01-31
+
+[var.a]
+x = var.b.y
+
+[node.headwater]
+loc = 0, 0
+type = inflow
+inflow = 10
+ds_1 = outlet
+
+[var.b]
+y = 1
+
+[node.outlet]
+loc = 0, 10
+type = blackhole
+
+[outputs]
+var.a.x
+";
+    let err = run_err(ini);
+    assert!(err.contains("Var block: '[var.a]'"), "context should name the block: {err}");
+}
+
+/// A block below every visited node (among the nodes ordering skips) runs
+/// first: the user and the ctrl above read it bare.
+#[test]
+fn order_phase_var_among_skipped_nodes_runs_first() {
+    let low = "[var.o]\nphase = order\nx = 3";
+    let rig = order_rig("set_order = var.o.x", "", low).replace("order = 5", "order = var.o.x + 2");
+    let model = run_model(&rig);
+    assert_series(&series(&model, "var.o.x"), &[3.0; 5], "constant");
+    assert_series(&series(&model, "node.ctrl.set_order"), &[3.0; 5], "ctrl reads var bare");
+}
+
+/// A block after the last node in the file runs first too: the user and the
+/// ctrl above read it bare.
+#[test]
+fn order_phase_var_after_last_node_runs_first() {
+    let rig = order_rig("set_order = var.o.x", "", "").replace("order = 5", "order = var.o.x + 2");
+    assert_eq!(rig.matches("\n[outputs]\n").count(), 1, "splice point");
+    let ini = rig.replace("\n[outputs]\n", "\n[var.o]\nphase = order\nx = 3\n\n[outputs]\n");
+    let model = run_model(&ini);
+    assert_series(&series(&model, "var.o.x"), &[3.0; 5], "constant");
+    assert_series(&series(&model, "node.ctrl.set_order"), &[3.0; 5], "ctrl reads var bare");
+}
+
+/// A second run of the same model gives the same results.
+#[test]
+fn order_blocks_survive_a_second_run() {
+    let mid = "[var.m]\nphase = order\nx = var.l.y + node.user.order";
+    let low = "[var.l]\nphase = order\ny = 3";
+    let rig = order_rig("set_order = var.m.x", mid, low).replace("order = 5", "order = var.l.y + 2");
+    let mut model = run_model(&rig);
+    model.run().unwrap_or_else(|e| panic!("second run should succeed: {e}"));
+    assert_series(&series(&model, "var.m.x"), &[8.0; 5], "m after a second run");
+    assert_series(&series(&model, "node.ctrl.set_order"), &[8.0; 5], "ctrl after a second run");
+}
+
+/// Rebuilding the ordering system's visit list keeps the order blocks
+/// merged into it, without placing them again.
+#[test]
+fn order_blocks_survive_reinitialising_the_ordering_system() {
+    let mid = "[var.o]\nphase = order\nx = node.user.order * 2";
+    let mut model = run_model(&order_rig("set_order = var.o.x", mid, ""));
+    model.simple_ordering_system
+        .initialize(&mut model.nodes, &model.links, &model.incoming_links, &mut model.account_manager)
+        .unwrap_or_else(|e| panic!("re-initialise should succeed: {e}"));
+    assert!(model.simple_ordering_system.has_order_var_blocks(), "blocks dropped on re-initialise");
+}
+
+/// A node below an order block runs before it in the order phase, so reading
+/// it bare is the usual loud error, naming the node.
+#[test]
+fn order_phase_node_below_cannot_read_block_bare() {
+    let mid = "[var.o]\nphase = order\nx = 3";
+    let rig = order_rig("set_order = var.o.x", mid, "").replace("order = 5", "order = var.o.x + 2");
+    let err = run_err(&rig);
+    assert!(err.contains("no value yet"), "unexpected: {err}");
+    assert!(err.contains("Node: 'user'"), "context should name the node: {err}");
+}
+
+/// Two regulated reaches with interleaved node indices: a block between the
+/// users runs after the lower one and before the upper one.
+#[test]
+fn order_block_between_interleaved_reaches() {
+    let ini = "\
+[kalix]
+start = 2020-01-30
+end = 2020-02-03
+
+[node.dam_a]
+loc = 0, 0
+type = storage
+initial_volume = 2000
+dimensions = 0, 0, 0, 0, 1, 10000, 0, 0, 1.1, 10001, 0, 10000, 1.2, 10002, 0, 10000
+ds_1 = user_a
+
+[node.dam_b]
+loc = 10, 0
+type = storage
+initial_volume = 2000
+dimensions = 0, 0, 0, 0, 1, 10000, 0, 0, 1.1, 10001, 0, 10000, 1.2, 10002, 0, 10000
+ds_1 = user_b
+
+[node.user_a]
+loc = 0, 10
+type = regulated_user
+order = var.m.x + 1
+ds_1 = sink_a
+
+[var.m]
+phase = order
+x = node.user_b.order * 2
+
+[node.user_b]
+loc = 10, 10
+type = regulated_user
+order = 4
+ds_1 = sink_b
+
+[node.sink_a]
+loc = 0, 20
+type = gauge
+
+[node.sink_b]
+loc = 10, 20
+type = gauge
+
+[outputs]
+node.user_a.order
+";
+    let model = run_model(ini);
+    assert_series(&series(&model, "var.m.x"), &[8.0; 5], "reads the lower reach's user bare");
+    assert_series(&series(&model, "node.user_a.order"), &[9.0; 5], "upper reach's user reads it bare");
+}
+
+/// With accounts, the order phase with var blocks still opens the accounts'
+/// forecast: an unread order var changes no order, diversion or account series.
+#[test]
+fn unread_order_var_with_accounts_changes_no_result() {
+    let model_with = |var: &str| format!("\
+[kalix]
+start = 2020-01-01
+end = 2020-01-07
+
+[acc.entitlements]
+accounts = name, size, initial,
+           a,    1000, 100,
+
+[node.dam]
+type = storage
+loc = 0, 0
+initial_volume = 12000
+dimensions = 0,  0,     0,  0,
+             10, 12000, 10, 0,
+             11, 12100, 10, 1000,
+ds_1 = reach
+
+[node.reach]
+type = routing
+loc = 0, 10
+lag = 2
+ds_1 = user
+
+{var}
+
+[node.user]
+type = regulated_user
+loc = 0, 20
+order = 100
+accounts = a
+ds_1 = sink
+
+[node.sink]
+type = blackhole
+loc = 0, 30
+
+[outputs]
+node.user.order
+node.user.diversion
+node.dam.ds_1
+acc.a.committed
+acc.a.closing_balance
+");
+    let names = ["node.user.order", "node.user.diversion", "node.dam.ds_1", "acc.a.committed", "acc.a.closing_balance"];
+    let a = run_model(&model_with(""));
+    let b = run_model(&model_with("[var.v]\nphase = order\nx = this[-1, 0] + 1"));
+    // The forecast does real work here: the first order is spoken for while en route
+    assert_series(&series(&a, "acc.a.committed"), &[0.0, 100.0, 100.0, 0.0, 0.0, 0.0, 0.0], "committed");
+    for name in names {
+        assert_eq!(series(&a, name), series(&b, name), "{name} changed by an unread order var");
+    }
+    assert_series(&series(&b, "var.v.x"), &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], "block still ran");
+}
+
+/// A block above every node runs last in the order phase, so it reads the
+/// whole reach's order-phase outputs bare. (The order_control's `order` and
+/// `set_order` are recorded in its flow phase; `ds_1_order` in its order phase.)
+#[test]
+fn order_phase_var_above_all_nodes_runs_last() {
+    let ini = order_rig("set_order = 3", "", "")
+        .replace("[node.dam]", "[var.o]\nphase = order\nx = node.user.order + node.ctrl.ds_1_order\n\n[node.dam]");
+    let model = run_model(&ini);
+    assert_series(&series(&model, "var.o.x"), &[10.0; 5], "user order + ctrl ds_1_order");
+}
+
+/// Blocks run bottom-up; keys inside a block run top-down. Here [var.a] sits
+/// above [var.b] and reads it bare, and b's second key reads its first. The
+/// model has no regulated zone: order vars run anyway.
+#[test]
+fn order_phase_blocks_run_bottom_up_keys_top_down() {
+    let ini = "\
+[kalix]
+start = 2020-01-30
+end = 2020-02-03
+
+[var.a]
+phase = order
+x = var.b.z + 1
+
+[node.headwater]
+loc = 0, 0
+type = inflow
+inflow = 10
+ds_1 = outlet
+
+[var.b]
+phase = order
+y = 1
+z = var.b.y + 1
+
+[node.outlet]
+loc = 0, 10
+type = blackhole
+";
+    let model = run_model(ini);
+    assert_series(&series(&model, "var.b.z"), &[2.0; 5], "keys top-down");
+    assert_series(&series(&model, "var.a.x"), &[3.0; 5], "block above runs after block below");
+}
+
+/// The flow pass runs after the whole order phase, so a flow-phase var
+/// anywhere reads an order var bare.
+#[test]
+fn flow_phase_reads_order_var_bare() {
+    let ini = "\
+[kalix]
+start = 2020-01-30
+end = 2020-02-03
+
+[var.f]
+y = var.o.x * 10
+
+[node.headwater]
+loc = 0, 0
+type = inflow
+inflow = 10
+ds_1 = outlet
+
+[node.outlet]
+loc = 0, 10
+type = blackhole
+
+[var.o]
+phase = order
+x = 2
+";
+    let model = run_model(ini);
+    assert_series(&series(&model, "var.f.y"), &[20.0; 5], "flow var above reads order var");
+}
+
+/// phase = order survives the canonical render and still runs in the order phase.
+#[test]
+fn order_phase_round_trips() {
+    let mid = "[var.o]\nphase = order\nx = node.user.order * 2";
+    let mut model = IniModelIO::read_model_string(&order_rig("set_order = var.o.x", mid, ""))
+        .expect("model should load");
+    // Canonical, so the writer renders the section (Standard keeps it verbatim)
+    model.configuration.save_method = SaveMethod::Canonical;
+    let rendered = IniModelIO::model_to_string(&model);
+    assert!(rendered.contains("phase = order"), "phase re-emitted:\n{rendered}");
+    let model2 = run_model(&rendered);
+    assert_series(&series(&model2, "node.ctrl.set_order"), &[10.0; 5], "still feeds ctrl bare");
+}
+
+/// Order vars that nothing reads change no result: a block below every node,
+/// one mid-reach and one above every node leave the reach's flows and orders
+/// exactly as in the model without them.
+#[test]
+fn unread_order_vars_change_no_result() {
+    let outputs = "node.dam.ds_1\nnode.dam.ds_1_order\nnode.ctrl.ds_1_order\nnode.user.order\nnode.user.diversion\nnode.gauge.ds_1\n";
+    let plain = order_rig("set_order = 7", "", "").replace("[outputs]\n", &format!("[outputs]\n{outputs}"));
+    let unread = "phase = order\nx = this[-1, 0] + 1";
+    let with_vars = order_rig("set_order = 7", &format!("[var.mid]\n{unread}"), &format!("[var.low]\n{unread}"))
+        .replace("[node.dam]", &format!("[var.top]\n{unread}\n\n[node.dam]"))
+        .replace("[outputs]\n", &format!("[outputs]\n{outputs}"));
+    let a = run_model(&plain);
+    let b = run_model(&with_vars);
+    for name in outputs.lines() {
+        assert_eq!(series(&a, name), series(&b, name), "{name} changed by unread order vars");
+    }
+    assert_series(&series(&b, "var.top.x"), &[1.0, 2.0, 3.0, 4.0, 5.0], "top block still ran");
+}
+
+/// A block built without phase text still saves its phase: a programmatic
+/// order block must not come back as a flow block.
+#[test]
+fn order_phase_saved_without_phase_text() {
+    let mid = "[var.o]
+phase = order
+x = node.user.order * 2";
+    let mut model = IniModelIO::read_model_string(&order_rig("set_order = var.o.x", mid, ""))
+        .expect("model should load");
+    model.var_blocks[0].phase_explicit = None;
+    // Render from the model alone, not the loaded text (which still has the phase line)
+    model.ini_document = None;
+    let rendered = IniModelIO::model_to_string(&model);
+    assert!(rendered.contains("phase = order"), "phase re-emitted:
+{rendered}");
+}
+
+/// Phase text that no longer names the block's phase is not saved: a block
+/// changed in code from flow to order saves as order.
+#[test]
+fn changed_phase_is_saved_over_stale_text() {
+    let mid = "[var.o]\nphase = flow\nx = 1";
+    let mut model = IniModelIO::read_model_string(&order_rig("set_order = 1", mid, ""))
+        .expect("model should load");
+    model.var_blocks[0].phase = VarPhase::Order;
+    model.ini_document = None;
+    let rendered = IniModelIO::model_to_string(&model);
+    assert!(rendered.contains("phase = order") && !rendered.contains("phase = flow"),
+        "the changed phase is saved:\n{rendered}");
+}
+
+/// Adjacent order blocks, with no node between them, still run bottom-up:
+/// [var.b] below runs first, so [var.a] above reads it bare.
+#[test]
+fn adjacent_order_blocks_run_bottom_up() {
+    let mid = "[var.a]\nphase = order\nx = var.b.y + 1\n\n[var.b]\nphase = order\ny = node.user.order";
+    let model = run_model(&order_rig("set_order = var.a.x", mid, ""));
+    assert_series(&series(&model, "var.a.x"), &[6.0; 5], "a reads b bare");
+    assert_series(&series(&model, "node.ctrl.set_order"), &[6.0; 5], "ctrl reads a bare");
+}
+
+/// Order blocks on either side of a visited node: [var.l] below the user runs
+/// before it, and the user before [var.m] above it, each read bare.
+#[test]
+fn order_blocks_either_side_of_a_visited_node() {
+    let mid = "[var.m]\nphase = order\nx = var.l.y + node.user.order";
+    let low = "[var.l]\nphase = order\ny = 3";
+    let rig = order_rig("set_order = var.m.x", mid, low).replace("order = 5", "order = var.l.y + 2");
+    let model = run_model(&rig);
+    assert_series(&series(&model, "var.m.x"), &[8.0; 5], "m reads l and the user bare");
+    assert_series(&series(&model, "node.ctrl.set_order"), &[8.0; 5], "ctrl reads m bare");
+}
+
+/// A block mid-reach among nodes the order phase does not visit (here a
+/// separate tributary) runs where the visited nodes around it put it: after
+/// the user below, before the ctrl above.
+#[test]
+fn order_block_among_unvisited_mid_reach_nodes() {
+    let mid = "\
+[node.trib]
+loc = 10, 10
+type = inflow
+inflow = 1
+ds_1 = trib_sink
+
+[var.o]
+phase = order
+x = node.user.order * 2
+
+[node.trib_sink]
+loc = 10, 20
+type = blackhole";
+    let model = run_model(&order_rig("set_order = var.o.x", mid, ""));
+    assert_series(&series(&model, "var.o.x"), &[10.0; 5], "reads the user below bare");
+    assert_series(&series(&model, "node.ctrl.set_order"), &[10.0; 5], "ctrl above reads it bare");
 }

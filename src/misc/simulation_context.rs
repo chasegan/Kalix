@@ -14,6 +14,8 @@ use crate::tid::utils::u64_to_auto_datetime_string;
 pub enum SimPhase {
     #[default]
     Unknown,
+    /// The ras slot at the top of the step: assessments and [ras.*] sections
+    Ras,
     Ordering,
     Flow,
 }
@@ -22,6 +24,7 @@ impl SimPhase {
     pub fn as_str(&self) -> &'static str {
         match self {
             SimPhase::Unknown => "unknown",
+            SimPhase::Ras => "ras",
             SimPhase::Ordering => "ordering",
             SimPhase::Flow => "flow",
         }
@@ -41,6 +44,20 @@ thread_local! {
 /// Sentinel value indicating no node is set (usize::MAX is never a valid node index)
 const NO_NODE: usize = usize::MAX;
 
+/// A var block shares the node cell, tagged by the top bit (no model has 2^62 nodes)
+const VAR_BLOCK_TAG: usize = 1 << (usize::BITS - 1);
+
+/// A [ras.*] section shares it too, tagged by the next bit
+const RAS_SECTION_TAG: usize = 1 << (usize::BITS - 2);
+
+/// What was running when the context was last set
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ContextItem {
+    Node(usize),
+    VarBlock(usize),
+    RasSection(usize),
+}
+
 /// Set the current phase
 #[inline]
 pub fn set_context_phase(phase: SimPhase) {
@@ -53,12 +70,38 @@ pub fn set_context_node(node_idx: usize) {
     SIM_NODE.with(|c| c.set(node_idx));
 }
 
+/// Set the current var block index, so an error inside it names the block, not the last node
+#[inline]
+pub fn set_context_var_block(vb_idx: usize) {
+    SIM_NODE.with(|c| c.set(VAR_BLOCK_TAG | vb_idx));
+}
+
+/// Set the current [ras.*] section index
+#[inline]
+pub fn set_context_ras_section(ras_idx: usize) {
+    SIM_NODE.with(|c| c.set(RAS_SECTION_TAG | ras_idx));
+}
+
+/// Clear the current item, for work that is none of them (the step's accounting)
+#[inline]
+pub fn clear_context_item() {
+    SIM_NODE.with(|c| c.set(NO_NODE));
+}
+
 /// Get the raw context for error formatting
-pub fn get_context() -> (SimPhase, Option<usize>) {
+pub fn get_context() -> (SimPhase, Option<ContextItem>) {
     let phase = SIM_PHASE.with(|c| c.get());
-    let node_idx = SIM_NODE.with(|c| c.get());
-    let node = if node_idx == NO_NODE { None } else { Some(node_idx) };
-    (phase, node)
+    let raw = SIM_NODE.with(|c| c.get());
+    let item = if raw == NO_NODE {
+        None
+    } else if raw & VAR_BLOCK_TAG != 0 {
+        Some(ContextItem::VarBlock(raw & !VAR_BLOCK_TAG))
+    } else if raw & RAS_SECTION_TAG != 0 {
+        Some(ContextItem::RasSection(raw & !RAS_SECTION_TAG))
+    } else {
+        Some(ContextItem::Node(raw))
+    };
+    (phase, item)
 }
 
 /// Clear the simulation context (called when simulation completes or before starting)
@@ -95,29 +138,35 @@ fn extract_panic_message(panic_info: Box<dyn Any + Send>) -> String {
     }
 }
 
-/// Format a simulation error with context information.
+/// Format a simulation error with context information. `name_fn` gives the
+/// name of the node, var block or [ras.*] section the context points at.
 pub fn format_simulation_error<F>(
     panic_info: Box<dyn Any + Send>,
     timestamp: u64,
-    node_name_fn: F,
+    name_fn: F,
 ) -> String
 where
-    F: Fn(usize) -> Option<String>,
+    F: Fn(ContextItem) -> Option<String>,
 {
     let panic_msg = extract_panic_message(panic_info);
-    let (phase, node_idx) = get_context();
+    let (phase, item) = get_context();
     let timestamp_str = u64_to_auto_datetime_string(timestamp);
 
-    let node_str = match node_idx {
-        Some(idx) => node_name_fn(idx).unwrap_or_else(|| format!("node_idx_{}", idx)),
-        None => "unknown_node".to_string(),
+    let item_str = match item {
+        Some(it @ ContextItem::Node(idx)) => format!(
+            "Node: '{}'", name_fn(it).unwrap_or_else(|| format!("node_idx_{}", idx))),
+        Some(it @ ContextItem::VarBlock(idx)) => format!(
+            "Var block: '[var.{}]'", name_fn(it).unwrap_or_else(|| format!("var_block_idx_{}", idx))),
+        Some(it @ ContextItem::RasSection(idx)) => format!(
+            "Ras section: '[ras.{}]'", name_fn(it).unwrap_or_else(|| format!("ras_idx_{}", idx))),
+        None => "Node: 'unknown_node'".to_string(),
     };
 
     format!(
-        "{}, Phase: {}, Node: '{}', Msg: '{}'",
+        "{}, Phase: {}, {}, Msg: '{}'",
         timestamp_str,
         phase.as_str(),
-        node_str,
+        item_str,
         panic_msg,
     )
 }

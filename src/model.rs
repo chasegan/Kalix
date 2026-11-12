@@ -7,7 +7,8 @@ use crate::io::error::KalixIoError;
 use crate::io::pixie_io;
 use crate::misc::configuration::Configuration;
 use crate::misc::simulation_context::{
-    clear_context, format_simulation_error, set_context_node, set_context_phase, SimPhase,
+    clear_context, clear_context_item, format_simulation_error, set_context_node,
+    set_context_phase, set_context_ras_section, set_context_var_block, ContextItem, SimPhase,
 };
 use crate::model_inputs::DynamicInput;
 use crate::nodes::{Link, Node, NodeEnum};
@@ -61,6 +62,10 @@ pub enum VarPhase {
     /// default).
     #[default]
     Flow,
+    /// At the block's file position in the order phase, which walks the file
+    /// bottom-up: below-block nodes' order results are read bare, nodes above
+    /// read the block bare.
+    Order,
 }
 
 /// A `[var.<name>]` section: published calculations, evaluated top to bottom
@@ -68,7 +73,7 @@ pub enum VarPhase {
 /// in the assessment slot at the top of the step — each written to its own
 /// data-cache series — so vars are readable anywhere, offset-addressable,
 /// and recordable like any node output (structured_expressions_design.md §9).
-/// `phase = order` is not yet implemented and is rejected at load.
+/// With `phase = order` it runs at its file position in the order phase.
 #[derive(Debug, Clone)]
 pub struct VarBlock {
     /// Section name minus the `var.` prefix.
@@ -126,7 +131,7 @@ pub struct Model {
 
     /// Hot path: flow phase, read in run_timestep().
     /// Var blocks ([var.*] sections): published calculations executed at their
-    /// file position within the flow phase (structured_expressions_design.md §9)
+    /// file position within the phase their `phase` key names (structured_expressions_design.md §9)
     ///
     /// Populated: during parsing or programmatic construction, via `add_var_block()`.
     pub var_blocks: Vec<VarBlock>,
@@ -152,7 +157,7 @@ pub struct Model {
     pub ras_slot: Vec<RasSlotItem>,
 
     /// Hot path: flow phase, read in run_timestep().
-    /// `exec_items` minus the ras-phase var blocks — what the flow pass
+    /// `exec_items` minus the ras- and order-phase var blocks — what the flow pass
     /// actually interleaves. The plain node loop is used instead when this
     /// contains no var blocks (see `flow_has_var_blocks`).
     ///
@@ -805,7 +810,11 @@ impl Model {
             Err(panic_info) => Err(format_simulation_error(
                 panic_info,
                 self.data_cache.current_timestamp,
-                |idx| self.nodes.get(idx).map(|n| n.get_name().to_string()),
+                |item| match item {
+                    ContextItem::Node(idx) => self.nodes.get(idx).map(|n| n.get_name().to_string()),
+                    ContextItem::VarBlock(idx) => self.var_blocks.get(idx).map(|vb| vb.name.clone()),
+                    ContextItem::RasSection(idx) => self.ras_systems.get(idx).map(|r| r.name.clone()),
+                },
             )),
         }
     }
@@ -1025,21 +1034,29 @@ impl Model {
         // step, before ordering and flow — today's orders and takes see
         // today's announcements (kalix-allocation-components.md §3.3), and
         // a section reads bare any assessment written above it.
-        for i in 0..self.ras_slot.len() {
-            match self.ras_slot[i] {
-                RasSlotItem::VarBlock(vb_idx) => {
-                    for def_idx in 0..self.var_blocks[vb_idx].defs.len() {
-                        let value = self.var_blocks[vb_idx].defs[def_idx]
-                            .input
-                            .get_value(&mut self.data_cache);
-                        let series_idx = self.var_blocks[vb_idx].defs[def_idx].series_idx;
-                        self.data_cache.add_value_at_index(series_idx, value);
+        // Most models have no ras slot, so they skip its error context too
+        if !self.ras_slot.is_empty() {
+            set_context_phase(SimPhase::Ras);
+            for i in 0..self.ras_slot.len() {
+                match self.ras_slot[i] {
+                    RasSlotItem::VarBlock(vb_idx) => {
+                        set_context_var_block(vb_idx);
+                        for def_idx in 0..self.var_blocks[vb_idx].defs.len() {
+                            let value = self.var_blocks[vb_idx].defs[def_idx]
+                                .input
+                                .get_value(&mut self.data_cache);
+                            let series_idx = self.var_blocks[vb_idx].defs[def_idx].series_idx;
+                            self.data_cache.add_value_at_index(series_idx, value);
+                        }
+                    }
+                    RasSlotItem::Ras(ras_idx) => {
+                        set_context_ras_section(ras_idx);
+                        self.ras_systems[ras_idx].run(&mut self.data_cache, &mut self.account_manager);
                     }
                 }
-                RasSlotItem::Ras(ras_idx) => {
-                    self.ras_systems[ras_idx].run(&mut self.data_cache, &mut self.account_manager);
-                }
             }
+            // The step's accounting below is no slot item
+            clear_context_item();
         }
 
         // Post-policy, pre-take snapshot: publishes acc.*.opening_balance and
@@ -1048,11 +1065,30 @@ impl Model {
 
         // Execute order phase
         set_context_phase(SimPhase::Ordering);
-        self.simple_ordering_system.run_ordering_phase(
-            &mut self.nodes,
-            &mut self.data_cache,
-            &mut self.account_manager,
-        );
+        // A model without order vars runs `run_ordering_phase`, which does no
+        // var-block work (ADR-0004 §3.5).
+        if !self.simple_ordering_system.has_order_var_blocks() {
+            self.simple_ordering_system.run_ordering_phase(
+                &mut self.nodes,
+                &mut self.data_cache,
+                &mut self.account_manager,
+            );
+        } else {
+            // The ordering system says when a block runs; the model evaluates it
+            let var_blocks = &self.var_blocks;
+            self.simple_ordering_system.run_ordering_phase_with_var_blocks(
+                &mut self.nodes,
+                &mut self.data_cache,
+                &mut self.account_manager,
+                |vb_idx, data_cache| {
+                    set_context_var_block(vb_idx);
+                    for def in &var_blocks[vb_idx].defs {
+                        let value = def.input.get_value(data_cache);
+                        data_cache.add_value_at_index(def.series_idx, value);
+                    }
+                },
+            );
+        }
 
         // Execute nodes and var blocks with flow phase, interleaved in
         // definition order (file position IS execution position for var
@@ -1104,6 +1140,7 @@ impl Model {
                         // Evaluate the block's definitions top to bottom,
                         // each written to its series — computed exactly once
                         // per step, so every reader observes one value.
+                        set_context_var_block(vb_idx);
                         for def_idx in 0..self.var_blocks[vb_idx].defs.len() {
                             let value = self.var_blocks[vb_idx].defs[def_idx]
                                 .input
@@ -1125,14 +1162,24 @@ impl Model {
         // never per step): ras-phase blocks run in the ras slot at the top of
         // the step; the flow pass interleaves the rest at file position,
         // falling back to the plain node loop when none remain.
+        // Order-phase blocks are kept with their file position (the count of
+        // nodes above them) until the ordering visit list exists.
         self.flow_exec_items.clear();
         let mut ras_phase_blocks: Vec<usize> = Vec::new();
+        let mut order_phase_blocks: Vec<(usize, usize)> = Vec::new();
+        let mut nodes_above = 0;
         for &item in &self.exec_items {
             match item {
-                ExecItem::VarBlock(vb_idx) if self.var_blocks[vb_idx].phase == VarPhase::Ras => {
-                    ras_phase_blocks.push(vb_idx);
+                // Every phase named, so a new one does not compile until it is placed
+                ExecItem::VarBlock(vb_idx) => match self.var_blocks[vb_idx].phase {
+                    VarPhase::Ras => ras_phase_blocks.push(vb_idx),
+                    VarPhase::Order => order_phase_blocks.push((nodes_above, vb_idx)),
+                    VarPhase::Flow => self.flow_exec_items.push(item),
+                },
+                ExecItem::Node(node_idx) => {
+                    nodes_above = node_idx + 1;
+                    self.flow_exec_items.push(item);
                 }
-                other => self.flow_exec_items.push(other),
             }
         }
         self.flow_has_var_blocks = self.flow_exec_items.iter()
@@ -1157,6 +1204,8 @@ impl Model {
         // TODO: I am doing this in "initialize_network" because it relies on execution order being resolved (which we do above).
         self.simple_ordering_system
             .initialize(&mut self.nodes, &self.links, &self.incoming_links, &mut self.account_manager)?;
+
+        self.simple_ordering_system.set_order_var_blocks(&order_phase_blocks);
 
         // Return
         Ok(())

@@ -287,12 +287,14 @@ that order in opposite directions — the **flow phase walks top to bottom**
 (file order, as the flow loop already does) and the **order phase walks
 bottom to top** (reverse file order, matching how ordering propagates
 upstream). `phase = flow` vars therefore slot into the existing flow loop
-at their `ExecItem` position. `phase = order` vars must interleave with the
-ordering system's own bottom-up traversal, which is structured differently
-(`simple_nodewise_ordering.rs`) — implementing that interleave is
-**explicitly deferred to the owner**; ship `phase = flow` first and reject
-`phase = order` with a clear "not yet implemented" load error rather than
-approximating its timing.
+at their `ExecItem` position. `phase = order` vars (#493) are items in
+the ordering system's own bottom-up visit list: at initialisation, the
+ordering system merges each block into that list by its file position
+(`set_order_var_blocks`; it alone knows which nodes it visits), the order
+phase's counterpart of `flow_exec_items`, and each step it walks the merged
+list. `has_order_var_blocks` picks the entry point once per step, as
+`flow_has_var_blocks` does, so a model without order vars runs the plain
+ordering phase: the same visits, over the plain list, with no block items.
 
 Var series are registered at load as non-critical (like `node.*` series).
 

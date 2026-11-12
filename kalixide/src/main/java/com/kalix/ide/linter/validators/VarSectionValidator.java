@@ -21,8 +21,8 @@ import java.util.regex.Pattern;
  * <ul>
  *   <li>The block name after {@code var.} is a bare identifier (lowercase
  *       letter first; lowercase letters, digits, underscores after; no dots).</li>
- *   <li>{@code phase = flow} is accepted; {@code phase = order} is designed but
- *       not yet implemented; any other phase value is invalid.</li>
+ *   <li>{@code phase} is {@code flow}, {@code ras} or {@code order}; any other
+ *       value is invalid.</li>
  *   <li>Every other key is a bare identifier, and its value is validated as a
  *       function expression (with model context but no current-node context —
  *       a var block belongs to no node, so {@code this.} cannot be resolved).</li>
@@ -99,16 +99,12 @@ public class VarSectionValidator implements ValidationStrategy {
         String phase = value == null ? "" : value.trim().toLowerCase();
         switch (phase) {
             case "flow":
-            case "ras":
-                // 'ras' runs in the assessment slot at the top of the step;
-                // the engine additionally requires such blocks to precede the
-                // first node section (placement is validated at load).
-                return;
+            // 'order' runs at file position in the bottom-up order phase.
             case "order":
-                result.addIssue(line,
-                        "phase = order is not yet implemented for [var.*] blocks "
-                                + "(only phase = ras or flow is supported)",
-                        ValidationRule.Severity.ERROR, "unsupported_var_phase");
+            // 'ras' runs in the assessment slot at the top of the step;
+            // the engine additionally requires such blocks to precede the
+            // first node section (placement is validated at load).
+            case "ras":
                 return;
             default:
                 result.addIssue(line,

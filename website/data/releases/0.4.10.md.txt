@@ -16,3 +16,7 @@ pip: "pip install kalix==0.4.10"
     - A new `forecast_volume` result records the forecast each target order is based on.
     - The IDE linter flags both targets given together and an adjustment without a target, and warns that a target has no effect under `order_through = true`.
 - `true` and `false` are read in any case (`TRUE`, `True`) for `order_through`, `demand_carryover` and a table's `bilinear`, in the engine and the IDE linter alike. Before, the engine refused anything but lowercase (#522).
+- Var blocks (#493):
+    - `[var.*]` blocks can take `phase = order`. The block runs at its place in the order phase, which works up the file: it reads the orders of nodes below it, and nodes above it read the block in their order inputs (an order control's `set_order`, a storage's `target_level`).
+    - A node or var above a `[var.*]` block can now refer to it (e.g. at `[-1, 0]`). This used to fail at load as a duplicate var definition.
+    - An error while running a var block now names the block, not the last node run, and one in a `[ras.*]` section names the section.
