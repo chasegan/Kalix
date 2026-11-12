@@ -211,4 +211,12 @@ else { ZoneRole::Continues }`.
 
 ## Amendments
 
-*None.*
+- *2026-11-12* — proposed with #493 (order-phase var blocks). The order
+  phase has two entry points: `run_ordering_phase`, and
+  `run_ordering_phase_with_var_blocks` for a model with order-phase var
+  blocks. Both visit a node through `visit_node`.
+  - §1: the upstream order is worked out in `visit_node`. The match is
+    still in the ordering module, names every node type and has no
+    wildcard arm (`test_ordering_exhaustive` passes).
+  - §6: the hot loop is now both entry points and `visit_node`. The move
+    was timed per ADR-0004 §4.
