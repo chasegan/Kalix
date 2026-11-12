@@ -323,9 +323,9 @@ public class MenuBarBuilder {
         viewMenu.add(createMenuItem("Zoom In", e -> callbacks.zoomIn()));
         viewMenu.add(createMenuItem("Zoom Out", e -> callbacks.zoomOut()));
         viewMenu.add(createMenuItem("Reset", e -> callbacks.resetZoom()));
-        viewMenu.addSeparator();
-
-        JCheckBoxMenuItem trackpadItem = new JCheckBoxMenuItem("Trackpad Navigation");
+        // Named for what it does, not for a device: with it on, a mouse wheel pans too.
+        JCheckBoxMenuItem trackpadItem = new JCheckBoxMenuItem("Scroll Pans Map");
+        trackpadItem.setToolTipText("Scrolling pans the map; hold Ctrl or Cmd to zoom");
         trackpadItem.addActionListener(e -> callbacks.setTrackpadNavigation(trackpadItem.isSelected()));
         viewMenu.add(trackpadItem);
 
