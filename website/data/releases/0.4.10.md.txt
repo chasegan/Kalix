@@ -10,8 +10,9 @@ pip: "pip install kalix==0.4.10"
 ---
 
 - Website: every link and button shows the same keyboard focus ring; tutorial and docs screenshots are framed with captions and a zoom badge; the About Kalix page is rebuilt and its quick example runs again; the Ask panel has a close button (Esc closes it too).
-- IDE navigation:
+- IDE navigation (tried on Windows and macOS, not yet on Linux):
     - Shift+scroll, or a sideways swipe, pans the schematic map and scrolls plots through time. Middle-drag pans the map from anywhere.
-    - Two-finger trackpad scrolling zooms smoothly. Turn on `View → Trackpad Navigation` to pan the map with two-finger scroll, and zoom with Ctrl+scroll (Cmd+scroll on macOS) or, on Windows, pinch.
+    - Two-finger trackpad scrolling zooms smoothly instead of in steps. On macOS a mouse wheel now zooms a little for a slow notch and further when spun fast.
+    - `View → Scroll Pans Map`, also in Preferences under Node Diagram, makes scrolling pan the map, with a mouse wheel as well as a trackpad. Zoom is then Ctrl+scroll (Cmd+scroll on macOS) or, on Windows, pinch. Plots are not affected.
     - Ctrl+0 (Cmd+0 on macOS) zooms the map to fit.
     - Alt+letter opens the menus on Windows and Linux, e.g. Alt+F for `File`.
