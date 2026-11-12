@@ -80,6 +80,8 @@ pub fn split_interleaved(interleaved: &[f64]) -> (Vec<f64>, Vec<f64>) {
 }
 
 
+/// Read a boolean as Kalix writes it in a model file: `true` or `false`, in any case,
+/// with surrounding whitespace ignored. The one definition every boolean property uses.
 pub fn true_or_false(s: &str) -> Result<bool, String> {
     let temp = s.trim().to_lowercase();
     if temp == "true" {
@@ -175,7 +177,7 @@ pub fn parse_csv_to_bool_option_u8(input: &str) -> Result<(bool, Option<u8>), St
     if parts.is_empty() {
         return Err("Input string is empty".to_string());
     }
-    let bool_val = parts[0].to_lowercase().parse::<bool>()
+    let bool_val = true_or_false(parts[0])
         .map_err(|_| format!("Failed to parse '{}' as bool", parts[0]))?;
     let u8_val = if parts.len() > 1 && !parts[1].is_empty() {
         Some(parts[1].parse::<u8>()

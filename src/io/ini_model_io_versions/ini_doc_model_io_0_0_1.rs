@@ -14,7 +14,7 @@ use crate::numerical::table::Table;
 use crate::model::Model;
 use crate::misc::link_helper::LinkHelper;
 use crate::tid::utils::{date_string_to_u64_flexible, u64_to_date_string_for_step_size};
-use crate::misc::misc_functions::{is_valid_variable_name, is_valid_bare_name, is_valid_name_segment, parse_csv_to_bool_option_u8, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty, set_property_unless_default, format_f64};
+use crate::misc::misc_functions::{is_valid_variable_name, is_valid_bare_name, is_valid_name_segment, parse_csv_to_bool_option_u8, true_or_false, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty, set_property_unless_default, format_f64};
 use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, regulated_user_node::RegulatedUserNode, field_node::{FieldNode, CropSlot, crop_slot_property, MAX_CROPS}, unregulated_user_node::UnregulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::{RoutingNode, RoutingSpec}, sacramento_node::SacramentoNode, storage_node::StorageNode, order_control_node::OrderControlNode, awbm_node::AwbmNode, surm_node::SurmNode, gr4jsg_node::Gr4jsgNode, Node};
 use crate::hydrology::rainfall_runoff::gr4j::Gr4Variant;
 use crate::hydrology::rainfall_runoff::awbm::AwbmVariant;
@@ -107,7 +107,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                                  ini_property.line_number, table_name, ini_property.value)))?;
                     }
                     "bilinear" => {
-                        bilinear = ini_property.value.trim().to_lowercase().parse::<bool>()
+                        bilinear = true_or_false(&ini_property.value)
                             .map_err(|_| KalixIoError::Parse(format!("Error on line {}: bilinear for table '{}' must be true or false, got '{}'",
                                                  ini_property.line_number, table_name, ini_property.value)))?;
                     }
