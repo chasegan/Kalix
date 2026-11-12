@@ -168,14 +168,14 @@ pub fn sanitize_name(name: &str) -> String {
 }
 
 
-/// Parse a csv string into a (bool, Option<u8>) the input string must start with true or false,
-/// but the u8 is optional.
+/// Parse a csv string into a (bool, Option<u8>) the input string must start with true or false
+/// (in any case), but the u8 is optional.
 pub fn parse_csv_to_bool_option_u8(input: &str) -> Result<(bool, Option<u8>), String> {
     let parts: Vec<&str> = input.split(',').map(|s| s.trim()).collect();
     if parts.is_empty() {
         return Err("Input string is empty".to_string());
     }
-    let bool_val = parts[0].parse::<bool>()
+    let bool_val = parts[0].to_lowercase().parse::<bool>()
         .map_err(|_| format!("Failed to parse '{}' as bool", parts[0]))?;
     let u8_val = if parts.len() > 1 && !parts[1].is_empty() {
         Some(parts[1].parse::<u8>()

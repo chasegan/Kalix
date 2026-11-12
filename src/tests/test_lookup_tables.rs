@@ -339,10 +339,13 @@ fn test_model_table_error_cases() {
     assert!(read("[kalix]\n[table.t]\nn_cols = 2\n").is_err());
     // Bad n_cols
     assert!(read("[kalix]\n[table.t]\nn_cols = two\nvalues = 0, 0, 1, 1\n").is_err());
-    // bilinear takes true or false, lowercase
+    // bilinear takes true or false, in any case
     let err = read("[kalix]\n[table.t]\nn_cols = 3\nbilinear = yes\nvalues = x, 1, 2, 0, 5, 6\n").err().expect("bad bilinear should fail").to_string();
     assert!(err.contains("bilinear for table 't' must be true or false"), "got: {}", err);
-    assert!(read("[kalix]\n[table.t]\nn_cols = 3\nbilinear = True\nvalues = x, 1, 2, 0, 5, 6\n").is_err());
+    for value in ["true", "True", "TRUE", "false", "False", "FALSE"] {
+        let ini = format!("[kalix]\n[table.t]\nn_cols = 3\nbilinear = {}\nvalues = x, 1, 2, 0, 5, 6\n", value);
+        assert!(read(&ini).is_ok(), "bilinear = {} should load", value);
+    }
     // bilinear = true on a 1D table, in either property order
     let err = read("[kalix]\n[table.t]\nbilinear = true\nvalues = 0, 0, 1, 1\n").err().expect("bilinear on 1D should fail").to_string();
     assert!(err.contains("bilinear applies only to 2D tables"), "got: {}", err);

@@ -554,3 +554,34 @@ fn test_save_keeps_time_of_day_on_start_and_end() {
     assert_eq!(reloaded.configuration.specified_sim_start_timestamp, Some(start), "saved:\n{}", out);
     assert_eq!(reloaded.configuration.specified_sim_end_timestamp, Some(end), "saved:\n{}", out);
 }
+
+#[test]
+fn test_boolean_properties_are_read_in_any_case() {
+    // The writer emits lowercase; the reader takes what the modeller meant.
+    for (written, expected) in [("true", true), ("True", true), ("TRUE", true),
+                                ("false", false), ("False", false), ("FALSE", false)] {
+        let ini = format!("[kalix]\n\
+                           \n\
+                           [node.s]\n\
+                           type = storage\n\
+                           loc = 5, 6\n\
+                           order_through = {}\n\
+                           dimensions = 0, 0, 0, 0,\n\
+                           \x20            1, 1000, 3, 0\n\
+                           ds_1 = bh\n\
+                           \n\
+                           [node.bh]\n\
+                           type = blackhole\n\
+                           loc = 1, 2\n", written);
+        let model = IniModelIO::read_model_string(&ini)
+            .unwrap_or_else(|e| panic!("order_through = {} should load, got: {}", written, e));
+        let order_through = model.nodes.iter().find_map(|node| match node {
+            crate::nodes::NodeEnum::StorageNode(n) => Some(n.order_through),
+            _ => None,
+        }).expect("model has a storage");
+        assert_eq!(order_through, expected, "order_through = {}", written);
+    }
+    // Anything else is still refused
+    let ini = "[kalix]\n\n[node.s]\ntype = storage\norder_through = yes\ndimensions = 0, 0, 0, 0, 1, 1000, 3, 0\n";
+    assert!(IniModelIO::read_model_string(ini).is_err());
+}
