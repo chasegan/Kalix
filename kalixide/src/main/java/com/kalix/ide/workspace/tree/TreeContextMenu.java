@@ -1,7 +1,10 @@
 package com.kalix.ide.workspace.tree;
 
 import com.kalix.ide.icons.MenuIcons;
+import com.kalix.ide.io.CompressedCsvFormat;
 import com.kalix.ide.io.CsvZipFormat;
+import com.kalix.ide.io.GzipFile;
+import com.kalix.ide.io.SourceResCsvFormat;
 import com.kalix.ide.utils.PlatformUtils;
 
 import javax.swing.Icon;
@@ -10,6 +13,7 @@ import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import java.io.File;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -152,6 +156,10 @@ public class TreeContextMenu {
                 item(
                     "Unzip", TreeContextMenu::isSingleZip,
                     sel -> fileOps.unzipFile(file(sel))
+                ),
+                item(
+                    "Gunzip", sel -> isSingleGzip(sel) && context == BuildContext.FileTree,
+                    sel -> fileOps.gunzipFile(file(sel))
                 )
             ),
             // External handoff
@@ -209,6 +217,12 @@ public class TreeContextMenu {
                     "Zip",
                     (sel -> (isNotSingleZip(sel) && context == BuildContext.FileTree)),
                     sel -> fileOps.zipFiles(files(sel), tree.getRootFile())
+                ),
+                // A gzipped CSV is still data the engine and IDE read; only plain
+                // CSV is offered, as a .res.csv.gz is not read by either.
+                item(
+                    "Gzip", sel -> isSinglePlainCsv(sel) && context == BuildContext.FileTree,
+                    sel -> fileOps.gzipFile(file(sel))
                 )
             ),
             // Destructive (isolated) — never the root (ADR-0002 §4).
@@ -304,13 +318,26 @@ public class TreeContextMenu {
         return sel.size() == 1 && TreeFileOperations.isZip(file(sel));
     }
 
+    private static boolean isSingleGzip(List<FileTreeNode> sel) {
+        return sel.size() == 1 && !sel.getFirst().isDirectory() && GzipFile.isGzip(file(sel));
+    }
+
+    /** One uncompressed {@code .csv} that is not a Source result ({@code .res.csv}). */
+    private static boolean isSinglePlainCsv(List<FileTreeNode> sel) {
+        if (sel.size() != 1 || sel.getFirst().isDirectory()) {
+            return false;
+        }
+        String name = file(sel).getName();
+        return name.toLowerCase(Locale.ROOT).endsWith(".csv") && !SourceResCsvFormat.isResCsv(name);
+    }
+
     /** True when the selection contains no root node — the empty-space subject. */
     private boolean noneIsRoot(List<FileTreeNode> sel) {
         return sel.stream().noneMatch(tree::isRoot);
     }
 
     private static boolean isNotSingleZip(List<FileTreeNode> sel) {
-        return !sel.isEmpty() && any(sel) && isNotZip(sel);
+        return !sel.isEmpty() && any(sel) && isNotZip(sel) && !isSingleCompressedCsv(sel);
     }
 
     /**
@@ -318,6 +345,11 @@ public class TreeContextMenu {
      */
     private static boolean isNotZip(List<FileTreeNode> sel) {
         return sel.stream().noneMatch((x) -> TreeFileOperations.isZip(x.getFile()));
+    }
+
+    /** A lone compressed CSV is not worth archiving; one among other files still is. */
+    private static boolean isSingleCompressedCsv(List<FileTreeNode> sel) {
+        return sel.size() == 1 && CompressedCsvFormat.isCompressedCsv(file(sel).getName());
     }
 
     // --- Selection accessors ---

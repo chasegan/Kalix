@@ -7,6 +7,7 @@ import com.kalix.ide.dataview.VirtualTextArea;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.JScrollPane;
+import javax.swing.SwingUtilities;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -87,8 +88,9 @@ class DataDocumentTest {
             new File("/nonexistent/kalix-test-missing.csv"), true);
         try {
             assertFalse(doc.isEditable(), "no session + empty buffer must never be saveable");
-            assertSame(doc.getEditor(), doc.getPrimaryView(),
-                "virtual text unavailable: the (unsaveable) editor is the fallback");
+            assertNotSame(doc.getEditor(), doc.getPrimaryView(),
+                "virtual text unavailable: the (unsaveable) editor is the fallback, under a banner saying why");
+            assertTrue(SwingUtilities.isDescendingFrom(doc.getEditor(), doc.getPrimaryView()));
             assertNull(doc.getContextView());
         } finally {
             doc.dispose();

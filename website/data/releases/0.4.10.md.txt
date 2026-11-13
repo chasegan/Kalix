@@ -26,3 +26,7 @@ pip: "pip install kalix==0.4.10"
     - `View → Scroll Pans Map`, also in Preferences under Node Diagram, makes scrolling pan the map, with a mouse wheel as well as a trackpad. Zoom is then Ctrl+scroll (Cmd+scroll on macOS) or, on Windows, pinch. Plots are not affected.
     - Ctrl+0 (Cmd+0 on macOS) zooms the map to fit.
     - Alt+letter opens the menus on Windows and Linux, e.g. Alt+F for `File`.
+- New support for `.csv.gz` file format (#521):
+    - A `.csv.gz` is a CSV in a gzip stream, the format `gzip` and pandas produce.
+    - Reference `.csv.gz` files directly in the model, write them using `kalix simulate -o` or `kalix convert`, and use them throughout KalixIDE.
+    - In the IDE's file tree, Gzip compresses a `.csv` and Gunzip unpacks a `.gz`.

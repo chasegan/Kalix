@@ -3,7 +3,10 @@ extern crate csv;
 use crate::io::error::KalixIoError;
 use crate::timeseries::Timeseries;
 use crate::tid::utils::{append_date_string, date_string_to_u64_flexible, date_string_to_u64_with_format, needs_time_of_day};
+use flate2::bufread::GzDecoder;
+use flate2::{Compression, GzBuilder};
 use std::fs;
+use std::io::{self, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
 #[derive(Debug)]
@@ -23,11 +26,26 @@ impl From<CsvError> for String {
     }
 }
 
-/// True when `filename` names a zip-compressed CSV (`.csv.zip`). This is the
-/// one extension test both the read and write paths key off, so the two can
-/// never disagree about what counts as compressed.
-pub fn is_zip_csv(filename: &str) -> bool {
-    filename.to_ascii_lowercase().ends_with(".csv.zip")
+/// How a CSV file is wrapped, named by extension: plain `.csv`, a one-entry
+/// zip archive (`.csv.zip`) or a gzip stream (`.csv.gz`). The same CSV grammar sits inside all three.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum CsvCompression {
+    None,
+    Zip,
+    Gzip,
+}
+
+/// The one extension test both the read and write paths key off, so the two
+/// can never disagree about what counts as compressed.
+pub fn csv_compression(filename: &str) -> CsvCompression {
+    let lower = filename.to_ascii_lowercase();
+    if lower.ends_with(".csv.zip") {
+        CsvCompression::Zip
+    } else if lower.ends_with(".csv.gz") {
+        CsvCompression::Gzip
+    } else {
+        CsvCompression::None
+    }
 }
 
 /// The archive's single entry name: the file name minus its `.zip` — pandas'
@@ -35,7 +53,7 @@ pub fn is_zip_csv(filename: &str) -> bool {
 /// a name not ending in `.zip` comes back unchanged (the suffix check keeps
 /// the byte slice on an ASCII boundary, so no multibyte name can panic).
 pub fn zip_inner_name(filename: &str) -> String {
-    let name = std::path::Path::new(filename)
+    let name = Path::new(filename)
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| filename.to_string());
@@ -47,8 +65,8 @@ pub fn zip_inner_name(filename: &str) -> String {
 }
 
 pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, KalixIoError> {
-    // A .csv.zip is the same CSV grammar inside a one-entry zip archive — the
-    // parse below never sees the difference (issue #409).
+    // A .csv.zip / .csv.gz is the same CSV grammar inside a compression
+    // wrapper — the parse below never sees the difference.
     let builder = || {
         let mut b = csv::ReaderBuilder::new();
         // Flexible record lengths: allows rows with trailing commas (extra
@@ -56,39 +74,116 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, KalixIoError> {
         b.flexible(true);
         b
     };
-    if is_zip_csv(filename) {
-        let file = fs::File::open(filename)
-            .map_err(|e| KalixIoError::Io(format!("Failed to open file '{}': {}", filename, e)))?;
-        let mut archive = zip::ZipArchive::new(file)
-            .map_err(|e| KalixIoError::Io(format!("'{}' is not a readable zip archive: {}", filename, e)))?;
-        // Pandas parity: a .csv.zip holds exactly one file. Reading "the first
-        // of several" would silently guess; pandas refuses too.
-        // by_index_raw classifies without opening the entry, so an archive
-        // holding e.g. an encrypted second entry still gets the clear
-        // "exactly one file" refusal rather than a decryption error.
-        let mut file_entries: Vec<usize> = Vec::new();
-        for i in 0..archive.len() {
-            let entry = archive.by_index_raw(i)
-                .map_err(|e| KalixIoError::Io(format!("Reading zip entry {} of '{}': {}", i, filename, e)))?;
-            if !entry.is_dir() {
-                file_entries.push(i);
-            }
+    match csv_compression(filename) {
+        CsvCompression::Zip => read_ts_zip(filename, builder()),
+        CsvCompression::Gzip => read_ts_gzip(filename, builder()),
+        CsvCompression::None => {
+            let reader = builder().from_path(filename)
+                .map_err(|e| KalixIoError::Io(format!("Failed to open file '{}': {}", filename, e)))?;
+            read_ts_records(reader, filename)
         }
-        if file_entries.len() != 1 {
-            return Err(KalixIoError::Io(format!(
-                "'{}': a .csv.zip must hold exactly one file, found {}", filename, file_entries.len())));
-        }
-        let entry = archive.by_index(file_entries[0])
-            .map_err(|e| KalixIoError::Io(format!("Reading '{}': {}", filename, e)))?;
-        read_ts_records(builder().from_reader(entry), filename)
-    } else {
-        let reader = builder().from_path(filename)
-            .map_err(|e| KalixIoError::Io(format!("Failed to open file '{}': {}", filename, e)))?;
-        read_ts_records(reader, filename)
     }
 }
 
-fn read_ts_records<R: std::io::Read>(
+fn read_ts_zip(filename: &str, builder: csv::ReaderBuilder) -> Result<Vec<Timeseries>, KalixIoError> {
+    let file = fs::File::open(filename)
+        .map_err(|e| KalixIoError::Io(format!("Failed to open file '{}': {}", filename, e)))?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|e| KalixIoError::Io(format!("'{}' is not a readable zip archive: {}", filename, e)))?;
+    // Pandas parity: a .csv.zip holds exactly one file. Reading "the first
+    // of several" would silently guess; pandas refuses too.
+    // by_index_raw classifies without opening the entry, so an archive
+    // holding e.g. an encrypted second entry still gets the clear
+    // "exactly one file" refusal rather than a decryption error.
+    let mut file_entries: Vec<usize> = Vec::new();
+    for i in 0..archive.len() {
+        let entry = archive.by_index_raw(i)
+            .map_err(|e| KalixIoError::Io(format!("Reading zip entry {} of '{}': {}", i, filename, e)))?;
+        if !entry.is_dir() {
+            file_entries.push(i);
+        }
+    }
+    if file_entries.len() != 1 {
+        return Err(KalixIoError::Io(format!(
+            "'{}': a .csv.zip must hold exactly one file, found {}", filename, file_entries.len())));
+    }
+    let entry = archive.by_index(file_entries[0])
+        .map_err(|e| KalixIoError::Io(format!("Reading '{}': {}", filename, e)))?;
+    read_ts_records(builder.from_reader(entry), filename)
+}
+
+fn read_ts_gzip(filename: &str, builder: csv::ReaderBuilder) -> Result<Vec<Timeseries>, KalixIoError> {
+    let mut file = fs::File::open(filename)
+        .map_err(|e| KalixIoError::Io(format!("Failed to open file '{}': {}", filename, e)))?;
+    // flate2 reads the header lazily, so a file that isn't gzip at all would
+    // otherwise surface as a puzzling first-row error. Check the magic up front.
+    let mut magic = [0u8; 2];
+    let is_gzip = file.read_exact(&mut magic).is_ok() && magic == [0x1f, 0x8b];
+    if !is_gzip {
+        return Err(KalixIoError::Io(format!("'{}' is not a readable gzip file", filename)));
+    }
+    file.seek(SeekFrom::Start(0))
+        .map_err(|e| KalixIoError::Io(format!("Reading '{}': {}", filename, e)))?;
+    // 32 KiB, as flate2's own MultiGzDecoder buffers.
+    let reader = BufReader::with_capacity(32 * 1024, file);
+    read_ts_records(builder.from_reader(GzMembers::new(reader)), filename)
+}
+
+/// A gzip file read as Python's gzip (and so pandas) reads it: concatenated
+/// members (`cat a.gz b.gz`, bgzip) are one stream, and zero padding after a
+/// member is skipped. Any other trailing byte must start a valid member, so
+/// garbage and truncation are errors (gzip(1) only warns on garbage).
+struct GzMembers<R: BufRead> {
+    member: Option<GzDecoder<R>>,
+}
+
+impl<R: BufRead> GzMembers<R> {
+    fn new(reader: R) -> Self {
+        GzMembers { member: Some(GzDecoder::new(reader)) }
+    }
+}
+
+impl<R: BufRead> Read for GzMembers<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        loop {
+            let Some(member) = self.member.as_mut() else { return Ok(0) };
+            let n = match member.read(buf) {
+                Ok(n) => n,
+                Err(e) => {
+                    self.member = None; // fused: a retry must not restart mid-stream
+                    return Err(e);
+                }
+            };
+            if n > 0 || buf.is_empty() {
+                return Ok(n);
+            }
+            // The member ended on a verified trailer; the reader sits just past it.
+            let mut rest = self.member.take().expect("member present").into_inner();
+            if skip_zero_padding(&mut rest)? {
+                return Ok(0);
+            }
+            self.member = Some(GzDecoder::new(rest));
+        }
+    }
+}
+
+/// Consumes zero bytes; true if the input ends there.
+fn skip_zero_padding<R: BufRead>(reader: &mut R) -> io::Result<bool> {
+    loop {
+        let buf = reader.fill_buf()?;
+        if buf.is_empty() {
+            return Ok(true);
+        }
+        let zeros = buf.iter().take_while(|&&b| b == 0).count();
+        let all_zero = zeros == buf.len();
+        reader.consume(zeros);
+        if !all_zero {
+            return Ok(false);
+        }
+    }
+}
+
+fn read_ts_records<R: Read>(
     mut reader: csv::Reader<R>,
     filename: &str,
 ) -> Result<Vec<Timeseries>, KalixIoError> {
@@ -322,17 +417,15 @@ pub fn push_f64_compact(buf: &mut String, value: f64) {
 }
 
 pub fn write_ts(filename: &str, timeseries_vector: Vec<&Timeseries>) -> Result<(), CsvError> {
-    let inner = if is_zip_csv(filename) { Some(zip_inner_name(filename)) } else { None };
-    write_ts_opts(filename, timeseries_vector, inner.as_deref())
+    write_ts_opts(filename, timeseries_vector, filename)
 }
 
-/// Like [`write_ts`], but with the zip decision made by the caller instead of
-/// read off `filename`: `zip_inner` of `Some(entry_name)` writes a one-entry
-/// zip archive holding the CSV under that name; `None` writes plain CSV. For
-/// writers that stage output under a temporary name (the conversion path),
-/// where the temp name's extension lies about both the format and the entry
-/// name.
-pub fn write_ts_opts(filename: &str, timeseries_vector: Vec<&Timeseries>, zip_inner: Option<&str>) -> Result<(), CsvError> {
+/// Like [`write_ts`], but writes to `filename` in the format `named_as`
+/// implies: plain CSV, a one-entry zip archive whose entry is named after
+/// `named_as` (`.csv.zip`), or gzip (`.csv.gz`). For writers that stage output
+/// under a temporary name (the conversion path), where the temp name's
+/// extension lies about both the format and the zip entry name.
+pub fn write_ts_opts(filename: &str, timeseries_vector: Vec<&Timeseries>, named_as: &str) -> Result<(), CsvError> {
 
     // Check that all timeseries in the vector have the same length
     let data_length = match timeseries_vector.len() {
@@ -380,28 +473,36 @@ pub fn write_ts_opts(filename: &str, timeseries_vector: Vec<&Timeseries>, zip_in
     }
 
     // Write it all to file. The zip entry's timestamp is pinned to the DOS
-    // epoch so identical content compresses to identical bytes run-to-run:
-    // the cross-platform contract is byte-identical *decompressed* content
-    // (Java and Rust encoders legitimately differ), with reproducible
-    // output within each stack (issue #409).
+    // epoch, and the gzip header's MTIME to 0, so identical content
+    // compresses to identical bytes run-to-run: the cross-platform contract
+    // is byte-identical *decompressed* content (Java and Rust encoders
+    // legitimately differ), with reproducible output within each stack.
     let filename_path = Path::new(filename);
-    let result = if let Some(entry_name) = zip_inner {
-        fs::File::create(filename_path).and_then(|file| {
-            use std::io::Write;
-            let mut writer = zip::ZipWriter::new(std::io::BufWriter::new(file));
+    let result = match csv_compression(named_as) {
+        CsvCompression::Zip => fs::File::create(filename_path).and_then(|file| {
+            let entry_name = zip_inner_name(named_as);
+            let mut writer = zip::ZipWriter::new(BufWriter::new(file));
             let options = zip::write::SimpleFileOptions::default()
                 .compression_method(zip::CompressionMethod::Deflated)
                 .last_modified_time(zip::DateTime::default());
-            writer.start_file(entry_name, options).map_err(std::io::Error::other)?;
+            writer.start_file(entry_name, options).map_err(io::Error::other)?;
             writer.write_all(data_string.as_bytes())?;
             // finish() writes the central directory into the BufWriter but
             // does not flush it; letting Drop flush would swallow a disk-full
             // error and report a truncated file as written.
-            let mut inner = writer.finish().map_err(std::io::Error::other)?;
+            let mut inner = writer.finish().map_err(io::Error::other)?;
             inner.flush()
-        })
-    } else {
-        fs::write(filename_path, data_string)
+        }),
+        CsvCompression::Gzip => fs::File::create(filename_path).and_then(|file| {
+            let mut encoder = GzBuilder::new()
+                .mtime(0)
+                .write(BufWriter::new(file), Compression::default());
+            encoder.write_all(data_string.as_bytes())?;
+            // As for zip: finish() writes the trailer but does not flush.
+            let mut inner = encoder.finish()?;
+            inner.flush()
+        }),
+        CsvCompression::None => fs::write(filename_path, data_string),
     };
     match result {
         Ok(_) => Ok(()),

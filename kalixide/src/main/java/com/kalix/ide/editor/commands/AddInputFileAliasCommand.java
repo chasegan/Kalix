@@ -1,5 +1,6 @@
 package com.kalix.ide.editor.commands;
 
+import com.kalix.ide.io.CompressedCsvFormat;
 import com.kalix.ide.linter.parsing.INIModelParser;
 import com.kalix.ide.utils.DialogUtils;
 import org.slf4j.Logger;
@@ -108,9 +109,9 @@ public class AddInputFileAliasCommand implements EditorCommand {
     static String suggestAlias(String filePath) {
         java.nio.file.Path fileName = java.nio.file.Paths.get(filePath).getFileName();
         String name = fileName != null ? fileName.toString() : filePath;
-        // .csv.zip is one extension, not two: rain.csv.zip suggests "rain", not "rain_csv".
-        if (com.kalix.ide.io.CsvZipFormat.isCsvZip(name)) {
-            name = name.substring(0, name.length() - com.kalix.ide.io.CsvZipFormat.EXTENSION.length());
+        // A compressed CSV extension is one extension, not two: rain.csv.zip suggests "rain", not "rain_csv".
+        if (CompressedCsvFormat.isCompressedCsv(name)) {
+            name = CompressedCsvFormat.stripExtension(name);
         } else {
             int dot = name.lastIndexOf('.');
             if (dot > 0) {

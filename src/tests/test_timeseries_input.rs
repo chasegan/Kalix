@@ -1,6 +1,13 @@
+use crate::timeseries_input::TimeseriesInput;
+use flate2::write::GzEncoder;
+use flate2::Compression;
+use std::env;
+use std::fs;
+use std::io::Write;
+use std::process;
+
 #[test]
 fn test_load() {
-    use crate::timeseries_input::TimeseriesInput;
     let vts = match TimeseriesInput::load("./src/tests/example_models/1/rex_mpot.csv", None) {
         Ok(v) => v,
         Err(e) => panic!("{}", e),
@@ -18,7 +25,6 @@ fn test_load() {
 
 #[test]
 fn test_load_2() {
-    use crate::timeseries_input::TimeseriesInput;
     let vts = match TimeseriesInput::load("./src/tests/example_models/1/rex_rain.csv", None) {
         Ok(v) => v,
         Err(e) => panic!("{}", e),
@@ -36,8 +42,6 @@ fn test_load_2() {
 
 #[test]
 fn test_name_sanitization() {
-    use crate::timeseries_input::TimeseriesInput;
-
     // Load a CSV file
     let vts = match TimeseriesInput::load("./src/tests/example_models/1/rex_rain.csv", None) {
         Ok(v) => v,
@@ -65,8 +69,6 @@ fn test_name_sanitization() {
 
 #[test]
 fn test_timeseries_input_with_alias() {
-    use crate::timeseries_input::TimeseriesInput;
-
     // Load a file with an alias
     let inputs = TimeseriesInput::load("./src/tests/example_data/test.csv", Some("mydata"))
         .expect("Failed to load with alias");
@@ -108,10 +110,10 @@ fn test_timeseries_input_with_alias() {
 fn make_pixie_fixture(test_name: &str) -> std::path::PathBuf {
     use crate::io::{csv_io, pixie_io};
 
-    let dir = std::env::temp_dir()
+    let dir = env::temp_dir()
         .join("kalix_tests")
         .join(format!("{}_{}", test_name, uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(&dir).unwrap();
+    fs::create_dir_all(&dir).unwrap();
 
     let series = csv_io::read_ts("./src/tests/example_data/test.csv").expect("read source csv");
     let base_path = dir.join("test");
@@ -124,7 +126,7 @@ fn make_pixie_fixture(test_name: &str) -> std::path::PathBuf {
 
 #[cfg(test)]
 fn cleanup_fixture(base_path: &std::path::Path) {
-    let _ = std::fs::remove_dir_all(base_path.parent().unwrap());
+    let _ = fs::remove_dir_all(base_path.parent().unwrap());
 }
 
 /// A Pixie source is named by its `.pxt` half, and the source name is just the
@@ -132,8 +134,6 @@ fn cleanup_fixture(base_path: &std::path::Path) {
 /// accepted in the first place.
 #[test]
 fn test_pixie_source_is_named_by_its_pxt() {
-    use crate::timeseries_input::TimeseriesInput;
-
     let base_path = make_pixie_fixture("pixie_source_name");
     let inputs = TimeseriesInput::load(&format!("{}.pxt", base_path.display()), None)
         .expect("load via .pxt");
@@ -149,8 +149,6 @@ fn test_pixie_source_is_named_by_its_pxt() {
 /// not accepted as a second spelling of the same source.
 #[test]
 fn test_pixie_pxb_is_rejected_with_guidance() {
-    use crate::timeseries_input::TimeseriesInput;
-
     let base_path = make_pixie_fixture("pixie_pxb_rejected");
 
     // TimeseriesInput isn't Debug, so unwrap the Result by hand.
@@ -171,8 +169,6 @@ fn test_pixie_pxb_is_rejected_with_guidance() {
 /// same column paths (bar the source name), same values.
 #[test]
 fn test_pixie_matches_csv_source() {
-    use crate::timeseries_input::TimeseriesInput;
-
     let base_path = make_pixie_fixture("pixie_vs_csv");
     let from_pixie = TimeseriesInput::load(&format!("{}.pxt", base_path.display()), None)
         .expect("load pixie");
@@ -204,10 +200,8 @@ fn test_pixie_matches_csv_source() {
 /// surfacing a bare "no such file" about a path the user never wrote.
 #[test]
 fn test_pixie_missing_companion_is_reported() {
-    use crate::timeseries_input::TimeseriesInput;
-
     let base_path = make_pixie_fixture("pixie_missing_companion");
-    std::fs::remove_file(format!("{}.pxb", base_path.display())).expect("remove companion");
+    fs::remove_file(format!("{}.pxb", base_path.display())).expect("remove companion");
 
     // TimeseriesInput isn't Debug, so unwrap the Result by hand rather than
     // reaching for expect_err.
@@ -306,4 +300,22 @@ fn test_model_with_pixie_data() {
     assert_eq!(ans.sum(), 38.1);
 
     cleanup_fixture(&base_path);
+}
+
+/// A `.csv.gz` source loads through the same funnel as `[data]` and
+/// `observed_file`, named like any other file.
+#[test]
+fn test_csv_gz_source_loads_and_is_named_by_file() {
+    let path = env::temp_dir().join(format!("kalix_{}_flows.csv.gz", process::id()));
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+    encoder.write_all(b"Date,q\n2020-01-01,1.0\n2020-01-02,2.0\n").unwrap();
+    fs::write(&path, encoder.finish().unwrap()).unwrap();
+
+    let result = TimeseriesInput::load(&path.to_string_lossy(), None);
+    fs::remove_file(&path).ok();
+    let inputs = result.expect("load via .csv.gz");
+    let expected = format!("kalix_{}_flows_csv_gz", process::id());
+    assert_eq!(inputs[0].source_name, expected);
+    assert_eq!(inputs[0].full_colname_path, format!("data.{expected}.by_name.q"));
+    assert_eq!(inputs[0].timeseries.values, vec![1.0, 2.0]);
 }

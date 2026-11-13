@@ -8,7 +8,7 @@ import com.kalix.ide.dataview.DataViewSession;
 import com.kalix.ide.dataview.VirtualLineNumberGutter;
 import com.kalix.ide.dataview.VirtualTextArea;
 import com.kalix.ide.editor.KalixCsvTokenMaker;
-import com.kalix.ide.io.CsvZipFormat;
+import com.kalix.ide.io.CompressedCsvFormat;
 import com.kalix.ide.preferences.PreferenceKeys;
 
 import org.slf4j.Logger;
@@ -69,25 +69,29 @@ public class DataDocument extends KalixDocument {
         if (file == null) {
             throw new IllegalArgumentException("DATA documents need a backing file");
         }
-        // A .csv.zip is read-only regardless of the gate: its bytes on disk are
-        // a zip archive, so there is no text buffer to honestly edit and save back.
-        // Enforced here so no entrance (test seam included) can mint an
-        // editable zip document.
-        largeReadOnly = largeReadOnly || CsvZipFormat.isCsvZip(file.getName());
+        // A compressed CSV is read-only regardless of the gate: its bytes on disk
+        // are compressed, so there is no text buffer to honestly edit and save
+        // back. Enforced here so no entrance (test seam included) can mint an
+        // editable compressed document.
+        largeReadOnly = largeReadOnly || CompressedCsvFormat.isCompressedCsv(file.getName());
         setFile(file); // the load path may setFile again with the same file; harmless
 
         DataViewSession session = null;
         String openFailureNote = null;
         try {
             session = DataViewOpener.openFor(file);
-        } catch (CsvZipFormat.TooLargeException e) {
+        } catch (CompressedCsvFormat.TooLargeException e) {
             // The one refusal with a story the banner must tell: the payload
             // crossed the in-memory limit, and the user can raise it. Reopening
             // is the recovery: a refused open builds no views to refresh into.
             openFailureNote = e.getMessage() + " (raise the limit in preferences and reopen)";
             logger.warn("Data view unavailable for {}: {}", file, e.getMessage());
         } catch (IOException e) {
-            // The tab still opens; only the data views are lost.
+            // The tab still opens; only the data views are lost. A read-only tab
+            // has no text to fall back on, so its banner says why (e.g. a
+            // truncated .csv.gz); a refused open builds no views to refresh into.
+            openFailureNote = "Can't read this file: "
+                + (e.getMessage() != null ? e.getMessage() : e.toString()) + " (reopen to retry)";
             logger.warn("Data view unavailable for {}: {}", file, e.getMessage());
         }
         this.dataViewSession = session;
@@ -119,9 +123,9 @@ public class DataDocument extends KalixDocument {
         if (virtualText) {
             this.largePrimaryView = withReadOnlyBanner(largeTextScroller, readOnlyBannerText(file));
         } else if (largeReadOnly && openFailureNote != null) {
-            // No views to show, but the tab must still say why (a refused
-            // .csv.zip): the banner carries the reason over the empty,
-            // unsaveable editor.
+            // No views to show, but the tab must still say why (a refused or
+            // unreadable compressed CSV): the banner carries the reason over
+            // the empty, unsaveable editor.
             this.largePrimaryView = withReadOnlyBanner(getEditor(), openFailureNote);
         } else {
             this.largePrimaryView = null;
@@ -140,10 +144,11 @@ public class DataDocument extends KalixDocument {
         }
     }
 
-    /** Why this tab is read-only, in the banner's words — .csv.zip has its own story. */
+    /** Why this tab is read-only, in the banner's words — compressed CSV has its own story. */
     private static String readOnlyBannerText(File file) {
-        if (CsvZipFormat.isCsvZip(file.getName())) {
-            return "Read only (.csv.zip is viewed decompressed)";
+        String extension = CompressedCsvFormat.extensionOf(file.getName());
+        if (extension != null) {
+            return "Read only (" + extension + " is viewed decompressed)";
         }
         return String.format(
             "Read only >%dMB (modify threshold in preferences)",
@@ -305,7 +310,7 @@ public class DataDocument extends KalixDocument {
                     old.close();
                 }
             });
-        } catch (CsvZipFormat.TooLargeException e) {
+        } catch (CompressedCsvFormat.TooLargeException e) {
             // The file changed and its new payload crosses the in-memory
             // limit. Keeping the old session is the least-bad option, but it
             // must never masquerade as current: the banner says what happened.

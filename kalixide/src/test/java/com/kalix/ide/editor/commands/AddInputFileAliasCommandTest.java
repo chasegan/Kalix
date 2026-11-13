@@ -19,6 +19,12 @@ class AddInputFileAliasCommandTest {
     }
 
     @Test
+    void aCompressedCsvExtensionCountsAsOne() {
+        assertEquals("rain", AddInputFileAliasCommand.suggestAlias("rain.csv.zip"));
+        assertEquals("rain", AddInputFileAliasCommand.suggestAlias("./data/Rain.CSV.GZ"));
+    }
+
+    @Test
     void handlesExtensionlessAndDotfileNames() {
         assertEquals("noext", AddInputFileAliasCommand.suggestAlias("./dir/noext"));
         assertEquals("_hidden", AddInputFileAliasCommand.suggestAlias(".hidden"));

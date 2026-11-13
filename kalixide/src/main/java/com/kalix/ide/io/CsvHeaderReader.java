@@ -29,7 +29,7 @@ public class CsvHeaderReader implements DataSourceHeaderReader {
 
     /**
      * Reader variant, for content not sitting in a plain file (a decompressed
-     * {@code .csv.zip} — see {@link ZipCsvHeaderReader}). The caller owns the reader.
+     * compressed CSV — see {@link CompressedCsvHeaderReader}). The caller owns the reader.
      */
     public List<String> readSeriesNames(BufferedReader reader) throws IOException {
         List<String> names = new ArrayList<>();

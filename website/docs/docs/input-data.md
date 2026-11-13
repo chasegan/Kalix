@@ -129,6 +129,7 @@ Supported data formats are listed below.
 | --- | --- | --- |
 | .csv | Comma separated values. | see below… |
 | .csv.zip | Zip-compressed CSV. | see below… |
+| .csv.gz | Gzip-compressed CSV. | see below… |
 | .pxt + .pxb | Pixie fast lightweight binary format. | see below… |
 
 ### CSV files
@@ -150,11 +151,14 @@ Rules for CSV files are as follows:
 
 - Blank values (or whitespace) are taken to indicate missing data.
 
-### Zip-compressed CSV files (.csv.zip)
+### Compressed CSV files (.csv.zip, .csv.gz)
 
-A `.csv.zip` is an ordinary CSV file (all the rules above apply) inside a standard zip archive holding **exactly one file** — the same convention pandas reads and writes natively (`df.to_csv("flows.csv.zip")`), and any zip tool or OS file manager can create or unpack one. Kalix reads and writes them everywhere it handles CSV: as model input data, as simulation output (`kalix simulate -o results.csv.zip`), and in [`kalix convert`](cli.md#kalix-convert). In the IDE they open read-only (decompressed into memory, bounded by a preference). An archive holding more than one file is refused, exactly as pandas refuses it.
+A compressed CSV is an ordinary CSV file (all the rules above apply) inside a compression wrapper. Kalix reads and writes both kinds everywhere it handles CSV: as model input data, as simulation output (`kalix simulate -o results.csv.gz`), and in [`kalix convert`](cli.md#kalix-convert). In the IDE they open read-only (decompressed into memory, bounded by a preference).
 
-Zip is the compression option everyone recognises; Pixie remains the faster, smaller Kalix-native alternative.
+- **`.csv.zip`** is a standard zip archive holding **exactly one file**. This is the convention pandas reads and writes natively (`df.to_csv("flows.csv.zip")`), and any zip tool or OS file manager can create or unpack one. An archive holding more than one file is refused, exactly as pandas refuses it.
+- **`.csv.gz`** is a gzip stream: what `gzip flows.csv` produces, and what pandas writes for `df.to_csv("flows.csv.gz")`. A file made of several gzip members joined end to end is read as one. In the IDE's file tree, right-click a `.csv` and choose **Gzip** to make one, or right-click a `.gz` and choose **Gunzip** to unpack it.
+
+Both are the compression options everyone recognises; Pixie remains the faster, smaller Kalix-native alternative.
 
 ### Pixie binary files (.pxt + .pxb)
 

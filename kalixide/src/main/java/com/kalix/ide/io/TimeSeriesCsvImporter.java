@@ -17,8 +17,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
 import java.util.function.IntConsumer;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
 import java.util.regex.Pattern;
 
 /**
@@ -310,8 +308,8 @@ public class TimeSeriesCsvImporter {
         long fileLength = Math.max(1, csvFile.length());
 
         try {
-            // The counter stays on the COMPRESSED stream for a .csv.zip, so
-            // byte progress remains comparable to file.length(). The archive
+            // The counter stays on the COMPRESSED stream for a compressed CSV,
+            // so byte progress remains comparable to file.length(). A .csv.zip
             // is pre-checked to hold exactly one file (pandas parity), then
             // streamed to its first file entry.
             if (CsvZipFormat.isCsvZip(csvFile.getName())
@@ -320,20 +318,7 @@ public class TimeSeriesCsvImporter {
                 return createResult(series, warnings, errors, startTime, null, 0, 0, 0);
             }
             CountingInputStream counter = new CountingInputStream(new FileInputStream(csvFile));
-            InputStream byteStream = counter;
-            if (CsvZipFormat.isCsvZip(csvFile.getName())) {
-                ZipInputStream zin = new ZipInputStream(counter);
-                try {
-                    ZipEntry entry;
-                    while ((entry = zin.getNextEntry()) != null && entry.isDirectory()) {
-                        // skip directory entries to the single file
-                    }
-                } catch (IOException e) {
-                    zin.close(); // a corrupt archive must not leak the stream
-                    throw e;
-                }
-                byteStream = zin;
-            }
+            InputStream byteStream = CompressedCsvFormat.wrapDecompressing(csvFile.getName(), counter);
             try (BufferedReader reader = new BufferedReader(
                     new InputStreamReader(byteStream, StandardCharsets.UTF_8))) {
 

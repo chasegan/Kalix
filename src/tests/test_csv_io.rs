@@ -1,5 +1,12 @@
 use crate::io::csv_io::{read_ts, write_ts};
+use crate::tid::utils::wrap_to_u64;
+use crate::timeseries::Timeseries;
+use flate2::write::GzEncoder;
+use flate2::Compression;
+use std::env;
+use std::fs;
 use std::io::Write;
+use std::process;
 
 
 #[test]
@@ -102,7 +109,7 @@ fn test_csv_reader_trailing_comma_in_header() {
     // Create a temp file with trailing comma in header
     let temp_path = "./src/tests/example_data/temp_trailing_comma.csv";
     {
-        let mut file = std::fs::File::create(temp_path).unwrap();
+        let mut file = fs::File::create(temp_path).unwrap();
         // Header has trailing comma, data rows don't
         writeln!(file, "Date,col1,col2,col3,").unwrap();
         writeln!(file, "2020-01-01,1.0,2.0,3.0").unwrap();
@@ -110,7 +117,7 @@ fn test_csv_reader_trailing_comma_in_header() {
     }
 
     let result = read_ts(temp_path);
-    std::fs::remove_file(temp_path).ok(); // Clean up
+    fs::remove_file(temp_path).ok(); // Clean up
 
     let timeseries = result.expect("Should handle trailing comma in header");
     assert_eq!(timeseries.len(), 3, "Should have 3 data columns");
@@ -128,14 +135,14 @@ fn test_csv_reader_trailing_comma_in_header_and_data() {
     // Create a temp file with trailing commas in both header and data
     let temp_path = "./src/tests/example_data/temp_trailing_comma2.csv";
     {
-        let mut file = std::fs::File::create(temp_path).unwrap();
+        let mut file = fs::File::create(temp_path).unwrap();
         writeln!(file, "Date,col1,col2,").unwrap();
         writeln!(file, "2020-01-01,10.0,20.0,").unwrap();
         writeln!(file, "2020-01-02,30.0,40.0,").unwrap();
     }
 
     let result = read_ts(temp_path);
-    std::fs::remove_file(temp_path).ok(); // Clean up
+    fs::remove_file(temp_path).ok(); // Clean up
 
     let timeseries = result.expect("Should handle trailing commas");
     assert_eq!(timeseries.len(), 2, "Should have 2 data columns");
@@ -149,14 +156,14 @@ fn test_csv_reader_whitespace_in_column_names() {
     // Create a temp file with whitespace around column names
     let temp_path = "./src/tests/example_data/temp_whitespace_cols.csv";
     {
-        let mut file = std::fs::File::create(temp_path).unwrap();
+        let mut file = fs::File::create(temp_path).unwrap();
         // Header has whitespace around column names
         writeln!(file, "Date, col1 , col2,  col3  ").unwrap();
         writeln!(file, "2020-01-01,1.0,2.0,3.0").unwrap();
     }
 
     let result = read_ts(temp_path);
-    std::fs::remove_file(temp_path).ok(); // Clean up
+    fs::remove_file(temp_path).ok(); // Clean up
 
     let timeseries = result.expect("Should handle whitespace in column names");
     assert_eq!(timeseries.len(), 3);
@@ -170,7 +177,7 @@ fn test_csv_reader_whitespace_in_column_names() {
 fn test_csv_reader_infers_daily_step_size() {
     let temp_path = "./src/tests/example_data/temp_step_daily.csv";
     {
-        let mut file = std::fs::File::create(temp_path).unwrap();
+        let mut file = fs::File::create(temp_path).unwrap();
         writeln!(file, "Date,col1").unwrap();
         writeln!(file, "2020-01-01,1.0").unwrap();
         writeln!(file, "2020-01-02,2.0").unwrap();
@@ -178,7 +185,7 @@ fn test_csv_reader_infers_daily_step_size() {
     }
 
     let result = read_ts(temp_path);
-    std::fs::remove_file(temp_path).ok();
+    fs::remove_file(temp_path).ok();
 
     let timeseries = result.expect("Should read daily CSV");
     assert_eq!(timeseries[0].step_size, 86400, "Daily data should infer step_size of 86400s");
@@ -189,7 +196,7 @@ fn test_csv_reader_infers_daily_step_size() {
 fn test_csv_reader_infers_hourly_step_size() {
     let temp_path = "./src/tests/example_data/temp_step_hourly.csv";
     {
-        let mut file = std::fs::File::create(temp_path).unwrap();
+        let mut file = fs::File::create(temp_path).unwrap();
         writeln!(file, "Date,col1").unwrap();
         writeln!(file, "2020-01-01T00:00:00,1.0").unwrap();
         writeln!(file, "2020-01-01T01:00:00,2.0").unwrap();
@@ -198,7 +205,7 @@ fn test_csv_reader_infers_hourly_step_size() {
     }
 
     let result = read_ts(temp_path);
-    std::fs::remove_file(temp_path).ok();
+    fs::remove_file(temp_path).ok();
 
     let timeseries = result.expect("Should read hourly CSV");
     assert_eq!(timeseries[0].step_size, 3600, "Hourly data should infer step_size of 3600s");
@@ -209,7 +216,7 @@ fn test_csv_reader_infers_hourly_step_size() {
 fn test_csv_reader_rejects_irregular_timestamps() {
     let temp_path = "./src/tests/example_data/temp_step_irregular.csv";
     {
-        let mut file = std::fs::File::create(temp_path).unwrap();
+        let mut file = fs::File::create(temp_path).unwrap();
         writeln!(file, "Date,col1").unwrap();
         writeln!(file, "2020-01-01,1.0").unwrap();
         writeln!(file, "2020-01-02,2.0").unwrap();
@@ -217,7 +224,7 @@ fn test_csv_reader_rejects_irregular_timestamps() {
     }
 
     let result = read_ts(temp_path);
-    std::fs::remove_file(temp_path).ok();
+    fs::remove_file(temp_path).ok();
 
     match result {
         Ok(_) => panic!("Irregularly-spaced timestamps should be rejected"),
@@ -235,7 +242,7 @@ fn test_csv_writer_uses_iso_datetime_for_hourly() {
     let in_path = "./src/tests/example_data/temp_writer_hourly_in.csv";
     let out_path = "./src/tests/example_data/temp_writer_hourly_out.csv";
     {
-        let mut file = std::fs::File::create(in_path).unwrap();
+        let mut file = fs::File::create(in_path).unwrap();
         writeln!(file, "Date,col1").unwrap();
         writeln!(file, "2020-01-01T00:00:00,1.0").unwrap();
         writeln!(file, "2020-01-01T01:00:00,2.0").unwrap();
@@ -247,9 +254,9 @@ fn test_csv_writer_uses_iso_datetime_for_hourly() {
     write_ts(out_path, refs).expect("Should write hourly output");
 
     // Read raw text and confirm time-of-day appears (hour 01 in the second data row)
-    let written = std::fs::read_to_string(out_path).unwrap();
-    std::fs::remove_file(in_path).ok();
-    std::fs::remove_file(out_path).ok();
+    let written = fs::read_to_string(out_path).unwrap();
+    fs::remove_file(in_path).ok();
+    fs::remove_file(out_path).ok();
 
     assert!(
         written.contains("2020-01-01T01:00:00"),
@@ -265,7 +272,7 @@ fn test_csv_writer_uses_date_only_for_daily() {
     let in_path = "./src/tests/example_data/temp_writer_daily_in.csv";
     let out_path = "./src/tests/example_data/temp_writer_daily_out.csv";
     {
-        let mut file = std::fs::File::create(in_path).unwrap();
+        let mut file = fs::File::create(in_path).unwrap();
         writeln!(file, "Date,col1").unwrap();
         writeln!(file, "2020-01-01,1.0").unwrap();
         writeln!(file, "2020-01-02,2.0").unwrap();
@@ -276,9 +283,9 @@ fn test_csv_writer_uses_date_only_for_daily() {
     let refs: Vec<&_> = series.iter().collect();
     write_ts(out_path, refs).expect("Should write daily output");
 
-    let written = std::fs::read_to_string(out_path).unwrap();
-    std::fs::remove_file(in_path).ok();
-    std::fs::remove_file(out_path).ok();
+    let written = fs::read_to_string(out_path).unwrap();
+    fs::remove_file(in_path).ok();
+    fs::remove_file(out_path).ok();
 
     assert!(
         written.contains("2020-01-02,2"),
@@ -311,8 +318,8 @@ fn test_hourly_model_end_to_end_preserves_step_size() {
     let output_path = "./src/tests/example_models/hourly_test/output.csv";
     m.write_outputs(output_path).expect("Write should succeed");
 
-    let written = std::fs::read_to_string(output_path).unwrap();
-    let _ = std::fs::remove_file(output_path);
+    let written = fs::read_to_string(output_path).unwrap();
+    let _ = fs::remove_file(output_path);
 
     assert!(
         written.contains("2020-01-01T01:00:00") && written.contains("2020-01-01T02:00:00"),
@@ -387,7 +394,7 @@ fn test_csv_round_trip_keeps_extreme_values_exact() {
     let out_path = "./src/tests/example_data/temp_extreme_values_out.csv";
     {
         // Written by hand in Display form, as Kalix wrote them before this change.
-        let mut file = std::fs::File::create(in_path).unwrap();
+        let mut file = fs::File::create(in_path).unwrap();
         writeln!(file, "Date,extreme").unwrap();
         for (i, v) in values.iter().enumerate() {
             writeln!(file, "2020-01-{:02},{}", i + 1, v).unwrap();
@@ -397,14 +404,124 @@ fn test_csv_round_trip_keeps_extreme_values_exact() {
     let series = read_ts(in_path).expect("reads the fixed spelling");
     let refs: Vec<&_> = series.iter().collect();
     write_ts(out_path, refs).expect("writes");
-    let text = std::fs::read_to_string(out_path).unwrap();
+    let text = fs::read_to_string(out_path).unwrap();
     assert!(text.contains("2020-01-01,1.38462e-47\r\n"), "{text}");
     assert!(text.contains("2020-01-04,1e20\r\n"), "{text}");
     assert!(text.contains("2020-01-06,0.30000000000000004\r\n"), "{text}");
 
     let back = read_ts(out_path).expect("reads the exponent spelling");
-    std::fs::remove_file(in_path).ok();
-    std::fs::remove_file(out_path).ok();
+    fs::remove_file(in_path).ok();
+    fs::remove_file(out_path).ok();
     assert_eq!(back[0].values.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
                values.iter().map(|v| v.to_bits()).collect::<Vec<_>>());
+}
+
+/// A per-process scratch path for the gzip tests.
+fn gz_scratch(name: &str) -> String {
+    env::temp_dir()
+        .join(format!("kalix_csv_io_{}_{}", process::id(), name))
+        .to_string_lossy()
+        .to_string()
+}
+
+fn gzip_bytes(content: &[u8]) -> Vec<u8> {
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+    encoder.write_all(content).unwrap();
+    encoder.finish().unwrap()
+}
+
+#[test]
+fn test_write_ts_gzips_by_name_and_reads_back() {
+    // The by-name path `simulate -o` and `save_results` use: a .csv.gz name is
+    // never plaintext, whatever its case.
+    for name in ["by_name.csv.gz", "BY_NAME_UPPER.CSV.GZ"] {
+        let path = gz_scratch(name);
+        let mut ts = Timeseries::new_daily();
+        ts.name = "q".to_string();
+        ts.start_timestamp = wrap_to_u64(1577836800); // 2020-01-01
+        ts.values = vec![1.5, 2.5];
+        write_ts(&path, vec![&ts]).unwrap();
+        let bytes = fs::read(&path).unwrap();
+        let back = read_ts(&path);
+        fs::remove_file(&path).ok();
+        assert_eq!(&bytes[..2], &[0x1f, 0x8b], "{name} must be written as gzip");
+        let back = back.expect("re-read the gzip");
+        assert_eq!(back[0].name, "q");
+        assert_eq!(back[0].values, vec![1.5, 2.5]);
+    }
+}
+
+#[test]
+fn test_read_ts_reads_multi_member_gzip_as_one_stream() {
+    // `cat a.gz b.gz` is valid gzip; gzip and pandas read it as one stream.
+    let path = gz_scratch("multi_member.csv.gz");
+    let mut bytes = gzip_bytes(b"Date,q\n2020-01-01,1.0\n");
+    bytes.extend(gzip_bytes(b"2020-01-02,2.0\n"));
+    fs::write(&path, bytes).unwrap();
+    let result = read_ts(&path);
+    fs::remove_file(&path).ok();
+    assert_eq!(result.expect("two members read")[0].values, vec![1.0, 2.0]);
+}
+
+#[test]
+fn test_read_ts_refuses_truncated_gzip() {
+    // A cut-off download must error, never return a short series. Cutting just
+    // the 8-byte trailer leaves every row decodable, so only gzip's own
+    // end-of-stream check can catch it; the longer cut ends mid-row.
+    let mut body = String::from("Date,q\n");
+    for day in 1..=28 {
+        body.push_str(&format!("2020-02-{day:02},{day}.0\n"));
+    }
+    let bytes = gzip_bytes(body.as_bytes());
+    for cut in [8, 12] {
+        let path = gz_scratch(&format!("truncated_{cut}.csv.gz"));
+        fs::write(&path, &bytes[..bytes.len() - cut]).unwrap();
+        let result = read_ts(&path);
+        fs::remove_file(&path).ok();
+        assert!(result.is_err(), "gzip cut by {cut} bytes must not read as data");
+    }
+}
+
+#[test]
+fn test_read_ts_refuses_trailing_garbage_after_gzip() {
+    // Strict, as pandas is; the IDE's GZIPInputStream stops quietly and
+    // gzip(1) warns. Zero padding first does not excuse it.
+    let mut padded = vec![0u8; 3];
+    padded.extend_from_slice(b"not a gzip member");
+    for (name, tail) in [("trailing_garbage.csv.gz", b"not a gzip member".to_vec()),
+                         ("zeros_then_garbage.csv.gz", padded)] {
+        let path = gz_scratch(name);
+        let mut bytes = gzip_bytes(b"Date,q\n2020-01-01,1.0\n2020-01-02,2.0\n");
+        bytes.extend_from_slice(&tail);
+        fs::write(&path, bytes).unwrap();
+        let result = read_ts(&path);
+        fs::remove_file(&path).ok();
+        assert!(result.is_err(), "{name}: bytes after the last member must not be ignored");
+    }
+}
+
+#[test]
+fn test_read_ts_skips_zero_padding_after_gzip() {
+    // Block-padded copies end in zeros; gzip(1) and pandas skip them.
+    let path = gz_scratch("zero_padded.csv.gz");
+    let mut bytes = gzip_bytes(b"Date,q\n2020-01-01,1.0\n");
+    bytes.extend_from_slice(&[0u8; 512]);
+    bytes.extend(gzip_bytes(b"2020-01-02,2.0\n"));
+    bytes.extend_from_slice(&[0u8; 3]);
+    fs::write(&path, bytes).unwrap();
+    let result = read_ts(&path);
+    fs::remove_file(&path).ok();
+    assert_eq!(result.expect("padding skipped")[0].values, vec![1.0, 2.0]);
+}
+
+#[test]
+fn test_read_ts_names_a_non_gzip_csv_gz() {
+    for (name, content) in [("not_gzip.csv.gz", &b"Date,q\n2020-01-01,1.0\n"[..]), ("empty.csv.gz", &b""[..])] {
+        let path = gz_scratch(name);
+        fs::write(&path, content).unwrap();
+        let result = read_ts(&path);
+        fs::remove_file(&path).ok();
+        let err = result.err().expect("must refuse");
+        assert!(format!("{err}").contains("not a readable gzip file"), "{name}: {err}");
+    }
 }

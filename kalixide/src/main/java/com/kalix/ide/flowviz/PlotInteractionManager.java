@@ -1364,11 +1364,9 @@ public class PlotInteractionManager {
             .title("Save Data")
             .startIn(baseDirectorySupplier != null ? baseDirectorySupplier.get() : null)
             .suggestedName("timeseries_data.csv")
-            .filters(
-                FileDialogFilter.of("CSV Files (*.csv)", "csv"),
-                FileDialogFilter.of("Zipped CSV (*.csv.zip)", "csv.zip"),
+            .filters(FileDialogFilter.csvThen(
                 FileDialogFilter.of("Source Result CSV (*.res.csv)", "res.csv"),
-                FileDialogFilter.of("Pixie Files (*.pxt)", "pxt"))
+                FileDialogFilter.of("Pixie Files (*.pxt)", "pxt")))
             .show();
         if (chosen.isPresent()) {
             File file = chosen.get();
@@ -1399,7 +1397,7 @@ public class PlotInteractionManager {
             com.kalix.ide.flowviz.transform.PlotType plotType = panel.getPlotType();
             com.kalix.ide.flowviz.data.LabelResolver labelResolver =
                 (labelResolverSupplier != null) ? labelResolverSupplier.get() : null;
-            // .csv.zip counts as CSV (the exporter zips by name); anything else gains .csv.
+            // Compressed CSV counts as CSV (the exporter compresses by name); anything else gains .csv.
             file = SeriesFileWriter.write(dataSet, file, plotType, labelResolver, false);
             JOptionPane.showMessageDialog(panel,
                 "Data saved successfully to " + file.getName(),

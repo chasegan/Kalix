@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -17,6 +18,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.regex.Pattern;
+import java.util.zip.GZIPOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -402,6 +404,50 @@ class TimeSeriesCsvRoundTripTest {
         double[] values = result.getSeries().get(0).data().getValues();
         assertEquals(1.5, values[0]);
         assertEquals(2.5, values[1]);
+    }
+
+    @Test
+    void exportImportRoundTripThroughCsvGz() throws Exception {
+        // The .csv.gz variant: the exporter gzips by name and the
+        // importer decompresses under its own progress counter.
+        DataSet ds = new DataSet();
+        ds.addSeries(new DatasetSeries("/x", "flow"), daily("2020-01-01", 1.5, 2.5));
+
+        File out = tempDir.resolve("roundtrip.csv.gz").toFile();
+        TimeSeriesCsvExporter.export(ds, out, null, LABELS);
+        byte[] bytes = Files.readAllBytes(out.toPath());
+        assertEquals((byte) 0x1f, bytes[0], "written as gzip");
+
+        TimeSeriesCsvImporter.CsvImportResult result = parse(out);
+        assertFalse(result.hasErrors(), () -> "errors: " + result.getErrors());
+        double[] values = result.getSeries().get(0).data().getValues();
+        assertEquals(1.5, values[0]);
+        assertEquals(2.5, values[1]);
+    }
+
+    @Test
+    void importerReadsConcatenatedGzipMembers() throws Exception {
+        File gz = tempDir.resolve("two.csv.gz").toFile();
+        try (OutputStream out = Files.newOutputStream(gz.toPath())) {
+            for (String part : new String[] {"Date,flow\n2020-01-01,1.5\n", "2020-01-02,2.5\n"}) {
+                GZIPOutputStream member = new GZIPOutputStream(out);
+                member.write(part.getBytes(StandardCharsets.UTF_8));
+                member.finish();
+            }
+        }
+        TimeSeriesCsvImporter.CsvImportResult result = parse(gz);
+        assertFalse(result.hasErrors(), () -> "errors: " + result.getErrors());
+        assertEquals(2, result.getSeries().get(0).data().getValues().length, "both members read");
+    }
+
+    @Test
+    void importerRefusesANonGzipCsvGzWithoutLeakingTheFile() throws Exception {
+        File bogus = tempDir.resolve("bogus.csv.gz").toFile();
+        Files.writeString(bogus.toPath(), "Date,flow\n2020-01-01,1.5\n");
+        TimeSeriesCsvImporter.CsvImportResult result = parse(bogus);
+        assertTrue(result.hasErrors(), "plain text under a .gz name is not data");
+        // On Windows a leaked handle would block the delete.
+        Files.delete(bogus.toPath());
     }
 
     @Test
