@@ -29,14 +29,15 @@ when to abandon it. Planting takes area from the fallow; harvest gives it back.
 
 ```ini
 [crop.cotton]
-root_depth = 900                    # mm
-p = 0.65
+root_depth = 1200                   # mm, fully grown
+initial_root_depth = 250            # mm at planting
+p = 0.6
 kcb = Day, Kcb,                     # basal coefficient by days since planting
       0,   0.15,
       30,  0.15,
-      70,  1.15,
-      130, 1.15,
-      180, 0.50,
+      80,  1.10,
+      140, 1.10,
+      180, 0.40,
 season_len = 180                    # harvested this many days after planting
 
 [crop.bare_soil]
@@ -47,13 +48,14 @@ kcb = 0                             # bare soil: the surface layer evaporates
 type = field
 loc = 30, 40
 area = 4.2                          # km2
-available_water = 150               # mm of water per m of soil
+available_water = 165               # mm of water per m of soil: a Vertosol
 rain = data.climate_csv.by_name.rain
 evap = data.climate_csv.by_name.et0
-efficiency = 0.8
+efficiency = 0.7                    # net of tailwater returns
 interception = 0                    # the surface layer evaporates small rains itself
-tew = 25                            # mm the surface layer can evaporate (FAO-56 Table 19)
-rew = 10                            # mm of it at the full rate
+tew = 28                            # mm the surface layer can evaporate (FAO-56 Table 19)
+rew = 8                             # mm of it at the full rate
+kc_max = 1.25                       # a hot, dry summer (FAO-56 equation 72)
 fallow = bare_soil
 crop_1 = cotton
 crop_1_plant = if(sim.month == 10 && sim.day == 15, min(this.area, 0.01 * node.ofs.volume[-1, 0] / 8), 0)
