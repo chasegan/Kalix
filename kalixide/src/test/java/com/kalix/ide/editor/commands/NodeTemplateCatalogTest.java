@@ -84,7 +84,7 @@ class NodeTemplateCatalogTest {
             carried.add(section.name());
             assertTrue(section.name().matches("crop\\.[a-z][a-z0-9_]*"), "carried section name: " + section.name());
             assertTrue(section.lines().stream().anyMatch(l -> l.startsWith("root_depth =")), section.name() + " needs root_depth");
-            assertTrue(section.lines().stream().anyMatch(l -> l.startsWith("kc =")), section.name() + " needs kc");
+            assertTrue(section.lines().stream().anyMatch(l -> l.startsWith("kc =") || l.startsWith("kcb =")), section.name() + " needs kc or kcb");
             for (String line : section.lines()) {
                 assertFalse(line.trim().startsWith("["), "carried section '" + section.name() + "' carries a header line: " + line);
             }

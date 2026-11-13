@@ -31,17 +31,17 @@ when to abandon it. Planting takes area from the fallow; harvest gives it back.
 [crop.cotton]
 root_depth = 900                    # mm
 p = 0.65
-kc = Day, Kc,                       # by days since planting
-     0,   0.35,
-     30,  0.35,
-     70,  1.20,
-     130, 1.20,
-     180, 0.60,
+kcb = Day, Kcb,                     # basal coefficient by days since planting
+      0,   0.15,
+      30,  0.15,
+      70,  1.15,
+      130, 1.15,
+      180, 0.50,
 season_len = 180                    # harvested this many days after planting
 
 [crop.bare_soil]
 root_depth = 600
-kc = 0.4
+kcb = 0                             # bare soil: the surface layer evaporates
 
 [node.paddock]
 type = field
@@ -51,6 +51,9 @@ available_water = 150               # mm of water per m of soil
 rain = data.climate_csv.by_name.rain
 evap = data.climate_csv.by_name.et0
 efficiency = 0.8
+interception = 0                    # the surface layer evaporates small rains itself
+tew = 25                            # mm the surface layer can evaporate (FAO-56 Table 19)
+rew = 10                            # mm of it at the full rate
 fallow = bare_soil
 crop_1 = cotton
 crop_1_plant = if(sim.month == 10 && sim.day == 15, min(this.area, 0.01 * node.ofs.volume[-1, 0] / 8), 0)
@@ -80,7 +83,7 @@ and gives it up at planting. A field with no crop slots is all fallow, all the t
 to declare one:
 
 - **As Source's Irrigator has it**: `kc` is a fallow factor, 0.4 to 1, and `root_depth` is how
-  deep the fallow ground dries, 600 mm say. The template's `bare_soil` is this.
+  deep the fallow ground dries, 600 mm say.
 - **As FAO-56's bare soil, with a single coefficient**: `root_depth` is the evaporation layer,
   100 to 150 mm by texture; `kc` is the bare-surface maximum, about 1.1; `p` is the readily
   evaporable share of the layer, `rew / tew` from Table 19, about 0.4. The stress coefficient
@@ -89,7 +92,7 @@ to declare one:
 - **As FAO-56's bare soil, with the basal coefficient**: `kcb = 0` and the field's `tew` and
   `rew`. The surface evaporates at `kc_max × evap` while less than `rew` has gone, then at a
   falling rate to nothing at `tew`, exactly as Chapter 7 has it. `root_depth` is then only the
-  depth of soil the fallow's bucket covers.
+  depth of soil the fallow's bucket covers. The IDE template's `bare_soil` is this.
 
 ## Node properties
 
