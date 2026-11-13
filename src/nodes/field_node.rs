@@ -189,6 +189,23 @@ impl EvapLayer {
         (ke, few)
     }
 
+    /// The curve number for the day between the dry curve `cn_dry` and the wet one
+    /// `cn_wet`, by the surface's depletion `de`, as ASCE Manual 70 (2016) eqs 14-18 to
+    /// 14-20 set it: the wet curve while less than half REW has evaporated, the dry curve
+    /// once more than 0.7 REW + 0.3 TEW has, a straight line between.
+    #[inline]
+    fn curve_number(&self, de: f64, cn_dry: f64, cn_wet: f64) -> f64 {
+        let wet_below = 0.5 * self.rew;
+        let dry_above = 0.7 * self.rew + 0.3 * self.tew;
+        if de <= wet_below {
+            cn_wet
+        } else if de >= dry_above {
+            cn_dry
+        } else {
+            cn_wet + (cn_dry - cn_wet) * (de - wet_below) / (dry_above - wet_below)
+        }
+    }
+
     /// The layer's balance for the day: the evaporation taken from it over the
     /// exposed wetted ground, the rain that reached the soil put back, held between
     /// full and TEW (what a full layer cannot take is in the root bucket already).
@@ -226,13 +243,14 @@ fn soil_day(profile: &Profile, partition: &mut Partition, p: f64, kc: f64, ke: f
 }
 
 /// Storm runoff off a partition's surface from a day's rain, by the USDA-NRCS curve
-/// number: S = 254 (100/CN − 1) mm of retention, runoff once the rain exceeds the initial
-/// abstraction 0.2 S. The day's curve sits between the dry one (CN1, at wilting point) and
-/// the wet one (CN3, at field capacity) by the root bucket's wetness, as APSIM chooses it.
-/// Rain only: irrigation never runs through it.
-fn curve_number_runoff(cn_dry: f64, cn_wet: f64, partition: &Partition, rain_mm: f64) -> f64 {
-    let wetness = (1.0 - partition.root_depletion / partition.root_capacity).clamp(0.0, 1.0);
-    let cn = cn_dry + (cn_wet - cn_dry) * wetness;
+/// number: S = 254 (100/CN − 1) mm of retention (the handbook's 1000/CN − 10 inches),
+/// runoff once the rain exceeds the initial abstraction 0.2 S. The day's curve sits between
+/// the dry one (CN1) and the wet one (CN3) by how far the surface evaporation layer has
+/// dried, as ASCE Manual 70 and pyfao56 choose it. Rain only: irrigation never runs
+/// through it.
+#[inline]
+fn curve_number_runoff(cn_dry: f64, cn_wet: f64, layer: &EvapLayer, partition: &Partition, rain_mm: f64) -> f64 {
+    let cn = layer.curve_number(partition.evap_depletion, cn_dry, cn_wet);
     let s = 254.0 * (100.0 / cn - 1.0);
     let initial_abstraction = 0.2 * s;
     if rain_mm > initial_abstraction {
@@ -278,7 +296,7 @@ pub struct FieldNode {
     pub efficiency: f64,            // share of supply that reaches the soil at all; the rest escapes
     pub interception: f64,          // fraction of evap that rain must exceed to reach the soil (FAO-56: 0.2)
     pub return_fraction: f64,       // share of the excess that the farm catches: it goes down ds_2 as return_flow
-    pub curve_number: Option<f64>,  // USDA-NRCS CN2 for storm runoff off the paddock surface; None, saturation excess only
+    pub curve_number: Option<f64>,  // USDA-NRCS CN2 for storm runoff off the paddock surface, the day's curve set by the evaporation layer (ASCE Manual 70); None, saturation excess only
     pub tew: Option<f64>,           // the surface evaporation layer's total evaporable water, mm (FAO-56 Table 19); needed by crops with a kcb
     pub rew: Option<f64>,           // its readily evaporable water, mm
     pub kc_max: f64,                // the ceiling on Kcb + Ke, 1.2 unless the climate says otherwise (FAO-56 eq. 72)
@@ -302,7 +320,7 @@ pub struct FieldNode {
     fallow_dual: bool,              // the fallow is declared with kcb: bare soil evaporating from the layer
     fallow_kc: f64,                 // the fallow's coefficient, a number
     fallow_p: (bool, f64, f64, f64), // the fallow's p adjustment: on, p_base, p_lo, p_hi; off: p in p_base
-    cn_dry: f64,                    // the curve numbers at wilting point and at field capacity (CN1, CN3)
+    cn_dry: f64,                    // the dry and wet curves (CN1, CN3) derived from curve_number
     cn_wet: f64,
     usflow: f64,
     dsflow_primary: f64,
@@ -578,9 +596,10 @@ impl Node for FieldNode {
             if data_cache.step_size != 0 && data_cache.step_size != 86400 {
                 return Err(format!("Error in node '{}'. curve_number is defined for daily rain totals; the model's step is {} seconds.", self.name, data_cache.step_size));
             }
-            // The dry and wet curves from the tabled average one, as APSIM derives them
-            self.cn_dry = cn / (2.334 - 0.01334 * cn);
-            self.cn_wet = cn / (0.4036 + 0.005964 * cn);
+            // The dry and wet curves from the tabled average one: ASCE Manual 70 (2016)
+            // eqs 14-14 and 14-15
+            self.cn_dry = cn / (2.281 - 0.01281 * cn);
+            self.cn_wet = cn / (0.427 + 0.00573 * cn);
         }
         let Some(fallow) = &self.fallow else {
             return Err(format!("Error in node '{}'. A field needs a fallow: the crop that covers what is not planted (fallow = <crop>).", self.name));
@@ -608,6 +627,16 @@ impl Node for FieldNode {
         self.fallow_p = if fallow.p_adjust { (true, fallow.p + 0.2, fallow.p.min(0.1), fallow.p.max(0.8)) } else { (false, fallow.p, 0.0, 0.0) };
         if self.evap_layer.is_none() && !dual_crops.is_empty() {
             return Err(format!("Error in node '{}'. Crop '{}' has a basal coefficient (kcb), so the field needs its evaporation layer: tew and rew, in mm (FAO-56 Table 19).", self.name, dual_crops[0]));
+        }
+        // The curve number method reads the surface layer's depletion for the day's curve
+        // (ASCE Manual 70), and only crops with a basal coefficient keep one
+        if self.curve_number.is_some() {
+            if self.evap_layer.is_none() {
+                return Err(format!("Error in node '{}'. curve_number sets the day's curve by the surface evaporation layer's depletion (ASCE Manual 70), so the field needs tew and rew, in mm (FAO-56 Table 19), and its crops and fallow a basal coefficient (kcb).", self.name));
+            }
+            if let Some(single) = self.slots.iter().map(|s| &s.crop).chain(std::iter::once(fallow)).find(|c| !c.dual) {
+                return Err(format!("Error in node '{}'. curve_number sets the day's curve by the surface evaporation layer's depletion (ASCE Manual 70), which only crops declared with kcb keep: crop '{}' has kc.", self.name, single.name));
+            }
         }
         // The fallow is never planted, so days since planting mean nothing to it
         if matches!(fallow.kc, crate::hydrology::crop::KcCurve::ByDay(_)) {
@@ -772,10 +801,10 @@ impl Node for FieldNode {
         let evap_mm = if self.slots.is_empty() { self.evap_input.get_value(data_cache).max(0.0) } else { self.evap_today };
 
         // 2. Each partition runs its day on its own bucket. With a curve number, the storm
-        //    runoff off the surface comes first, by the partition's wetness. Then rain goes on
-        //    the soil less what the canopy intercepts and evaporates (FAO-56: a share of the
-        //    day's reference evapotranspiration, 0.2 by default).
-        let curve = self.curve_number.map(|_| (self.cn_dry, self.cn_wet));
+        //    runoff off the surface comes first, by how dry the partition's surface layer is.
+        //    Then rain goes on the soil less what the canopy intercepts and evaporates
+        //    (FAO-56: a share of the day's reference evapotranspiration, 0.2 by default).
+        let curve = self.curve_number.and(self.evap_layer).map(|layer| (self.cn_dry, self.cn_wet, layer));
         let mut intercepted_ml = 0.0;
         let mut et_ml = 0.0;
         let mut excess = 0.0;
@@ -787,7 +816,7 @@ impl Node for FieldNode {
             } else {
                 (0.0, 1.0)
             };
-            let runoff_mm = curve.map_or(0.0, |(dry, wet)| curve_number_runoff(dry, wet, &self.fallow_partition, rain_mm));
+            let runoff_mm = curve.map_or(0.0, |(dry, wet, layer)| curve_number_runoff(dry, wet, &layer, &self.fallow_partition, rain_mm));
             let intercepted_mm = (rain_mm - runoff_mm).min(self.interception * evap_mm);
             let effective_rain_mm = rain_mm - runoff_mm - intercepted_mm;
             let (adjust, p_base, p_lo, p_hi) = self.fallow_p;
@@ -806,7 +835,7 @@ impl Node for FieldNode {
             // the curve times the slot's multiplier (a skip-row planting, a climate
             // adjustment, a stress the node does not model), which touches the ET step
             // only, and p for the day's ETc. Interception reads evap as it is.
-            let runoff_mm = curve.map_or(0.0, |(dry, wet)| curve_number_runoff(dry, wet, &slot.partition, rain_mm));
+            let runoff_mm = curve.map_or(0.0, |(dry, wet, layer)| curve_number_runoff(dry, wet, &layer, &slot.partition, rain_mm));
             let intercepted_mm = (rain_mm - runoff_mm).min(self.interception * evap_mm);
             let effective_rain_mm = rain_mm - runoff_mm - intercepted_mm;
             let (ks, et_mm, excess_mm) = soil_day(&self.profile, &mut slot.partition, slot.p_today, slot.kcb_today, slot.ke_today, evap_mm, effective_rain_mm);

@@ -579,7 +579,7 @@
           "type": "number",
           "min": 1,
           "max": 100,
-          "description": "USDA-NRCS curve number (CN2, average antecedent condition) for storm runoff off the paddock surface; omitted, rain runs off only when the profile is full. Daily steps only"
+          "description": "USDA-NRCS curve number (CN2, average antecedent condition) for storm runoff off the paddock surface, the day's curve set by the evaporation layer's depletion (ASCE Manual 70): needs tew and rew, and kcb on every crop and the fallow; omitted, rain runs off only when the profile is full. Daily steps only"
         },
         "available_water": {
           "type": "number",
