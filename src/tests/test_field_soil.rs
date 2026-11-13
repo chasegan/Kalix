@@ -21,7 +21,7 @@ fn rig(river_lag: usize, field: &str) -> String {
     let mut crop = String::new();
     let mut props = String::new();
     for line in field.lines() {
-        if line.starts_with("kc ") || line.starts_with("p ") {
+        if line.starts_with("kc ") || line.starts_with("p ") || line.starts_with("p_adjust") {
             crop.push_str(line); crop.push('\n');
         } else if let Some(rule) = line.strip_prefix("order = ") {
             props.push_str("crop_1_order = "); props.push_str(rule); props.push('\n');
@@ -167,7 +167,8 @@ fn test_a_rain_fed_field_dries_fills_and_sheds_excess() {
 #[test]
 fn test_stress_reduces_evapotranspiration_as_the_soil_dries() {
     // Bone dry start, no rain: ks falls from (100 - 60)/50 = 0.8 towards 0 and et with it
-    let mut model = run(&rig(0, "evap = 10\nkc = 1\np = 0.5\ninitial_depletion = 60"));
+    // (p as written: with the FAO-56 adjustment, 10 mm/day of ETc would take it to 0.3)
+    let mut model = run(&rig(0, "evap = 10\nkc = 1\np = 0.5\np_adjust = false\ninitial_depletion = 60"));
     let ks = s(&mut model, "ks");
     let et = s(&mut model, "et");
     let dep = s(&mut model, "depletion");

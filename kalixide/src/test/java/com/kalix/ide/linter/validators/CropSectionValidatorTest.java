@@ -27,7 +27,9 @@ class CropSectionValidatorTest {
         assertNoIssues("""
             [crop.cotton]
             root_depth = 900
+            initial_root_depth = 200
             p = 0.65
+            p_adjust = false
             kc = Day, Kc,
                  0,   0.35,
                  70,  1.2,
@@ -51,7 +53,9 @@ class CropSectionValidatorTest {
     @DisplayName("Missing required properties should be flagged")
     void testMissingProperties() {
         assertHasIssue("[crop.cotton]\nkc = 1\n", "has no 'root_depth'");
-        assertHasIssue("[crop.cotton]\nroot_depth = 900\n", "has no 'kc'");
+        assertHasIssue("[crop.cotton]\nroot_depth = 900\n", "has no 'kc' (or 'kcb')");
+        assertHasIssue("[crop.cotton]\nroot_depth = 900\nkc = 1\nkcb = 0.9\n", "has both 'kc' and 'kcb'");
+        assertNoIssues("[crop.cotton]\nroot_depth = 900\nkcb = 0, 0.15, 60, 1.1, 180, 0.5\n");
     }
 
     @Test
@@ -64,6 +68,9 @@ class CropSectionValidatorTest {
         assertHasIssue("[crop.cotton]\nroot_depth = 900\nkc = 1\nseason_len = 0\n", "season_len must be a whole number of days");
         assertHasIssue("[crop.cotton]\nroot_depth = 900\nkc = 1\nseason_len = 90.5\n", "season_len must be a whole number of days");
         assertHasIssue("[crop.cotton]\nroot_depth = 900\nkc = 1\nyield = 2\n", "Unexpected property 'yield'");
+        assertHasIssue("[crop.cotton]\nroot_depth = 900\ninitial_root_depth = 0\nkc = 1\n", "initial_root_depth must be a positive number");
+        assertHasIssue("[crop.cotton]\nroot_depth = 900\ninitial_root_depth = 900\nkc = 1\n", "initial_root_depth must be less than root_depth");
+        assertHasIssue("[crop.cotton]\nroot_depth = 900\np_adjust = maybe\nkc = 1\n", "p_adjust must be true or false");
     }
 
     @Test
