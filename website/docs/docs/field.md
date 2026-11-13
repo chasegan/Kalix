@@ -31,17 +31,17 @@ when to abandon it. Planting takes area from the fallow; harvest gives it back.
 [crop.cotton]
 root_depth = 900                    # mm
 p = 0.65
-kc = Day, Kc,                       # by days since planting
-     0,   0.35,
-     30,  0.35,
-     70,  1.20,
-     130, 1.20,
-     180, 0.60,
+kcb = Day, Kcb,                     # basal coefficient by days since planting
+      0,   0.15,
+      30,  0.15,
+      70,  1.15,
+      130, 1.15,
+      180, 0.50,
 season_len = 180                    # harvested this many days after planting
 
 [crop.bare_soil]
 root_depth = 600
-kc = 0.4
+kcb = 0                             # bare soil: the surface layer evaporates
 
 [node.paddock]
 type = field
@@ -51,6 +51,9 @@ available_water = 150               # mm of water per m of soil
 rain = data.climate_csv.by_name.rain
 evap = data.climate_csv.by_name.et0
 efficiency = 0.8
+interception = 0                    # the surface layer evaporates small rains itself
+tew = 25                            # mm the surface layer can evaporate (FAO-56 Table 19)
+rew = 10                            # mm of it at the full rate
 fallow = bare_soil
 crop_1 = cotton
 crop_1_plant = if(sim.month == 10 && sim.day == 15, min(this.area, 0.01 * node.ofs.volume[-1, 0] / 8), 0)
@@ -80,7 +83,7 @@ and gives it up at planting. A field with no crop slots is all fallow, all the t
 to declare one:
 
 - **As Source's Irrigator has it**: `kc` is a fallow factor, 0.4 to 1, and `root_depth` is how
-  deep the fallow ground dries, 600 mm say. The template's `bare_soil` is this.
+  deep the fallow ground dries, 600 mm say.
 - **As FAO-56's bare soil, with a single coefficient**: `root_depth` is the evaporation layer,
   100 to 150 mm by texture; `kc` is the bare-surface maximum, about 1.1; `p` is the readily
   evaporable share of the layer, `rew / tew` from Table 19, about 0.4. The stress coefficient
@@ -89,7 +92,7 @@ to declare one:
 - **As FAO-56's bare soil, with the basal coefficient**: `kcb = 0` and the field's `tew` and
   `rew`. The surface evaporates at `kc_max × evap` while less than `rew` has gone, then at a
   falling rate to nothing at `tew`, exactly as Chapter 7 has it. `root_depth` is then only the
-  depth of soil the fallow's bucket covers.
+  depth of soil the fallow's bucket covers. The IDE template's `bare_soil` is this.
 
 ## Node properties
 
@@ -107,10 +110,10 @@ to declare one:
 | interception (optional) | Rain reaches the soil only beyond this fraction of the day's `evap`; the rest wets the canopy and evaporates (`intercepted`). Default 0.2, FAO-56's interception loss. Write `0` to take rain as given. Example: `interception = 0.2` |
 | return\_fraction (optional) | The share of the field's runoff (`excess`) that the farm's drains catch. It leaves on `ds_2` as `return_flow`; the rest goes down `ds_1` with the bypass. Default 0. See [Returning runoff to the farm storage](#returning-runoff-to-the-farm-storage). Example: `return_fraction = 0.8` |
 | initial\_depletion (optional) | How far below full the soil starts, over the whole profile to the deepest roots [mm], every layer alike. Default 0, a full profile top to bottom. Example: `initial_depletion = 20` |
-| curve\_number (optional) | The USDA-NRCS curve number for storm runoff off the paddock surface: the tabled value for average antecedent conditions (CN2), by cover and hydrologic soil group. Each day the curve is chosen between the dry and wet ones by each partition's wetness, so a crop held near full sheds more than the dry fallow beside it. Omitted, rain runs off only when the profile is full. Rain only, never irrigation; daily steps only. See [Storm runoff](#storm-runoff). Example: `curve_number = 85` |
+| curve\_number (optional) | The USDA-NRCS curve number for storm runoff off the paddock surface: the tabled value for average antecedent conditions (CN2), by cover and hydrologic soil group. Each day the curve is chosen between the dry and wet ones by how far each partition's surface evaporation layer has dried (ASCE Manual 70), so a crop irrigated yesterday sheds more than the dry fallow beside it. Needs `tew` and `rew`, and every crop and the fallow declared with `kcb`. Omitted, rain runs off only when the profile is full. Rain only, never irrigation; daily steps only. See [Storm runoff](#storm-runoff). Example: `curve_number = 85` |
 | tew (optional) | Total evaporable water of the surface evaporation layer [mm], FAO-56 Table 19: about 20 to 30 for a clay, 16 to 22 for a loam, 6 to 12 for a sand, for a 100 mm layer. Needed, with `rew`, by any crop or fallow declared with `kcb`. Example: `tew = 25` |
 | rew (optional) | Readily evaporable water of the surface layer [mm], Table 19: the surface evaporates at the full rate until this much has gone, then at a falling rate to nothing at `tew`. About 8 to 12 for a clay or loam. Example: `rew = 10` |
-| kc\_max (optional) | The most a wet surface and a full canopy evaporate together, as a share of `evap`: the ceiling on `kcb + ke` (FAO-56 equation 72). Default 1.2; 1.25 to 1.3 in a hot, dry, windy climate. Example: `kc_max = 1.25` |
+| kc\_max (optional) | The most a wet surface and a full canopy evaporate together, as a share of `evap`: the ceiling on `kcb + ke` (FAO-56 equation 72), never less than `kcb + 0.05` as the equation says. Default 1.2; 1.25 to 1.3 in a hot, dry, windy climate. Example: `kc_max = 1.25` |
 | wetted\_fraction (optional) | The share of the ground irrigation wets (FAO-56 Table 20): 1 for rain, flood, furrow and sprinkler, 0.3 to 0.4 for drip. Caps `ke` at the ground that is both bare and wet, and concentrates irrigation onto that share of the evaporation layer. Default 1. Example: `wetted_fraction = 0.4` |
 | crop\_N (optional) | The crop in slot N, for N from 1 to 4: the name of a `[crop.*]` section. Slots are numbered without gaps. Example: `crop_1 = cotton` |
 | crop\_N\_plant (compulsory with crop\_N) | The area of the crop to plant today [km²]: an expression, read every day the slot is empty, in the order phase (see step 1 of [How the node works](#how-the-node-works)). Above zero plants the crop on that much land, capped at the fallow's area that day, taking it from the fallow with its water; zero plants nothing. A slot with a crop in the ground is not read; where two slots plant the same day, the lower N goes first. A rule that gives an area every day plants again on the day of a harvest or an abandonment, into the land just returned to the fallow. Negative or not a number stops the run. Example: `crop_1_plant = if(sim.month == 10 && sim.day == 15, min(this.area, 0.01 * node.ofs.volume[-1, 0] / 8), 0)` |
@@ -265,8 +268,8 @@ In this order:
    `crop_N_kc_multiplier`, 1 unless written. The fallow's `kc` is its number. For a crop
    declared with `kcb`, `et = (ks × kcb × kc_multiplier + ke) × evap`, the stress on the
    transpiration only; see [The basal coefficient](#the-basal-coefficient) for `ke`.
-4. **Rain.** With a `curve_number`, each partition first sheds storm runoff by its own
-   wetness (see [Storm runoff](#storm-runoff)). The rest goes on the soil, less
+4. **Rain.** With a `curve_number`, each partition first sheds storm runoff by how dry its
+   own surface is (see [Storm runoff](#storm-runoff)). The rest goes on the soil, less
    `intercepted = min(rain, interception × evap)`. What would take a bucket below zero drains
    into the layers below it, filling each in turn; what passes the last layer leaves with the
    runoff as `excess`.
@@ -319,6 +322,8 @@ which holds `tew` mm of evaporable water (FAO-56 Table 19) and has its own deple
   nothing at `tew`: `kr = (tew − De) / (tew − rew)`.
 - **The energy the canopy leaves.** `ke = kr × (kc_max − kcb)`: a full canopy at `kcb` near
   `kc_max` leaves the surface almost nothing to evaporate with, bare ground leaves it all.
+  `kc_max` is never taken below `kcb + 0.05` (equation 72), so a wet surface always has a
+  little.
 - **The ground that can evaporate.** `ke` is no more than `few × kc_max`, where `few` is the
   share of the ground both bare and wet: `min(1 − cover, wetted_fraction)`, with the canopy's
   cover `(kcb − 0.15) / (kc_max − 0.15)` (FAO-56 equation 76, its height exponent taken as 1).
@@ -342,24 +347,30 @@ Without a curve number a paddock sheds rain only by saturation excess: when the 
 to the deepest roots, is full. That is how the FAO-56 bucket works, and how NSW's river system
 models estimate runoff from cropped areas. The curve number adds the other mechanism, rain the
 surface cannot take in a storm, by the USDA-NRCS method that the irrigation industry's own
-assessments use. With `curve_number` set to the tabled CN2 for the cover and hydrologic soil
-group, each partition each day:
+assessments use, in the form ASCE Manual 70 gives it for a daily FAO-56 water balance, which
+is the form pyfao56 runs. The day's curve is set by how dry the surface evaporation layer is,
+so the field needs `tew` and `rew`, and every crop and the fallow declared with `kcb` (see
+[The basal coefficient](#the-basal-coefficient)): only the dual coefficient keeps the
+surface's depletion `De`. With `curve_number` set to the tabled CN2 for the cover and
+hydrologic soil group, each partition each day:
 
 ```
-wetness = 1 − D / TAW                      the root bucket, 0 at wilting point, 1 at field capacity
-CN      = CN1 + (CN3 − CN1) × wetness      between the dry and wet curves derived from CN2
-S       = 254 × (100 / CN − 1)             mm of retention
-runoff  = (rain − 0.2 S)² / (rain + 0.8 S)   when rain > 0.2 S, else 0
+CN = CN3                                    while De ≤ 0.5 rew: the surface wet
+CN = CN1                                    once De ≥ 0.7 rew + 0.3 tew: the surface dry
+CN = CN3 + (CN1 − CN3) × (De − 0.5 rew) / (0.2 rew + 0.3 tew)   between
+S       = 254 × (100 / CN − 1)              mm of retention
+runoff  = (rain − 0.2 S)² / (rain + 0.8 S)    when rain > 0.2 S, else 0
 ```
 
-CN1 and CN3 are the standard dry and wet curves (`CN2 / (2.334 − 0.01334 CN2)` and
-`CN2 / (0.4036 + 0.005964 CN2)`), and choosing the day's curve by soil wetness is what APSIM,
-HowLeaky and pyfao56 do; the tabled initial abstraction of 0.2 S is kept because the tables are
-defined on it. Runoff is taken from the gross rain, and interception from what is left:
-`intercepted = min(rain − runoff, interception × evap)` on each partition. Irrigation never
-runs through it:
-application losses are `efficiency`. The method is defined on daily rain totals, and a model
-with another step refuses it at load.
+CN1 and CN3 are the dry and wet curves derived from CN2 (`CN2 / (2.281 − 0.01281 CN2)` and
+`CN2 / (0.427 + 0.00573 CN2)`, ASCE Manual 70 equations 14-14 and 14-15); the antecedent rule
+is its equations 14-18 to 14-20. `S` is the handbook's `1000 / CN − 10` inches exactly (the
+Manual rounds the 254 to 250). The tabled initial abstraction of 0.2 S is kept because the
+tables are defined on it. Runoff is taken from the gross rain, and interception from what is
+left: `intercepted = min(rain − runoff, interception × evap)` on each partition, though a
+field of `kcb` crops would set `interception = 0`, as the surface layer evaporates small rains
+itself. Irrigation never runs through it: application losses are `efficiency`. The method is
+defined on daily rain totals, and a model with another step refuses it at load.
 
 A field's runoff is not a catchment's. If the field's area also lies inside a rainfall-runoff
 node's catchment, both will generate runoff from the same rain.
@@ -537,7 +548,7 @@ crop models, the Irrigator Demand Model and IQQM Crop Model 2; the field follows
 | Interception | `min(rain − runoff, interception × evap)` off every rain day | Source Irrigator, equation 7, for the form; FAO-56 Chapter 7 for the 0.2 × ET₀ figure. FAO-56's own text is a threshold on small rains, not a deduction |
 | Soil below the roots | Layers that keep their water at or below field capacity, filled by overflow, drawn only by roots that reach them | pyfao56's depletion to the maximum root depth, generalised to the field's root depths; no drainage below field capacity as in FAO-56 equation 88 and AquaCrop. Source Irrigator instead assumes the soil below the fallow is full |
 | Saturation-excess runoff | Overflow past the deepest layer leaves on the links | Source Irrigator equation 8; NSW river-model practice. In FAO-56 the same water is deep percolation, lost |
-| Storm runoff | Curve number on gross rain, the curve set by the bucket's wetness between dry and wet | USDA-NRCS NEH-630 Chapter 10; the wetness interpolation and CN1/CN3 fits as APSIM SoilWat and HowLeaky use them, with the whole root bucket as the wetness rather than APSIM's surface layers |
+| Storm runoff | Curve number on gross rain, the curve set between dry and wet by the surface evaporation layer's depletion | USDA-NRCS NEH-630 Chapter 10 for the method; ASCE Manual 70 Chapter 14 for the CN1/CN3 fits and the antecedent rule on `De`, as pyfao56 runs it |
 | Fallow | A crop that is never irrigated, with its own depth, coefficient and `p` | Source Irrigator's automatic fallow crop, with a fallow factor and a depth evaporation reaches. With a depth near 150 mm, `kc` near 1.1 and `p` near 0.4 it is FAO-56 Chapter 7's two-stage bare-soil evaporation instead; with `kcb = 0` it is Chapter 7 exactly |
 | Irrigation | Each crop takes up to its order, never more than its bucket has room for | FAO-56 Chapter 8 scheduling; Source Irrigator orders to hold a target depletion |
 | Delivery loss | `efficiency` of the supply reaches the soil; the rest escapes and is lost | Source Irrigator's crop-level escapes, fractions of applied water with no return; irrigation deep percolation belongs here |
@@ -594,10 +605,13 @@ choice is not in FAO-56, the reference it follows is given.
   Jiang, R., Woodward, D.E., Hjelmfelt, A.T. and Van Mullem, J.A. (2002), *Runoff curve number
   method: examination of the initial abstraction ratio*, for the case that 0.05 S fits event
   data better than the tabled 0.2 S.
-- APSIM Initiative. *SoilWat module*, runoff: the daily curve number interpolated between the
-  dry and wet curves by soil wetness, the form the field follows. NSW Department of Planning,
-  Industry and Environment (2019). *Assessment of the additional cropped area rainfall runoff
-  occurring due to irrigation*: the saturation-excess store of the NSW river models beside the
+- Jensen, M.E. and Allen, R.G., eds (2016). *Evaporation, Evapotranspiration, and Irrigation
+  Water Requirements*, 2nd edition. ASCE Manuals and Reports on Engineering Practice No. 70,
+  Chapter 14, equations 14-12 to 14-20: the curve number method on a daily FAO-56 balance, the
+  dry and wet curves from CN2, and the day's curve from the evaporation layer's depletion,
+  which is the form the field follows and pyfao56 runs. NSW Department of Planning, Industry
+  and Environment (2019). *Assessment of the additional cropped area rainfall runoff occurring
+  due to irrigation*: the saturation-excess store of the NSW river models beside the
   consultants' curve-number estimates for the same farms.
 - Bange, M.P., Carberry, P.S., Marshall, J. and Milroy, S.P. (2005). *Row configuration as a
   tool for managing rain-fed cotton systems: review and simulation analysis.* Australian Journal

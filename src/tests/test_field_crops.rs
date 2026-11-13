@@ -288,31 +288,70 @@ fn test_field_with_crops_round_trips() {
 }
 
 
+/// The curve-number rig: a bare fallow with a basal coefficient of 0 over the whole field,
+/// and a 500 mm crop at kcb 1, on a surface layer of tew 20 and rew 8
+fn cn_rig(field: &str) -> String {
+    let crops = "\n[crop.bare_dual]\nroot_depth = 500\nkcb = 0\n\n[crop.shallow_dual]\nroot_depth = 500\nkcb = 1\n";
+    rig(crops, &format!("tew = 20\nrew = 8\n{field}")).replace("fallow = bare\n", "fallow = bare_dual\n")
+}
+
+/// Dry-curve storm runoff from 50 mm of rain at CN2 85: CN1 = 85 / (2.281 − 0.01281 × 85) =
+/// 71.30, S = 254 (100/71.30 − 1) = 102.2, initial abstraction 20.45,
+/// (50 − 20.45)² / (50 + 81.8) = 6.63 mm
+const DRY_RUNOFF_50: f64 = 6.626186744654658;
+
 #[test]
-fn test_a_curve_number_sheds_storm_rain_by_the_paddocks_wetness() {
+fn test_a_curve_number_sheds_storm_rain_by_how_dry_the_surface_is() {
     // All fallow (no slots), 4 km2 rooted to 500 mm at 100 mm/m: a 50 mm bucket. CN2 = 85, so
-    // the dry curve is 85 / (2.334 − 0.01334 × 85) = 70.83 and the wet one
-    // 85 / (0.4036 + 0.005964 × 85) = 93.35. 50 mm of rain on day 2.
+    // the dry curve is 71.30 and the wet one 85 / (0.427 + 0.00573 × 85) = 92.99 (ASCE Manual
+    // 70). 50 mm of rain on day 2, nothing evaporating.
+    // Bone dry: the surface starts as far down as the profile, 20 of tew 20, past
+    // 0.7 rew + 0.3 tew = 11.6, so the dry curve: 6.63 mm run off and 43.37 go into the
+    // 50 mm room.
     let dry = "initial_depletion = 50\nrain = if(var.day.n == 2, 50, 0)\ncurve_number = 85";
-    let mut model = run(&rig("", dry));
-    // Bone dry: wetness 0, CN 70.83, S = 254 (100/70.83 − 1) = 104.6, initial abstraction 20.9,
-    // runoff (50 − 20.9)² / (50 + 83.7) = 6.32 mm. The other 43.68 mm go into the 50 mm room.
-    assert_close(s(&mut model, "excess")[1], 6.323638637769316 * 4.0, "storm runoff from a dry paddock, ML");
-    assert_close(s(&mut model, "fallow_depletion")[1], 50.0 - (50.0 - 6.323638637769316), "the rest infiltrated");
-    // Full: wetness 1, CN 93.35, S = 18.1, runoff 33.37 mm; the rest overflows a full profile,
-    // so all 50 mm leave
+    let mut model = run(&cn_rig(dry));
+    assert_close(s(&mut model, "excess")[1], DRY_RUNOFF_50 * 4.0, "storm runoff from a dry paddock, ML");
+    assert_close(s(&mut model, "fallow_depletion")[1], 50.0 - (50.0 - DRY_RUNOFF_50), "the rest infiltrated");
+    // Full: the surface 0 down, inside half rew, so the wet curve: S = 19.14, runoff
+    // (50 − 3.83)² / (50 + 15.3) = 32.64 mm; the rest overflows a full profile, so all 50 leave
     let wet = "rain = if(var.day.n == 2, 50, 0)\ncurve_number = 85";
-    let mut model = run(&rig("", wet));
+    let mut model = run(&cn_rig(wet));
     assert_close(s(&mut model, "excess")[1], 50.0 * 4.0, "runoff and overflow together");
     assert_close(s(&mut model, "fallow_depletion")[1], 0.0, "still full");
+    // Between: 20 mm down over the 50 mm profile puts the surface 8 of 20 down, between
+    // 0.5 rew = 4 and 11.6, so CN = 92.99 + (71.30 − 92.99) × (8 − 4) / 7.6 = 81.58; 20 mm of
+    // rain sheds (20 − 11.47)² / (20 + 45.9) = 1.10 mm and the bucket takes the rest
+    let between = "initial_depletion = 20\nrain = if(var.day.n == 2, 20, 0)\ncurve_number = 85";
+    let mut model = run(&cn_rig(between));
+    assert_close(s(&mut model, "excess")[1], 1.1032408957016577 * 4.0, "the curve between dry and wet");
+    assert_close(s(&mut model, "fallow_depletion")[1], 20.0 - (20.0 - 1.1032408957016577), "the rest infiltrated");
     // Below the initial abstraction nothing runs off: 10 mm on the dry paddock all infiltrates
     let small = "initial_depletion = 50\nrain = if(var.day.n == 2, 10, 0)\ncurve_number = 85";
-    let mut model = run(&rig("", small));
+    let mut model = run(&cn_rig(small));
     assert_eq!(s(&mut model, "excess")[1], 0.0);
     assert_close(s(&mut model, "fallow_depletion")[1], 40.0, "all 10 mm in");
     // Without a curve number the same dry paddock takes all 50 mm
-    let mut model = run(&rig("", "initial_depletion = 50\nrain = if(var.day.n == 2, 50, 0)"));
+    let mut model = run(&cn_rig("initial_depletion = 50\nrain = if(var.day.n == 2, 50, 0)"));
     assert_eq!(s(&mut model, "excess")[1], 0.0);
+}
+
+#[test]
+fn test_a_curve_number_needs_the_evaporation_layer_and_basal_coefficients() {
+    let err = |ini: String| {
+        let mut model = IniModelIO::read_model_string(&ini).expect("loads");
+        model.configure().map(|_| ()).and_then(|_| model.run()).err().map(|e| e.to_string()).unwrap_or_default()
+    };
+    // A plain fallow (kc) and no layer
+    let e = err(rig("", "curve_number = 85"));
+    assert!(e.contains("so the field needs tew and rew") && e.contains("ASCE Manual 70"), "got: {e}");
+    // The layer is there but a crop has a single coefficient
+    let e = err(cn_rig("curve_number = 85\ncrop_1 = shallow\ncrop_1_plant = 0"));
+    assert!(e.contains("which only crops declared with kcb keep: crop 'shallow' has kc"), "got: {e}");
+    // A fallow with kc among kcb crops is refused the same way
+    let e = err(cn_rig("curve_number = 85\ncrop_1 = shallow_dual\ncrop_1_plant = 0").replace("fallow = bare_dual\n", "fallow = bare\n"));
+    assert!(e.contains("crop 'bare' has kc"), "got: {e}");
+    // All kcb: fine
+    assert_eq!(err(cn_rig("curve_number = 85\ncrop_1 = shallow_dual\ncrop_1_plant = 0")), "");
 }
 
 #[test]
@@ -321,16 +360,17 @@ fn test_irrigation_never_runs_through_the_curve_number_and_wet_crops_shed_more()
     // nothing dries (evap 0). Day 3: 50 mm of rain. The crop sheds by the wet curve, the
     // fallow by the dry one, and the irrigation delivered on day 2 shed nothing at all.
     // (viable_area = 1 keeps the crop alive through its bone-dry first day.)
-    let field = "initial_depletion = 50\nevap = 0\nrain = if(var.day.n == 3, 50, 0)\ncurve_number = 85\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 1, 1, 0)\ncrop_1_order = if(var.day.n == 2, 50, 0)\ncrop_1_viable_area = 1";
-    let mut model = run(&rig("", field));
+    let field = "initial_depletion = 50\nevap = 0\nrain = if(var.day.n == 3, 50, 0)\ncurve_number = 85\ncrop_1 = shallow_dual\ncrop_1_plant = if(var.day.n == 1, 1, 0)\ncrop_1_order = if(var.day.n == 2, 50, 0)\ncrop_1_viable_area = 1";
+    let mut model = run(&cn_rig(field));
     assert_eq!(s(&mut model, "usflow")[1], 50.0);
     assert_eq!(s(&mut model, "supply")[1], 50.0, "1 km2 x 50 mm of room, all taken");
     assert_eq!(s(&mut model, "excess")[1], 0.0, "irrigation does not run off");
     assert_eq!(s(&mut model, "crop_1_depletion")[1], 0.0);
-    // Day 3: the crop is full, so 33.37 mm run off it and the rest overflows: 50 mm x 1 km2.
-    // The fallow is dry: 6.32 mm x 3 km2.
-    assert_close(s(&mut model, "excess")[2], 50.0 * 1.0 + 6.323638637769316 * 3.0, "wet crop and dry fallow");
-    assert_close(s(&mut model, "fallow_depletion")[2], 6.323638637769316, "the fallow took the rest");
+    // Day 3: the irrigation wet the crop's surface too, so it sheds by the wet curve, 32.64 mm,
+    // and the rest overflows its full bucket: 50 mm x 1 km2. The fallow's surface is dry:
+    // 6.63 mm x 3 km2.
+    assert_close(s(&mut model, "excess")[2], 50.0 * 1.0 + DRY_RUNOFF_50 * 3.0, "wet crop and dry fallow");
+    assert_close(s(&mut model, "fallow_depletion")[2], DRY_RUNOFF_50, "the fallow took the rest");
     // The balance still closes
     field_balance_closes(&mut model);
 }
@@ -431,19 +471,20 @@ fn test_two_slots_firing_the_same_day_plant_lower_first_and_the_fallow_caps_the_
 
 #[test]
 fn test_interception_comes_off_what_the_storm_leaves() {
-    // Dry fallow, CN 85, evap 10 with the default 0.2 interception: 50 mm of rain sheds
-    // 6.32 mm, then 2 mm is intercepted from the remainder, and 41.68 mm infiltrates
-    let ini = rig("", "initial_depletion = 50\nevap = 10\nrain = if(var.day.n == 2, 50, 0)\ncurve_number = 85").replace("interception = 0\n", "");
+    // Dry fallow (its surface as dry as its bucket, so nothing evaporates on day 1), CN 85,
+    // evap 10 with the default 0.2 interception: 50 mm of rain sheds 6.63 mm, then 2 mm is
+    // intercepted from the remainder, and 41.37 mm infiltrates
+    let ini = cn_rig("initial_depletion = 50\nevap = 10\nrain = if(var.day.n == 2, 50, 0)\ncurve_number = 85").replace("interception = 0\n", "");
     let mut model = run(&ini);
     assert_close(s(&mut model, "intercepted")[1], 2.0, "mm, the same over the whole fallow");
-    assert_close(s(&mut model, "fallow_depletion")[1], 50.0 - (50.0 - 6.323638637769316 - 2.0), "what reached the soil");
+    assert_close(s(&mut model, "fallow_depletion")[1], 50.0 - (50.0 - DRY_RUNOFF_50 - 2.0), "what reached the soil");
 }
 
 #[test]
 fn test_a_curve_number_needs_a_daily_step() {
     // The step is daily by construction today, so the guard is reached by setting the cache's
     // step directly and initialising the network as a run does
-    let mut model = IniModelIO::read_model_string(&rig("", "curve_number = 85")).expect("loads");
+    let mut model = IniModelIO::read_model_string(&cn_rig("curve_number = 85")).expect("loads");
     model.configure().expect("configures: the step is not known yet");
     model.data_cache.set_start_and_stepsize(model.configuration.sim_start_timestamp, 3600);
     let err = model.initialize_network().err().unwrap_or_default();
@@ -567,9 +608,10 @@ fn test_the_profiles_water_is_the_one_state_whose_change_is_the_water_balance() 
     // Everything at once over twelve days: two crops of different root depths planted and one
     // harvested, a curve number, interception, irrigation with a forced pour, rain that
     // overflows into the layers. The balance closes every step from the results alone.
-    let ini = rig("", "initial_depletion = 30\nevap = 5\nrain = if(var.day.n == 4, 40, if(var.day.n == 9, 70, 0))\ncurve_number = 80\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 2, 2, 0)\ncrop_1_order = if(var.day.n == 6, 60, this.crop_1_area * clamp(this.crop_1_depletion[-1, 0] - 10, 0, 50))\ncrop_2 = deep\ncrop_2_plant = if(var.day.n == 3, 1, 0)\ncrop_2_order = this.crop_2_area * clamp(this.crop_2_depletion[-1, 0] - 20, 0, 50)")
+    let crops = "\n[crop.bare_dual]\nroot_depth = 500\nkcb = 0\n\n[crop.shallow_dual]\nroot_depth = 500\nkcb = 1\nseason_len = 6\n\n[crop.deep_dual]\nroot_depth = 1000\nkcb = 1\n";
+    let ini = rig(crops, "initial_depletion = 30\nevap = 5\nrain = if(var.day.n == 4, 40, if(var.day.n == 9, 70, 0))\ncurve_number = 80\ntew = 20\nrew = 8\ncrop_1 = shallow_dual\ncrop_1_plant = if(var.day.n == 2, 2, 0)\ncrop_1_order = if(var.day.n == 6, 60, this.crop_1_area * clamp(this.crop_1_depletion[-1, 0] - 10, 0, 50))\ncrop_2 = deep_dual\ncrop_2_plant = if(var.day.n == 3, 1, 0)\ncrop_2_order = this.crop_2_area * clamp(this.crop_2_depletion[-1, 0] - 20, 0, 50)")
         .replace("interception = 0\n", "")
-        .replace("[crop.shallow]\nroot_depth = 500\nkc = 1\n", "[crop.shallow]\nroot_depth = 500\nkc = 1\nseason_len = 6\n");
+        .replace("fallow = bare\n", "fallow = bare_dual\n");
     let mut model = run(&ini);
     field_balance_closes(&mut model);
     // With the whole field under one crop on a one-layer profile of 50 mm, the field's
@@ -791,6 +833,13 @@ fn test_a_crop_with_a_basal_coefficient_transpires_by_it_and_its_soil_evaporates
     assert_close(s(&mut model, "crop_1_ke")[0], 0.36, "ground-limited ke");
     assert_close(s(&mut model, "crop_1_kc")[0], 0.76, "kcb + ke");
     field_balance_closes(&mut model);
+    // FAO-56 eq. 72: kc_max is never less than kcb + 0.05, so a canopy at the ceiling still
+    // leaves a wet surface a little: with kcb 1.2 the ceiling is 1.25, the cover
+    // (1.2 − 0.15) / 1.1 = 0.9545 leaves few 0.0455, and ke = min(0.05, 0.0455 × 1.25) = 0.05
+    let full = "\n[crop.full]\nroot_depth = 1000\nkcb = 1.2\n";
+    let mut model = run(&rig(full, "evap = 5\nrain = 0\ntew = 20\nrew = 8\ncrop_1 = full\ncrop_1_plant = if(var.day.n == 1, 4, 0)"));
+    assert_close(s(&mut model, "crop_1_ke")[0], 0.05, "the floor on kc_max");
+    assert_close(s(&mut model, "crop_1_kc")[0], 1.25, "kcb + ke");
 }
 
 #[test]
