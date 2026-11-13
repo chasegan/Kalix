@@ -181,11 +181,14 @@ impl EvapLayer {
     /// crop-height exponent only tells under drip at full canopy).
     #[inline]
     fn ke(&self, de: f64, kcb: f64) -> (f64, f64) {
+        // Eq. 72: the ceiling is never less than Kcb + 0.05, so a full canopy still leaves a
+        // wet surface a little to evaporate with
+        let kc_max = self.kc_max.max(kcb + 0.05);
         let kr = if de <= self.rew { 1.0 } else { ((self.tew - de) / (self.tew - self.rew)).clamp(0.0, 1.0) };
         const KC_MIN: f64 = 0.15;
-        let cover = ((kcb - KC_MIN) / (self.kc_max - KC_MIN)).clamp(0.0, 1.0);
+        let cover = ((kcb - KC_MIN) / (kc_max - KC_MIN)).clamp(0.0, 1.0);
         let few = (1.0 - cover).min(self.fw);
-        let ke = (kr * (self.kc_max - kcb)).min(few * self.kc_max).max(0.0);
+        let ke = (kr * (kc_max - kcb)).min(few * kc_max).max(0.0);
         (ke, few)
     }
 

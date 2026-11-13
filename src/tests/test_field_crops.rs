@@ -833,6 +833,13 @@ fn test_a_crop_with_a_basal_coefficient_transpires_by_it_and_its_soil_evaporates
     assert_close(s(&mut model, "crop_1_ke")[0], 0.36, "ground-limited ke");
     assert_close(s(&mut model, "crop_1_kc")[0], 0.76, "kcb + ke");
     field_balance_closes(&mut model);
+    // FAO-56 eq. 72: kc_max is never less than kcb + 0.05, so a canopy at the ceiling still
+    // leaves a wet surface a little: with kcb 1.2 the ceiling is 1.25, the cover
+    // (1.2 − 0.15) / 1.1 = 0.9545 leaves few 0.0455, and ke = min(0.05, 0.0455 × 1.25) = 0.05
+    let full = "\n[crop.full]\nroot_depth = 1000\nkcb = 1.2\n";
+    let mut model = run(&rig(full, "evap = 5\nrain = 0\ntew = 20\nrew = 8\ncrop_1 = full\ncrop_1_plant = if(var.day.n == 1, 4, 0)"));
+    assert_close(s(&mut model, "crop_1_ke")[0], 0.05, "the floor on kc_max");
+    assert_close(s(&mut model, "crop_1_kc")[0], 1.25, "kcb + ke");
 }
 
 #[test]
