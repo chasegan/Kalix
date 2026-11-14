@@ -83,7 +83,7 @@ Every field has a fallow: a crop with no plants, declared like any other and nam
 and gives it up at planting. A field with no crop slots is all fallow, all the time. Bare
 ground is `kcb = 0`: FAO-56's bare soil, which evaporates from the field's evaporation layer at
 `kc_max × evap` while less than `rew` has gone, then at a falling rate to nothing at `tew`,
-exactly as Chapter 7 has it. Its `root_depth` is only the depth of soil the fallow's bucket
+as Chapter 7 describes. Its `root_depth` is only the depth of soil the fallow's bucket
 covers, 600 mm say, which sets how much water it holds for the next crop. A fallow with a cover
 crop or stubble has a small `kcb` instead. Source Irrigator's fallow factor converts as
 [Coming from a single coefficient](#coming-from-a-single-coefficient) says.
@@ -120,7 +120,7 @@ The seasonal totals agree. Kc was averaged over a typical wetting frequency; the
 coefficient gives the same season when the surface is wetted that often, and differs day by
 day in the direction the surface says: more evapotranspiration after rain or irrigation, less
 in a dry spell. A model that calibrates to diversions keeps doing so through
-`crop_N_kc_multiplier`, which scales `kcb` exactly as the NSW models scale Kc.
+`crop_N_kc_multiplier`, which scales `kcb` as the NSW models scale Kc.
 
 ## Node properties
 
@@ -247,7 +247,7 @@ That is the whole model: two inputs (P, E₀), one state per crop (D), three soi
 
 ## How the node works
 
-The steps above, as this version runs them each day, exactly.
+This section gives the steps above as the node runs them each day.
 
 The field is partitioned: the fallow, and each crop slot with a crop in the ground. Each
 partition works in mm over its own area: 1 mm × 1 km² = 1 ML. The soil is kept in layers whose
@@ -365,7 +365,7 @@ which holds `tew` mm of evaporable water (FAO-56 Table 19) and has its own deple
   which still holds all the water: the balance identity below is unchanged.
 
 Planting, harvest and abandonment carry `De` with the land, mixed by area like the layers. A
-fallow with `kcb = 0` is FAO-56's bare soil exactly. Small rains evaporate through `ke` from the
+fallow with `kcb = 0` is FAO-56's bare soil. Small rains evaporate through `ke` from the
 surface in a day or two, which is why the field deducts no interception unless told to.
 Results: `crop_N_ke`, and `crop_N_kc` as `kcb × kc_multiplier + ke`.
 
@@ -390,8 +390,8 @@ runoff  = (rain − 0.2 S)² / (rain + 0.8 S)    when rain > 0.2 S, else 0
 
 CN1 and CN3 are the dry and wet curves derived from CN2 (`CN2 / (2.281 − 0.01281 CN2)` and
 `CN2 / (0.427 + 0.00573 CN2)`, ASCE Manual 70 equations 14-14 and 14-15); the antecedent rule
-is its equations 14-18 to 14-20. `S` is the handbook's `1000 / CN − 10` inches exactly (the
-Manual rounds the 254 to 250). The tabled initial abstraction of 0.2 S is kept because the
+is its equations 14-18 to 14-20. `S` is the handbook's `1000 / CN − 10` inches converted to
+millimetres (the Manual rounds the 254 to 250). The tabled initial abstraction of 0.2 S is kept because the
 tables are defined on it. Runoff is taken from the gross rain, and any interception from what
 is left: `intercepted = min(rain − runoff, interception × evap)` on each partition. Irrigation
 never runs through it: application losses are `efficiency`. The method is
@@ -581,7 +581,7 @@ crop models, the Irrigator Demand Model and IQQM Crop Model 2; the field follows
 | Ordering | Orders placed in the order phase on yesterday's states, with travel time and orders en route, no forecast | IQQM's ordering convention. Source Irrigator forecasts over the travel time; Kalix does not |
 | Land moving with its water | Planting, harvest and abandonment move area between partitions with its water, mixed by area, layer by layer | Kalix's own. Source Irrigator initialises a new crop from the fallow's depletion with the subsoil assumed full; the field tracks it instead. Conserving by construction |
 | Pour of surplus | Water beyond the orders poured over the standing crops, driest first | Kalix's own, for water a modeller has forced to the field |
-| Several crops at once, the kc multiplier, the balance identity | Up to four slots on one soil; a daily scalar on kcb; `volume` changing by exactly the fluxes | Kalix's own |
+| Several crops at once, the kc multiplier, the balance identity | Up to four slots on one soil; a daily scalar on kcb; `volume` changing by the sum of the fluxes | Kalix's own |
 
 Not modelled, and worth knowing: FAO-56's adjustment of `kcb` and `kc_max` for climate (humidity
 and wind, which a river model rarely has; the multiplier and `kc_max` carry it by hand), its
