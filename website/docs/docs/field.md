@@ -369,26 +369,44 @@ works out each day, and the day's crop coefficient is `kcb + ke`:
 et = (ks × kcb × kc_multiplier + ke) × evap
 ```
 
-The stress applies to the transpiration only, since a wet surface dries whatever the plant is
-doing. `ke` comes from the field's surface evaporation layer, the top 100 to 150 mm of soil,
-which holds `tew` mm of evaporable water (FAO-56 Table 19) and has its own depletion `De`:
+The stress applies to the transpiration only, since a wet surface dries whether or not the plant
+is transpiring. `ke` comes from the field's surface evaporation layer, the top 100 to 150 mm of
+soil, which holds `tew` mm of evaporable water (FAO-56 Table 19) and has its own depletion `De`.
+Four quantities set it.
 
-- **Two-stage drying.** While less than `rew` has evaporated since the surface was last wet,
-  it evaporates at the full rate: `kr = 1`. Beyond that the rate falls in a straight line to
-  nothing at `tew`: `kr = (tew − De) / (tew − rew)`.
-- **The energy the canopy leaves.** `ke = kr × (kc_max − kcb)`: a full canopy at `kcb` near
-  `kc_max` leaves the surface almost nothing to evaporate with, bare ground leaves it all.
-  `kc_max` is never taken below `kcb + 0.05` (equation 72), so a wet surface always has a
+- `kr` is the drying rate of the surface. While less than `rew` has evaporated since the surface
+  was last wet, the surface evaporates at the full rate and `kr = 1`. Beyond that the rate falls
+  in a straight line to nothing at `tew`:
+
+  ```
+  kr = (tew − De) / (tew − rew)
+  ```
+
+- `kc_max − kcb` is the energy the canopy leaves to the surface. A full canopy with `kcb` near
+  `kc_max` leaves the surface almost nothing to evaporate with. Bare ground leaves it all.
+  `kc_max` is never taken below `kcb + 0.05` (FAO-56 equation 72), so a wet surface always has a
   little.
-- **The ground that can evaporate.** `ke` is no more than `few × kc_max`, where `few` is the
-  share of the ground both bare and wet: `min(1 − cover, wetted_fraction)`, with the canopy's
-  cover `(kcb − 0.15) / (kc_max − 0.15)` (FAO-56 equation 76, its height exponent taken as 1).
-  Under flood or furrow this seldom binds; under drip it is what keeps dry ground from
-  evaporating.
-- **The layer's balance.** The day's evaporation `ke × evap` deepens `De` over the share `few`
-  of the ground; rain that reaches the soil refills it; irrigation refills the share
-  `wetted_fraction` of it. `De` runs from 0 to `tew`. It is bookkeeping within the root bucket,
-  which still holds all the water: the balance identity below is unchanged.
+
+- `few` is the share of the ground that is both bare and wet, so it can evaporate at all:
+
+  ```
+  few   = min(1 − cover, wetted_fraction)
+  cover = (kcb − 0.15) / (kc_max − 0.15)
+  ```
+
+  The cover fraction is FAO-56 equation 76 with its height exponent taken as 1. Under flood or
+  furrow irrigation `few` seldom binds. Under drip it is what keeps dry ground from evaporating.
+
+- `ke` is the smaller of the two limits:
+
+  ```
+  ke = min(kr × (kc_max − kcb), few × kc_max)
+  ```
+
+The layer's depletion `De` is kept day by day. The day's evaporation `ke × evap` deepens it over
+the share `few` of the ground. Rain that reaches the soil refills it. Irrigation refills the
+share `wetted_fraction` of it. `De` runs from 0 to `tew`. It is bookkeeping within the root
+bucket, which still holds all the water, so the balance identity below is unchanged.
 
 Planting, harvest and abandonment carry `De` with the land, mixed by area like the layers. A
 fallow with `kcb = 0` is FAO-56's bare soil. Small rains evaporate through `ke` from the
