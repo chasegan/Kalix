@@ -96,6 +96,40 @@ to declare one:
   falling rate to nothing at `tew`, exactly as Chapter 7 has it. `root_depth` is then only the
   depth of soil the fallow's bucket covers. The IDE template's `bare_soil` is this.
 
+## Coming from a single coefficient
+
+Every published crop table a modeller is likely to have is a single coefficient Kc: FAO-56
+Table 12, WATERpak, the NSW river-system model reports, IQQM and Source Irrigator all think in
+Kc. The field takes the basal coefficient `kcb`, which is the plant's transpiration alone, and
+computes the soil surface's evaporation itself. FAO-56 derived both tables from the same field
+data and states the relationship between them (Chapter 7), so a Kc table converts in three
+edits:
+
+| Stage | Rule | Why |
+| --- | --- | --- |
+| Initial | `kcb` = 0.15, whatever Kc ini was | Kc ini is almost all soil evaporation: FAO-56 Figure 29 makes it a function of how often the surface is wetted, not of the crop. The evaporation layer now computes it from the actual rain and irrigation. |
+| Mid-season | `kcb` = Kc mid − 0.05 | Under a full canopy the surface is shaded and the plant does nearly all the work. Sparse canopies, − 0.10. |
+| End | `kcb` = Kc end − 0.05 to − 0.10 | The canopy thins and the surface shows again; the larger gap for crops that dry down in the field. |
+| Stage lengths | unchanged | The same Table 11 days. |
+
+Applied to the cotton factors the NSW Border Rivers and Namoi models use, 0.35, 1.20 and 0.60,
+the rule gives 0.15, 1.15 and 0.50, which is FAO-56 Table 17's own cotton row. Do not write a
+Kc table as `kcb`: Kc ini already contains the bare-soil evaporation that `ke` would then add
+again, and the initial stage would run too wet.
+
+The fallow converts by rule too. Source Irrigator's fallow factor of 0.4 to 0.6 on a 300 to
+600 mm bucket becomes `kcb = 0` with the field's `tew` and `rew`: FAO-56's bare soil, which
+evaporates at `kc_max × evap` while the surface is wet and at a falling rate as it dries. The
+bucket depth then only sets how much water the fallow holds for the next crop. An interception
+deduction is no longer needed, because the layer evaporates small rains itself, so leave
+`interception` at its default of 0.
+
+The seasonal totals agree. Kc was averaged over a typical wetting frequency; the dual
+coefficient gives the same season when the surface is wetted that often, and differs day by
+day in the direction the surface says: more evapotranspiration after rain or irrigation, less
+in a dry spell. A model that calibrates to diversions keeps doing so through
+`crop_N_kc_multiplier`, which scales `kcb` exactly as the NSW models scale Kc.
+
 ## Node properties
 
 | Property | Description |
