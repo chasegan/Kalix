@@ -258,10 +258,15 @@ part of that layer below the root front keeps its own depletion until the roots 
 it. Below the deepest roots on the field nothing draws, so water that passes is gone.
 
 <figure markdown class="kx-figure--plain">
-![The soil as one set of layers for the whole field, each partition with a bucket to its root depth and a depletion per layer below; and at harvest, the crop's bucket spread over its layers and mixed into the fallow's by area](../assets/docs-nodes-field/layers.svg)
-<figcaption markdown>The layers, and what harvest does with them. The 600 to 900 mm layer keeps the deficit cotton
-left there, below the fallow's roots, until the next deep-rooted crop reaches it.</figcaption>
+![The soil as one set of layers for the whole field: a fallow, cotton and lucerne side by side against one depth scale, each with a root bucket to its roots and a depletion per layer below, the evaporation layer at the top of each bucket](../assets/docs-nodes-field/layers.svg)
+<figcaption markdown>One set of layers for the whole field. The 600 to 900 mm layer keeps the deficit cotton
+leaves there, below the fallow's roots, until the next deep-rooted crop reaches it.</figcaption>
 </figure>
+
+A single bucket per crop would have to invent the water below one crop's roots when a deeper
+crop followed, or lose it when a shallower one did. Source Irrigator assumes the subsoil is at
+field capacity, so its balance cannot close across a planting. The layers conserve water by
+construction, and the soil module's tests check every move.
 
 The node runs these steps in this order.
 
@@ -338,9 +343,9 @@ The node runs these steps in this order.
    therefore never overfills a root zone, whatever was ordered.
 
 <figure markdown class="kx-figure--plain">
-![The water balance of one partition: rain, interception and storm runoff above the surface; the root bucket with its depletion; irrigation in and escape out; evapotranspiration up; overflow down through the layers below the roots; excess leaving to ds_1 and ds_2](../assets/docs-nodes-field/water-balance.svg)
-<figcaption markdown>One partition's day: rain is shed, intercepted or infiltrated; plants and irrigator work the
-root bucket; overflow fills the layers below, and what passes the last is excess.</figcaption>
+![One partition's day as a soil column: a plant rooted to root_depth in its bucket, the evaporation layer at the surface, the layers below; rain splitting at the surface into storm runoff and infiltration; transpiration from the roots and evaporation from the surface; irrigation in and escape out; overflow down the column and out past the deepest roots into the excess channel that the storm runoff also feeds](../assets/docs-nodes-field/water-balance.svg)
+<figcaption markdown>One partition's day. Rain splits at the surface, where the curve number acts; the plant
+transpires from the bucket and the surface layer evaporates; both runoff routes end in `excess`.</figcaption>
 </figure>
 
 Rain goes on before irrigation so that a day's rain reduces what a crop takes, rather than
@@ -504,7 +509,7 @@ the account.
 <figure markdown class="kx-figure--plain">
 ![A 4 km² field over six days: all fallow; 1 km² planted from the fallow at the fallow's wetness; the crop drying while the fallow does not; the land returned at harvest and the depletions mixed by area](../assets/docs-nodes-field/land-moves.svg)
 <figcaption markdown>Land moves with its water. The fallow gives up area at planting and takes it back at harvest or
-abandonment; every move mixes depletions by area, layer by layer, so nothing is created or lost.</figcaption>
+abandonment. Every move mixes depletions by area, layer by layer, so nothing is created or lost.</figcaption>
 </figure>
  A perennial is planted once and stays (`crop_1_plant = if(sim.year == 1990 && sim.month
 == 3 && sim.day == 1, this.area, 0)`, with no `season_len` on the crop; a rule on a recurring
