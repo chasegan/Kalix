@@ -66,18 +66,20 @@
 
   <!-- key -->
   <rect x="670" y="96" width="16" height="16" class="bucket"/>
-  <text x="694" y="109" class="small">root bucket, to the roots</text>
+  <text x="694" y="109" class="small">depletion, the empty part of a bucket</text>
   <rect x="670" y="122" width="16" height="16" fill="#efe0bf" stroke="#c9a96a" stroke-width="1"/>
   <text x="694" y="135" class="small">evaporation layer</text>
   <rect x="670" y="148" width="16" height="16" class="soil"/>
   <text x="694" y="161" class="small">layer below the roots</text>
   <rect x="670" y="174" width="16" height="16" class="water"/>
-  <text x="694" y="187" class="small">water held; depletion above it</text>
+  <text x="694" y="187" class="small">water held</text>
   <text x="670" y="222" class="small">The layer boundaries are the field's</text>
   <text x="670" y="238" class="small">distinct root depths, fallow included.</text>
-  <text x="670" y="262" class="small">Each partition has one bucket, which</text>
-  <text x="670" y="278" class="small">the plants and the irrigator work, and</text>
-  <text x="670" y="294" class="small">one depletion per layer below it.</text>
-  <text x="670" y="318" class="small">Below 1200 mm nothing on this field</text>
-  <text x="670" y="334" class="small">draws: water that passes is gone.</text>
+  <text x="670" y="262" class="small">A bucket is the green-edged box, from</text>
+  <text x="670" y="278" class="small">the surface to the roots' depth. Each</text>
+  <text x="670" y="294" class="small">partition has one, which the plants and</text>
+  <text x="670" y="310" class="small">the irrigator work, and one depletion</text>
+  <text x="670" y="326" class="small">per layer below it.</text>
+  <text x="670" y="350" class="small">Below 1200 mm nothing on this field</text>
+  <text x="670" y="366" class="small">draws: water that passes is gone.</text>
 </svg>
