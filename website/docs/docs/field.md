@@ -14,8 +14,7 @@ roots is kept in layers, so that water left by one crop is there for the next.
 
 The field follows FAO-56 for the soil and the crop, pyfao56 for the soil below the roots, and
 Source's Irrigator Demand Model for the farm: the fallow, planting, the irrigation target, crop
-death and losses. [Where each part comes from](#where-each-part-comes-from) says which rule is
-whose, and what is Kalix's own.
+death and losses. [Provenance](#provenance) says which rule is whose, and what is Kalix's own.
 
 A field is supplied by the node above it: a [storage](storage.md) outlet, or a supply outlet
 (`ds_2` to `ds_4`) of a [regulated user](regulated-user.md#supply-outlets) or an
@@ -190,7 +189,7 @@ in a dry spell. A model that calibrates to diversions keeps doing so through
 | area | The declared `area` (a static property) |
 | efficiency | The declared `efficiency` (a static property) |
 
-## The crop model, from the top
+## The crop model in outline
 
 Think of the soil under a crop as a bucket. Each day, rain and irrigation put water in, the crop
 takes water out, and the field keeps track of how far below full the bucket is. Everything else
@@ -598,7 +597,7 @@ close, record `volume` with `rain_vol`, `intercepted`, `supply`, `escape`, `et_v
 and `excess`: the day-to-day change in the first is the sum of the rest, every day. `bypass`, `excess` and `return_flow` are still
 in the model, on `ds_1` and `ds_2`.
 
-## Where each part comes from
+## Provenance
 
 Kalix does not invent crop models. Every rule in the field node is taken from a published model,
 and this table says which; the few things that are Kalix's own are marked as such. Source has two

@@ -1,7 +1,7 @@
 //! The soil under a field, kept as layers so that water below one crop's roots
 //! is still there for the next. The reasoning and the references are in the
 //! field page of the user docs (website/docs/docs/field.md, "How the node
-//! works" and "Where each part comes from"): FAO-56's root zone does not drain
+//! works" and "Provenance"): FAO-56's root zone does not drain
 //! below field capacity, and USDA-ARS's pyfao56 keeps the same depletion
 //! below the roots to the deepest they will reach.
 //!
