@@ -17,11 +17,11 @@ end = 2020-01-04
 
 [crop.bare]
 root_depth = 1000
-kc = 0
+kcb = 0
 
 [crop.thirsty]
 root_depth = 1000
-kc = 0
+kcb = 0
 
 [node.dam]
 type = storage
@@ -38,6 +38,8 @@ ds_1 = paddock
 type = field
 area = 1
 available_water = 1000
+tew = 20
+rew = 8
 initial_depletion = 1000
 fallow = bare
 crop_1 = thirsty
@@ -135,11 +137,11 @@ end = 2020-01-10
 
 [crop.bare]
 root_depth = 1000
-kc = 0
+kcb = 0
 
 [crop.thirsty]
 root_depth = 1000
-kc = 0
+kcb = 0
 
 [node.dam]
 type = storage
@@ -170,6 +172,8 @@ ds_1 = paddock
 type = field
 area = 1
 available_water = 1000
+tew = 20
+rew = 8
 initial_depletion = 1000
 fallow = bare
 crop_1 = thirsty

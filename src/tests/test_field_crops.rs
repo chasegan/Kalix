@@ -12,7 +12,12 @@ use crate::model::Model;
 /// 500 mm (50 mm bucket) and deep to 1000 mm (100 mm bucket); the fallow is
 /// bare ground rooted with the shallow crop. `{crops}` are the crop sections'
 /// extra lines, `{field}` the field's properties after the soil.
+/// The rig's evaporation layer never dries (rew just under tew, both huge), so ke is the
+/// constant kc_max − kcb while the surface is wet: 0.2 for the crops at kcb 1 and 1.2 for the
+/// bare fallow, and ET is (ks × kcb + ke) × evap in plain sight. A test that writes its own
+/// tew and rew gets those instead.
 fn rig(crops: &str, field: &str) -> String {
+    let layer = if field.contains("tew") { "" } else { "tew = 1000\nrew = 999\n" };
     format!(r#"
 [kalix]
 start = 2020-01-01
@@ -20,15 +25,15 @@ end = 2020-01-12
 
 [crop.bare]
 root_depth = 500
-kc = 0
+kcb = 0
 
 [crop.shallow]
 root_depth = 500
-kc = 1
+kcb = 1
 
 [crop.deep]
 root_depth = 1000
-kc = 1
+kcb = 1
 {crops}
 
 [var.day]
@@ -52,7 +57,7 @@ loc = 0, 20
 area = 4
 available_water = 100
 interception = 0
-fallow = bare
+{layer}fallow = bare
 {field}
 ds_1 = outlet
 
@@ -136,11 +141,13 @@ fn field_balance_closes(model: &mut Model) {
 fn test_planting_takes_area_from_the_fallow_with_its_water_and_harvest_gives_it_back() {
     // The whole profile starts 20 mm below full (over 1 m: 10 in the top 500 mm, 10 below;
     // the deep crop in slot 2, never planted, is what gives the profile its second layer).
-    // Day 3: 1 km2 of the shallow crop is planted; the fallow is bare so nothing has
-    // dried, and the crop's bucket is 10 mm down, like the fallow's. It dries 4 mm a day
-    // for 3 days (days 0, 1, 2 since planting) and is harvested on day 6 as days reaches 3.
+    // The bare fallow dries 1.2 x 4 = 4.8 a day from its wet surface: 14.8, 19.6. Day 3: 1 km2
+    // of the shallow crop is planted at the fallow's 19.6 and dries 4.8 a day too (1 + 0.2);
+    // day 5 it opens at 29.2, past the readily available 25.4 (p 0.508 for 4.8 mm/day), so
+    // ks = 20.8 / 24.6 and it dries (ks + 0.2) x 4 = 4.18. Harvested on day 6 as days reaches
+    // 3. The bare fallow has nothing to stress (kcb 0) and keeps drying 4.8 a day.
     let ini = rig("", "initial_depletion = 20\nevap = 4\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 3, 1, 0)\ncrop_2 = deep\ncrop_2_plant = 0")
-        .replace("[crop.shallow]\nroot_depth = 500\nkc = 1\n", "[crop.shallow]\nroot_depth = 500\nkc = 1\nseason_len = 3\n");
+        .replace("[crop.shallow]\nroot_depth = 500\nkcb = 1\n", "[crop.shallow]\nroot_depth = 500\nkcb = 1\nseason_len = 3\n");
     let mut model = run(&ini);
     let area = s(&mut model, "crop_1_area");
     let days = s(&mut model, "crop_1_days");
@@ -148,59 +155,65 @@ fn test_planting_takes_area_from_the_fallow_with_its_water_and_harvest_gives_it_
     assert_eq!(area[..7], [0.0, 0.0, 1.0, 1.0, 1.0, 0.0, 0.0]);
     assert!(days[1].is_nan() && dep[1].is_nan() && s(&mut model, "crop_1_ks")[1].is_nan(), "no state before planting");
     assert_eq!(days[2..5], [0.0, 1.0, 2.0]);
-    assert_eq!(dep[2..5], [14.0, 18.0, 22.0], "10 mm down at planting, then 4 mm a day");
+    let day_5 = 29.2 + (20.8 / 24.6 + 0.2) * 4.0;
+    for (t, want) in [24.4, 29.2, day_5].iter().enumerate() {
+        assert_close(dep[t + 2], *want, "19.6 down at planting, then 4.8 a day until the stress bites");
+    }
     assert!(days[5].is_nan(), "harvested at the start of day 6");
-    assert_eq!(s(&mut model, "et_vol")[2..6], [4.0, 4.0, 4.0, 0.0], "1 km2 x 4 mm while the crop stands");
-    // The fallow's bucket: 10 mm down throughout, until the harvest brings back 1 km2 at 22 mm
-    // down in the top 500 mm mixed with 3 km2 at 10: 13 mm
+    assert_close(s(&mut model, "et_vol")[2], 19.2, "4 km2 x 4.8 mm, crop and fallow alike");
+    assert_close(s(&mut model, "et_vol")[4], 3.0 * 4.8 + (20.8 / 24.6 + 0.2) * 4.0, "day 5: the fallow at full rate, the crop stressed");
+    // The fallow's bucket: 4.8 a day to 34 on day 5, then the harvest brings back 1 km2 at
+    // 33.38 mixed with 3 km2 at 34, and another day's 4.8
     let fallow = s(&mut model, "fallow_depletion");
-    assert_eq!(fallow[..5], [10.0; 5]);
-    assert_eq!(fallow[5], 13.0);
+    for (t, want) in [14.8, 19.6, 24.4, 29.2, 34.0].iter().enumerate() {
+        assert_close(fallow[t], *want, "the fallow dries 4.8 a day");
+    }
+    assert_close(fallow[5], (day_5 + 3.0 * 34.0) / 4.0 + 4.8, "harvest mixes by area, then the day's drying");
     field_balance_closes(&mut model);
 }
 
 #[test]
 fn test_each_crop_orders_for_its_own_deficit_and_takes_only_its_own_order() {
-    // Both crops planted on day 1, 1 km2 each, over a full profile, evap 5 mm. Each orders
-    // yesterday's closing deficit. Day 1: nothing to read, no orders; each closes 5 down.
-    // Day 2: each orders 5 ML; each takes its own 5 with 0.5 mm... no: 5 ML over 1 km2 is
-    // 5 mm, refilling exactly; then dries 5 again. The dam sees the sum.
+    // Both crops planted on day 1, 1 km2 each, over a full profile, evap 5 mm: each dries
+    // (1 + 0.2) x 5 = 6 a day. Each orders yesterday's closing deficit. Day 1: nothing to
+    // read, no orders; each closes 6 down. Day 2: each orders 6 ML, which over 1 km2 is 6 mm,
+    // refilling exactly; then dries 6 again. The dam sees the sum.
     let mut model = run(&rig("", "evap = 5\ncrop_1 = shallow\ncrop_1_plant = 1\ncrop_1_order = this.crop_1_area[-1, 0] * this.crop_1_depletion[-1, 0]\ncrop_2 = deep\ncrop_2_plant = 1\ncrop_2_order = this.crop_2_area[-1, 0] * this.crop_2_depletion[-1, 0]"));
-    assert_eq!(s(&mut model, "crop_1_order")[..3], [0.0, 5.0, 5.0]);
-    assert_eq!(s(&mut model, "crop_2_order")[..3], [0.0, 5.0, 5.0]);
+    assert_eq!(s(&mut model, "crop_1_order")[..3], [0.0, 6.0, 6.0]);
+    assert_eq!(s(&mut model, "crop_2_order")[..3], [0.0, 6.0, 6.0]);
     let dam_order = {
         let idx = model.data_cache.get_series_idx("node.dam.ds_1_order", false).unwrap();
         model.data_cache.series[idx].values.clone()
     };
-    assert_eq!(dam_order[..3], [0.0, 10.0, 10.0], "the field places the sum");
-    assert_eq!(s(&mut model, "usflow")[1], 10.0);
-    assert_eq!(s(&mut model, "supply")[1], 10.0);
-    assert_eq!(s(&mut model, "crop_1_depletion")[..3], [5.0, 5.0, 5.0], "refilled then dried again, every day");
-    assert_eq!(s(&mut model, "crop_2_depletion")[..3], [5.0, 5.0, 5.0]);
+    assert_eq!(dam_order[..3], [0.0, 12.0, 12.0], "the field places the sum");
+    assert_eq!(s(&mut model, "usflow")[1], 12.0);
+    assert_eq!(s(&mut model, "supply")[1], 12.0);
+    assert_eq!(s(&mut model, "crop_1_depletion")[..3], [6.0, 6.0, 6.0], "refilled then dried again, every day");
+    assert_eq!(s(&mut model, "crop_2_depletion")[..3], [6.0, 6.0, 6.0]);
     assert_eq!(s(&mut model, "bypass")[1], 0.0);
-    // The fallow, 2 km2 of bare ground, neither dries nor is watered
-    assert_eq!(s(&mut model, "fallow_depletion")[5], 0.0);
+    // The fallow, 2 km2 of bare ground, dries 6 a day from its wet surface and is never watered
+    assert_close(s(&mut model, "fallow_depletion")[5], 36.0, "six days of 6 mm");
 }
 
 #[test]
 fn test_water_beyond_the_orders_is_poured_over_the_driest_crop_first() {
-    // Two crops of 1 km2, both drying 5 mm a day; crop_2 never orders, crop_1 orders 30 from
-    // day 2. Day 2: both open 5 down and dry to 10 before the water is applied. crop_1 takes
-    // min(30, its room of 10) = 10. The other 20 is a forced watering: crop_2, now the drier,
-    // gets 10 to level the two at 0, and the last 10, with no room anywhere, is bypass.
+    // Two crops of 1 km2, both drying 6 mm a day; crop_2 never orders, crop_1 orders 30 from
+    // day 2. Day 2: both open 6 down and dry to 12 before the water is applied. crop_1 takes
+    // min(30, its room of 12) = 12. The other 18 is a forced watering: crop_2, now the drier,
+    // gets 12 to level the two at 0, and the last 6, with no room anywhere, is bypass.
     let mut model = run(&rig("", "evap = 5\ncrop_1 = shallow\ncrop_1_plant = 1\ncrop_1_order = if(var.day.n >= 2, 30, 0)\ncrop_2 = deep\ncrop_2_plant = 1"));
     assert_eq!(s(&mut model, "usflow")[1], 30.0);
-    assert_eq!(s(&mut model, "supply")[1], 20.0);
-    assert_eq!(s(&mut model, "bypass")[1], 10.0);
-    assert_eq!(s(&mut model, "crop_1_depletion")[1], 0.0, "watered to full");
-    assert_eq!(s(&mut model, "crop_2_depletion")[1], 0.0, "the same, from the pour");
+    assert_close(s(&mut model, "supply")[1], 24.0, "supply");
+    assert_close(s(&mut model, "bypass")[1], 6.0, "bypass");
+    assert_close(s(&mut model, "crop_1_depletion")[1], 0.0, "watered to full");
+    assert_close(s(&mut model, "crop_2_depletion")[1], 0.0, "the same, from the pour");
     // With unequal deficits the pour levels from the driest down. 20 mm down over the metre
     // at the start: 10 in the shallow crop's bucket, 20 in the deep one's. Day 1 closes at
-    // 15 and 25; day 2 dries them to 20 and 30, crop_1 takes its 20, and the other 10 brings
-    // crop_2 from 30 to 20: nothing bypasses.
+    // 16 and 26; day 2 dries them to 22 and 32, crop_1 takes its 22, and the other 8 brings
+    // crop_2 from 32 to 24: nothing bypasses.
     let mut model = run(&rig("", "initial_depletion = 20\nevap = 5\ncrop_1 = shallow\ncrop_1_plant = 1\ncrop_1_order = if(var.day.n >= 2, 30, 0)\ncrop_2 = deep\ncrop_2_plant = 1"));
-    assert_eq!(s(&mut model, "crop_1_depletion")[..2], [15.0, 0.0]);
-    assert_eq!(s(&mut model, "crop_2_depletion")[..2], [25.0, 20.0]);
+    assert_eq!(s(&mut model, "crop_1_depletion")[..2], [16.0, 0.0]);
+    assert_eq!(s(&mut model, "crop_2_depletion")[..2], [26.0, 24.0]);
     assert_eq!(s(&mut model, "supply")[1], 30.0);
     assert_eq!(s(&mut model, "bypass")[1], 0.0);
 }
@@ -213,7 +226,7 @@ fn test_the_fallow_is_never_irrigated_and_forced_water_with_no_crop_is_bypass() 
     let mut model = run(&rig("", "initial_depletion = 20\nevap = 5\ncrop_1 = shallow\ncrop_1_plant = 0\ncrop_1_order = 10\ncrop_2 = deep\ncrop_2_plant = 0"));
     assert_eq!(s(&mut model, "crop_1_order")[3], 0.0, "not in the ground, not evaluated");
     assert_eq!(s(&mut model, "usflow")[3], 0.0);
-    assert_eq!(s(&mut model, "fallow_depletion")[3], 10.0, "bare ground with kc 0 never dries");
+    assert_close(s(&mut model, "fallow_depletion")[3], 34.0, "bare ground dries kc_max x evap, 6 a day, and is never watered");
     // Rain on the fallow overflows into the layer below before it leaves as excess: the top
     // 500 mm is 10 down and the layer below 10 down; 15 mm fills the top and 5 goes below
     let mut model = run(&rig("", "initial_depletion = 20\nrain = if(var.day.n == 2, 15, if(var.day.n == 3, 30, 0))\ncrop_1 = shallow\ncrop_1_plant = 0\ncrop_2 = deep\ncrop_2_plant = 0"));
@@ -225,32 +238,32 @@ fn test_the_fallow_is_never_irrigated_and_forced_water_with_no_crop_is_bypass() 
 #[test]
 fn test_water_below_one_crops_roots_is_there_for_the_next() {
     // A deep crop is planted over the whole field on day 1 into a full profile and dries it
-    // 10 mm a day for 4 days: 40 down over the metre, which its harvest on day 5 spreads: 20
-    // in the top 500 mm, 20 below. The fallow (rooted to 500) then holds 20 down on top, and
-    // the layer below remembers its 20. Day 7 a shallow crop is planted into that: it starts
-    // 20 down and dries to 30. Day 8 it opens past p x 50 = 25, so ks = 20 / 25 = 0.8 and it
-    // dries 8 to 38; 50 mm of rain fills it with 12 to spare, which the layer below takes
-    // (20 down to 8): no excess. Day 9, 60 mm: the bucket takes 10, the layer its last 8,
-    // and 42 mm over 4 km2 leaves. Without the layer's memory the whole 12 would have left
-    // on day 8.
-    let ini = rig("", "evap = 10\ncrop_1 = deep\ncrop_1_plant = if(var.day.n == 1, 4, 0)\ncrop_2 = shallow\ncrop_2_plant = if(var.day.n == 7, 4, 0)\nrain = if(var.day.n == 8, 50, if(var.day.n == 9, 60, 0))")
-        .replace("[crop.deep]\nroot_depth = 1000\nkc = 1\n", "[crop.deep]\nroot_depth = 1000\nkc = 1\nseason_len = 4\n")
-        .replace("[crop.shallow]\nroot_depth = 500\nkc = 1\n", "[crop.shallow]\nroot_depth = 500\nkc = 1\np_adjust = false\n");
+    // (1 + 0.2) x 5 = 6 mm a day for 4 days: 24 down over the metre, which its harvest on day 5
+    // spreads: 12 in the top 500 mm, 12 below. The fallow (rooted to 500) then holds 12 down on
+    // top and dries 6 a day itself (bare, kc_max x evap) to 18, then 24, and the layer below
+    // remembers its 12. Day 7 a shallow crop is planted into that: it starts 24 down and dries
+    // 6 to 30. Day 8 it opens past p x 50 = 25, so ks = 20 / 25 = 0.8 and it dries (0.8 + 0.2)
+    // x 5 = 5 to 35; 47 mm of rain fills it with 12 to spare, which the layer below takes (12
+    // down to 0): no excess. Day 9, 60 mm: the bucket takes its 6, the layer is full, and 54 mm
+    // over 4 km2 leaves. Without the layer's memory the 12 would have left on day 8.
+    let ini = rig("", "evap = 5\ncrop_1 = deep\ncrop_1_plant = if(var.day.n == 1, 4, 0)\ncrop_2 = shallow\ncrop_2_plant = if(var.day.n == 7, 4, 0)\nrain = if(var.day.n == 8, 47, if(var.day.n == 9, 60, 0))")
+        .replace("[crop.deep]\nroot_depth = 1000\nkcb = 1\n", "[crop.deep]\nroot_depth = 1000\nkcb = 1\nseason_len = 4\n")
+        .replace("[crop.shallow]\nroot_depth = 500\nkcb = 1\n", "[crop.shallow]\nroot_depth = 500\nkcb = 1\np_adjust = false\n");
     let mut model = run(&ini);
-    assert_eq!(s(&mut model, "crop_1_depletion")[..4], [10.0, 20.0, 30.0, 40.0]);
+    assert_eq!(s(&mut model, "crop_1_depletion")[..4], [6.0, 12.0, 18.0, 24.0]);
     assert!(s(&mut model, "crop_1_days")[4].is_nan(), "harvested on day 5");
-    assert_eq!(s(&mut model, "fallow_depletion")[4], 20.0, "the top half of 40 over the metre");
-    assert_eq!(s(&mut model, "crop_2_depletion")[6], 30.0, "planted 20 down on day 7 and dried 10");
-    assert_eq!(s(&mut model, "crop_2_ks")[7], 0.8);
-    assert_eq!(s(&mut model, "crop_2_depletion")[7], 0.0);
-    assert_eq!(s(&mut model, "excess")[7], 0.0, "the 12 to spare went to the layer below");
-    assert_eq!(s(&mut model, "crop_2_depletion")[8], 0.0);
-    assert_eq!(s(&mut model, "excess")[8], 168.0, "42 mm over 4 km2 once the layer is full");
+    assert_close(s(&mut model, "fallow_depletion")[4], 18.0, "the top half of 24 over the metre, and a day's drying");
+    assert_close(s(&mut model, "crop_2_depletion")[6], 30.0, "planted 24 down on day 7 and dried 6");
+    assert_close(s(&mut model, "crop_2_ks")[7], 0.8, "ks on day 8");
+    assert_close(s(&mut model, "crop_2_depletion")[7], 0.0, "full after the rain");
+    assert_close(s(&mut model, "excess")[7], 0.0, "the 12 to spare went to the layer below");
+    assert_close(s(&mut model, "crop_2_depletion")[8], 0.0, "full again");
+    assert_close(s(&mut model, "excess")[8], 216.0, "54 mm over 4 km2 once the layer is full");
     // The profile's water shows the layer the buckets hide: at the end of day 5, after the
-    // harvest, the fallow's bucket is 20 down and the layer below 20, over the whole field:
-    // 100 mm of capacity less 40, over 4 km2
-    assert_eq!(s(&mut model, "soil_moisture")[4], 60.0);
-    assert_eq!(s(&mut model, "volume")[4], 240.0);
+    // harvest and the day's drying, the fallow's bucket is 18 down and the layer below 12,
+    // over the whole field: 100 mm of capacity less 30, over 4 km2
+    assert_close(s(&mut model, "soil_moisture")[4], 70.0, "soil moisture");
+    assert_close(s(&mut model, "volume")[4], 280.0, "volume");
     field_balance_closes(&mut model);
 }
 
@@ -336,21 +349,17 @@ fn test_a_curve_number_sheds_storm_rain_by_how_dry_the_surface_is() {
 }
 
 #[test]
-fn test_a_curve_number_needs_the_evaporation_layer_and_basal_coefficients() {
+fn test_every_field_needs_its_evaporation_layer() {
     let err = |ini: String| {
         let mut model = IniModelIO::read_model_string(&ini).expect("loads");
         model.configure().map(|_| ()).and_then(|_| model.run()).err().map(|e| e.to_string()).unwrap_or_default()
     };
-    // A plain fallow (kc) and no layer
-    let e = err(rig("", "curve_number = 85"));
-    assert!(e.contains("so the field needs tew and rew") && e.contains("ASCE Manual 70"), "got: {e}");
-    // The layer is there but a crop has a single coefficient
-    let e = err(cn_rig("curve_number = 85\ncrop_1 = shallow\ncrop_1_plant = 0"));
-    assert!(e.contains("which only crops declared with kcb keep: crop 'shallow' has kc"), "got: {e}");
-    // A fallow with kc among kcb crops is refused the same way
-    let e = err(cn_rig("curve_number = 85\ncrop_1 = shallow_dual\ncrop_1_plant = 0").replace("fallow = bare_dual\n", "fallow = bare\n"));
-    assert!(e.contains("crop 'bare' has kc"), "got: {e}");
-    // All kcb: fine
+    // The rig adds tew and rew unless the field mentions them: a comment is enough to stop it
+    let e = err(rig("", "# no tew here\ncurve_number = 85"));
+    assert!(e.contains("A field needs its surface evaporation layer: tew and rew"), "got: {e}");
+    let e = err(rig("", "# no tew here"));
+    assert!(e.contains("A field needs its surface evaporation layer"), "got: {e}");
+    // With it, a curve number needs nothing more
     assert_eq!(err(cn_rig("curve_number = 85\ncrop_1 = shallow_dual\ncrop_1_plant = 0")), "");
 }
 
@@ -397,10 +406,10 @@ fn test_a_slot_number_with_a_leading_zero_is_not_a_slot() {
 
 #[test]
 fn test_a_fallow_with_a_kc_table_is_refused() {
-    let ini = rig("", "").replace("[crop.bare]\nroot_depth = 500\nkc = 0\n", "[crop.bare]\nroot_depth = 500\nkc = 0, 0.2, 100, 0.5\n");
+    let ini = rig("", "").replace("[crop.bare]\nroot_depth = 500\nkcb = 0\n", "[crop.bare]\nroot_depth = 500\nkcb = 0, 0.2, 100, 0.5\n");
     let mut model = IniModelIO::read_model_string(&ini).expect("loads");
     let err = model.configure().map(|_| ()).and_then(|_| model.run()).err().map(|e| e.to_string()).unwrap_or_default();
-    assert!(err.contains("The fallow's kc must be a number"), "got: {err}");
+    assert!(err.contains("The fallow's kcb must be a number"), "got: {err}");
 }
 
 #[test]
@@ -432,10 +441,11 @@ fn test_a_field_outside_every_regulated_zone_plants_irrigates_and_records_no_ord
     assert!(s(&mut model, "crop_1_order").iter().all(|v| *v == 0.0), "no order phase, no order");
     assert_eq!(s(&mut model, "crop_1_order_due").len(), n);
     assert_eq!(s(&mut model, "crop_1_orders_en_route").len(), n);
-    // Day 2: planted full, dries 5; nothing due, so the 20 arriving is a forced watering
-    // poured into the crop's 5 mm of room: 5 ML taken, 15 bypass
-    assert_eq!(s(&mut model, "supply")[1], 5.0);
-    assert_eq!(s(&mut model, "bypass")[1], 15.0);
+    // Day 2: planted into the fallow, which dried 6 on day 1 (bare, kc_max 1.2 x 5), and dries
+    // 6 itself; nothing due, so the 20 arriving is a forced watering poured into the crop's
+    // 12 mm of room: 12 ML taken, 8 bypass
+    assert_close(s(&mut model, "supply")[1], 12.0, "supply");
+    assert_close(s(&mut model, "bypass")[1], 8.0, "bypass");
 }
 
 #[test]
@@ -444,7 +454,7 @@ fn test_a_standing_trigger_replants_on_the_day_of_harvest() {
     // every third day and planted again the same morning, so its area never shows a gap and
     // days runs 0, 1, 0, 1, ...
     let ini = rig("", "evap = 0\ncrop_1 = shallow\ncrop_1_plant = 1")
-        .replace("[crop.shallow]\nroot_depth = 500\nkc = 1\n", "[crop.shallow]\nroot_depth = 500\nkc = 1\nseason_len = 2\n");
+        .replace("[crop.shallow]\nroot_depth = 500\nkcb = 1\n", "[crop.shallow]\nroot_depth = 500\nkcb = 1\nseason_len = 2\n");
     let mut model = run(&ini);
     assert_eq!(s(&mut model, "crop_1_days")[..5], [0.0, 1.0, 0.0, 1.0, 0.0]);
     assert_eq!(s(&mut model, "crop_1_area")[..5], [1.0; 5]);
@@ -452,14 +462,18 @@ fn test_a_standing_trigger_replants_on_the_day_of_harvest() {
 
 #[test]
 fn test_kc_is_read_from_the_crops_table_by_days_since_planting() {
-    // kc 0 on the planting day, 1 the next, 1 after: ET is 0 on day 2 (days = 0) and
-    // evap x area from day 3
+    // kcb 0 on the planting day, 1 the next, 1 after. On the rig's wet surface the day's
+    // coefficient is kc_max either way, so the table shows in the split: all surface on day 2
+    // (days = 0), 1 + 0.2 from day 3
     let ini = rig("", "evap = 4\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 2, 1, 0)")
-        .replace("[crop.shallow]\nroot_depth = 500\nkc = 1\n", "[crop.shallow]\nroot_depth = 500\nkc = 0, 0, 1, 1, 2, 1\n");
+        .replace("[crop.shallow]\nroot_depth = 500\nkcb = 1\n", "[crop.shallow]\nroot_depth = 500\nkcb = 0, 0, 1, 1, 2, 1\n");
     let mut model = run(&ini);
     assert_eq!(s(&mut model, "crop_1_days")[1..4], [0.0, 1.0, 2.0]);
-    assert_eq!(s(&mut model, "et_vol")[1..4], [0.0, 4.0, 4.0]);
-    assert_eq!(s(&mut model, "et")[2], 1.0, "4 mm over 1 of 4 km2: 1 mm over the field");
+    for (t, ke) in [1.2, 0.2, 0.2].iter().enumerate() {
+        assert_close(s(&mut model, "crop_1_ke")[t + 1], *ke, &format!("ke on day {}", t + 2));
+        assert_close(s(&mut model, "crop_1_kc")[t + 1], 1.2, "kcb + ke");
+    }
+    assert_close(s(&mut model, "et")[2], 4.8, "1.2 x 4 mm over crop and fallow alike");
 }
 
 #[test]
@@ -474,7 +488,7 @@ fn test_interception_comes_off_what_the_storm_leaves() {
     // Dry fallow (its surface as dry as its bucket, so nothing evaporates on day 1), CN 85,
     // evap 10 with the default 0.2 interception: 50 mm of rain sheds 6.63 mm, then 2 mm is
     // intercepted from the remainder, and 41.37 mm infiltrates
-    let ini = cn_rig("initial_depletion = 50\nevap = 10\nrain = if(var.day.n == 2, 50, 0)\ncurve_number = 85").replace("interception = 0\n", "");
+    let ini = cn_rig("initial_depletion = 50\nevap = 10\nrain = if(var.day.n == 2, 50, 0)\ncurve_number = 85").replace("interception = 0\n", "interception = 0.2\n");
     let mut model = run(&ini);
     assert_close(s(&mut model, "intercepted")[1], 2.0, "mm, the same over the whole fallow");
     assert_close(s(&mut model, "fallow_depletion")[1], 50.0 - (50.0 - DRY_RUNOFF_50 - 2.0), "what reached the soil");
@@ -494,7 +508,7 @@ fn test_a_curve_number_needs_a_daily_step() {
 #[test]
 fn test_a_rerun_of_the_same_model_repeats_itself() {
     let ini = rig("", "evap = 5\nrain = if(var.day.n == 4, 30, 0)\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 2, 2, 0)\ncrop_1_order = this.crop_1_area[-1, 0] * this.crop_1_depletion[-1, 0]")
-        .replace("[crop.shallow]\nroot_depth = 500\nkc = 1\n", "[crop.shallow]\nroot_depth = 500\nkc = 1\nseason_len = 5\n");
+        .replace("[crop.shallow]\nroot_depth = 500\nkcb = 1\n", "[crop.shallow]\nroot_depth = 500\nkcb = 1\nseason_len = 5\n");
     let mut model = run(&ini);
     let first: Vec<Vec<f64>> = ["crop_1_area", "crop_1_depletion", "fallow_depletion", "excess", "supply"].iter().map(|k| s(&mut model, k)).collect();
     model.run().expect("second run");
@@ -541,17 +555,20 @@ fn test_the_planting_and_viability_rules_are_recorded_as_read() {
 #[test]
 fn test_a_perennial_is_planted_once_and_stays() {
     // No season_len: planted on day 2 and never harvested; its plant rule is not read again
-    // while it stands, and its kc table holds its last value past the end
-    // (10 mm of rain a day keeps the bucket full, so stress never enters into it)
+    // while it stands, and its kcb table holds its last value past the end. On the rig's wet
+    // surface the whole field evaporates at kc_max whatever the canopy, so the curve shows in
+    // the split between kcb and ke: 0.5 + 0.7 on its first day, 1.0 + 0.2 from day 2 of its
+    // life (10 mm of rain a day keeps the bucket full, so stress never enters into it)
     let ini = rig("", "evap = 10\nrain = 10\ncrop_1 = deep\ncrop_1_plant = if(var.day.n == 2, 4, 0)")
-        .replace("[crop.deep]\nroot_depth = 1000\nkc = 1\n", "[crop.deep]\nroot_depth = 1000\nkc = 0, 0.5, 2, 1.0\n");
+        .replace("[crop.deep]\nroot_depth = 1000\nkcb = 1\n", "[crop.deep]\nroot_depth = 1000\nkcb = 0, 0.5, 2, 1.0\n");
     let mut model = run(&ini);
     let area = s(&mut model, "crop_1_area");
     assert!(area[1..].iter().all(|a| *a == 4.0), "in the ground from day 2 to the end: {area:?}");
     assert!(s(&mut model, "crop_1_plant")[2..].iter().all(|v| v.is_nan()), "the plant rule is not read while it stands");
-    assert_eq!(s(&mut model, "et_vol")[1], 20.0, "kc 0.5 on its first day");
-    assert_eq!(s(&mut model, "et_vol")[3], 40.0, "kc 1.0 from day 2 of its life");
-    assert_eq!(s(&mut model, "et_vol")[8], 40.0, "and held there past the end of the table");
+    assert_close(s(&mut model, "crop_1_ke")[1], 0.7, "kcb 0.5 on its first day leaves 0.7 to the surface");
+    assert_close(s(&mut model, "crop_1_ke")[3], 0.2, "kcb 1.0 from day 2 of its life");
+    assert_close(s(&mut model, "crop_1_ke")[8], 0.2, "and held there past the end of the table");
+    assert_close(s(&mut model, "et_vol")[8], 48.0, "1.2 x 10 mm over 4 km2");
 }
 
 #[test]
@@ -582,16 +599,19 @@ fn test_todays_opening_stress_is_readable_in_a_viable_area_rule() {
     // ks is written the moment it is computed for the day, before the viability rule reads
     // it, so `this.crop_1_ks` with no offset is today's opening stress: a written rule at
     // the built-in threshold kills the crop on the same morning the built-in rule would.
-    // 50 mm bucket, planted 48.5 down on day 1 (ks = 1.5/25 = 0.06), drying 0.06 x 5 that
-    // day: ks opens at 0.048 on day 2, below 0.05.
+    // 50 mm bucket, planted 48.5 down on day 1; p for the day's 6 mm of ETc is 0.46, so
+    // ks = 1.5/27 = 0.0556, and it dries (0.0556 + 0.2) x 5 that day: ks opens at 0.0082 on
+    // day 2, below 0.05.
+    let ks_day_1 = 1.5 / 27.0;
+    let ks_day_2 = (1.5 - (ks_day_1 + 0.2) * 5.0) / 27.0;
     let mut built_in = run(&rig("", "initial_depletion = 48.5\nevap = 5\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 1, 1, 0)"));
     let mut written = run(&rig("", "initial_depletion = 48.5\nevap = 5\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 1, 1, 0)\ncrop_1_viable_area = if(this.crop_1_ks <= 0.05, 0, this.crop_1_area[-1, 0])"));
     assert_eq!(s(&mut built_in, "crop_1_area")[..3], [1.0, 0.0, 0.0]);
     assert_eq!(s(&mut written, "crop_1_area")[..3], [1.0, 0.0, 0.0], "same morning as the built-in rule");
-    assert!((s(&mut written, "crop_1_ks")[0] - 0.06).abs() < 1e-12);
-    assert!((s(&mut written, "crop_1_ks")[1] - 0.048).abs() < 1e-12, "the morning it dies, the stress that killed it is recorded");
+    assert!((s(&mut written, "crop_1_ks")[0] - ks_day_1).abs() < 1e-12);
+    assert!((s(&mut written, "crop_1_ks")[1] - ks_day_2).abs() < 1e-12, "the morning it dies, the stress that killed it is recorded");
     assert!(s(&mut written, "crop_1_ks")[2].is_nan(), "then nothing stands");
-    // Yesterday's ks is a day late: on day 2 it reads 0.06 and the crop lives one more day
+    // Yesterday's ks is a day late: on day 2 it reads 0.0556 and the crop lives one more day
     let mut late = run(&rig("", "initial_depletion = 48.5\nevap = 5\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 1, 1, 0)\ncrop_1_viable_area = if(this.crop_1_ks[-1, 1] <= 0.05, 0, this.crop_1_area[-1, 0])"));
     assert_eq!(s(&mut late, "crop_1_area")[..4], [1.0, 1.0, 0.0, 0.0]);
     // A field outside every zone writes ks once a step too
@@ -610,13 +630,13 @@ fn test_the_profiles_water_is_the_one_state_whose_change_is_the_water_balance() 
     // overflows into the layers. The balance closes every step from the results alone.
     let crops = "\n[crop.bare_dual]\nroot_depth = 500\nkcb = 0\n\n[crop.shallow_dual]\nroot_depth = 500\nkcb = 1\nseason_len = 6\n\n[crop.deep_dual]\nroot_depth = 1000\nkcb = 1\n";
     let ini = rig(crops, "initial_depletion = 30\nevap = 5\nrain = if(var.day.n == 4, 40, if(var.day.n == 9, 70, 0))\ncurve_number = 80\ntew = 20\nrew = 8\ncrop_1 = shallow_dual\ncrop_1_plant = if(var.day.n == 2, 2, 0)\ncrop_1_order = if(var.day.n == 6, 60, this.crop_1_area * clamp(this.crop_1_depletion[-1, 0] - 10, 0, 50))\ncrop_2 = deep_dual\ncrop_2_plant = if(var.day.n == 3, 1, 0)\ncrop_2_order = this.crop_2_area * clamp(this.crop_2_depletion[-1, 0] - 20, 0, 50)")
-        .replace("interception = 0\n", "")
+        .replace("interception = 0\n", "interception = 0.2\n")
         .replace("fallow = bare\n", "fallow = bare_dual\n");
     let mut model = run(&ini);
     field_balance_closes(&mut model);
     // With the whole field under one crop on a one-layer profile of 50 mm, the field's
     // moisture is the capacity less the crop's depletion
-    let mut one = run(&rig("", "initial_depletion = 20\nevap = 5\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 1, 4, 0)").replace("[crop.deep]\nroot_depth = 1000\nkc = 1\n", "[crop.deep]\nroot_depth = 500\nkc = 1\n"));
+    let mut one = run(&rig("", "initial_depletion = 20\nevap = 5\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 1, 4, 0)").replace("[crop.deep]\nroot_depth = 1000\nkcb = 1\n", "[crop.deep]\nroot_depth = 500\nkcb = 1\n"));
     for t in 0..5 {
         assert_close(s(&mut one, "soil_moisture")[t], 50.0 - s(&mut one, "crop_1_depletion")[t], "one crop, one layer, whole field");
     }
@@ -624,12 +644,15 @@ fn test_the_profiles_water_is_the_one_state_whose_change_is_the_water_balance() 
 
 #[test]
 fn test_the_kc_multiplier_scales_the_crops_water_use_and_nothing_else() {
-    // A crop at kc 1 on evap 5 dries 5 mm a day; with a multiplier of 0.6 it dries 3, with 0
-    // nothing, and the multiplier never reaches the interception, which still takes 0.2 x evap
-    let base = "evap = 5\nrain = 2\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 1, 4, 0)";
-    let mut plain = run(&rig("", base).replace("interception = 0\n", ""));
-    let mut skip = run(&rig("", &format!("{base}\ncrop_1_kc_multiplier = 0.6")).replace("interception = 0\n", ""));
-    let mut none = run(&rig("", &format!("{base}\ncrop_1_kc_multiplier = 0")).replace("interception = 0\n", ""));
+    // A surface layer so thin it dries within the first day (tew 0.2), so from day 2 the
+    // surface adds nothing and the multiplier's effect is in plain sight: a crop at kcb 1 on
+    // evap 5 dries 5 mm a day; with a multiplier of 0.6 it dries 3, with 0 nothing. Rain on
+    // day 2 only: the multiplier never reaches the interception, which still takes 0.2 x evap
+    let base = "evap = 5\ntew = 0.2\nrew = 0.1\nrain = if(var.day.n == 2, 2, 0)\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 1, 4, 0)";
+    let mut plain = run(&rig("", base).replace("interception = 0\n", "interception = 0.2\n"));
+    let mut skip = run(&rig("", &format!("{base}\ncrop_1_kc_multiplier = 0.6")).replace("interception = 0\n", "interception = 0.2\n"));
+    let mut none = run(&rig("", &format!("{base}\ncrop_1_kc_multiplier = 0")).replace("interception = 0\n", "interception = 0.2\n"));
+    assert_eq!(s(&mut plain, "crop_1_ke")[1], 0.0, "the surface dried on day 1");
     assert_eq!(s(&mut plain, "et")[1], 5.0);
     assert_close(s(&mut skip, "et")[1], 3.0, "0.6 of the water use");
     assert_eq!(s(&mut none, "et")[1], 0.0, "a multiplier of 0 is no evapotranspiration");
@@ -642,25 +665,28 @@ fn test_the_kc_multiplier_scales_the_crops_water_use_and_nothing_else() {
     assert_close(s(&mut skip, "crop_1_kc_multiplier")[1], 0.6, "the multiplier as read");
     assert_close(s(&mut skip, "crop_1_kc")[1], 0.6, "the curve's 1 times 0.6");
     // Not a number when nothing stands
-    let mut later = run(&rig("", "evap = 5\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 3, 4, 0)\ncrop_1_kc_multiplier = 0.8"));
+    let mut later = run(&rig("", "evap = 5\ntew = 0.2\nrew = 0.1\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 3, 4, 0)\ncrop_1_kc_multiplier = 0.8"));
     assert!(s(&mut later, "crop_1_kc_multiplier")[0].is_nan() && s(&mut later, "crop_1_kc")[0].is_nan());
-    assert_close(s(&mut later, "crop_1_kc")[2], 0.8, "from the planting day");
+    assert_close(s(&mut later, "crop_1_kc")[2], 0.8, "from the planting day, into a surface the fallow dried");
 }
 
 #[test]
 fn test_the_kc_multiplier_can_follow_the_season_and_the_curve() {
     // The multiplier reads the slot's own series without an offset, since area and days are
     // written at planting: a single skip whose canopy closes over the skip after day 2.
-    // The kc curve is 0.5 on day 0 rising to 1 by day 2, so the coefficient used is the
-    // product on every day.
+    // The kcb curve is 0.5 on day 0 rising to 1 by day 2, so the basal coefficient used is
+    // the product on every day; on the rig's wet surface ke makes up the rest of kc_max, so
+    // the product shows as kc − ke.
     let ini = rig("", "evap = 10\nrain = 10\ncrop_1 = deep\ncrop_1_plant = if(var.day.n == 1, 4, 0)\ncrop_1_kc_multiplier = if(this.crop_1_days < 2, 0.7, 0.9)")
-        .replace("[crop.deep]\nroot_depth = 1000\nkc = 1\n", "[crop.deep]\nroot_depth = 1000\nkc = 0, 0.5, 2, 1.0\n");
+        .replace("[crop.deep]\nroot_depth = 1000\nkcb = 1\n", "[crop.deep]\nroot_depth = 1000\nkcb = 0, 0.5, 2, 1.0\n");
     let mut model = run(&ini);
     let kc = s(&mut model, "crop_1_kc");
-    assert_close(kc[0], 0.5 * 0.7, "day 0 of the crop");
-    assert_close(kc[1], 0.75 * 0.7, "day 1");
-    assert_close(kc[2], 1.0 * 0.9, "day 2: the canopy has closed");
-    assert_close(s(&mut model, "et")[2], 9.0, "kc 0.9 x evap 10 over the whole field");
+    let ke = s(&mut model, "crop_1_ke");
+    assert_close(kc[0] - ke[0], 0.5 * 0.7, "day 0 of the crop");
+    assert_close(kc[1] - ke[1], 0.75 * 0.7, "day 1");
+    assert_close(kc[2] - ke[2], 1.0 * 0.9, "day 2: the canopy has closed");
+    assert_close(kc[2], 1.2, "the wet surface brings the day's coefficient to kc_max");
+    assert_close(s(&mut model, "et")[2], 12.0, "kc_max 1.2 x evap 10 over the whole field");
     // A multiplier that gives no number, or a negative one, stops the run
     let bad = rig("", "evap = 5\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 1, 4, 0)\ncrop_1_kc_multiplier = -0.5");
     let err = std::panic::catch_unwind(|| run(&bad)).err().map(|e| e.downcast_ref::<String>().cloned().unwrap_or_default()).unwrap_or_default();
@@ -679,7 +705,7 @@ fn test_roots_grow_with_the_kc_curve_and_take_in_the_soil_below() {
     // A crop whose kc rises from 0.4 to 1.0 over its first ten days, roots from 250 to
     // 1000 mm with it: 75 mm a day. No weather, the profile half empty throughout, so the
     // bucket's depletion is half its growing capacity: 12.5 at 25 mm of capacity, 50 at 100
-    let crops = "\n[crop.grower]\nroot_depth = 1000\ninitial_root_depth = 250\nkc = 0, 0.4, 10, 1.0\n";
+    let crops = "\n[crop.grower]\nroot_depth = 1000\ninitial_root_depth = 250\nkcb = 0, 0.4, 10, 1.0\n";
     let mut model = run(&rig(crops, "evap = 0\nrain = 0\ninitial_depletion = 50\ncrop_1 = grower\ncrop_1_plant = if(var.day.n == 1, 4, 0)"));
     let depth = s(&mut model, "crop_1_root_depth");
     let depletion = s(&mut model, "crop_1_depletion");
@@ -694,14 +720,15 @@ fn test_roots_grow_with_the_kc_curve_and_take_in_the_soil_below() {
     // Water left below a shallow bucket is reached as the roots grow: dry the top 250 mm
     // by evaporation while the soil below stays full, then watch the bucket's depletion
     // per mm of capacity fall as the roots take in full soil
-    let mut model = run(&rig(crops, "evap = 10\nrain = 0\ncrop_1 = grower\ncrop_1_plant = if(var.day.n == 1, 4, 0)"));
+    let mut model = run(&rig(crops, "evap = 4\nrain = 0\ncrop_1 = grower\ncrop_1_plant = if(var.day.n == 1, 4, 0)"));
     let depth = s(&mut model, "crop_1_root_depth");
     let depletion = s(&mut model, "crop_1_depletion");
     let ks = s(&mut model, "crop_1_ks");
-    // Day 0: 25 mm bucket, 4 mm of ET (kc 0.4 x 10) -> depletion 4
-    assert_close(depletion[0], 4.0, "day 0");
+    // Day 0: 25 mm bucket, 4.8 mm of ET (kcb 0.4 and the wet surface's 0.8 make kc_max 1.2,
+    // x 4) -> depletion 4.8
+    assert_close(depletion[0], 4.8, "day 0");
     // Day 1: roots to 325 mm take in 7.5 mm of full soil; ks at the start of the day is on
-    // the grown bucket, 32.5 mm with 4 below full: no stress yet
+    // the grown bucket, 32.5 mm with 4.8 below full: no stress yet
     assert_close(depth[1], 325.0, "day 1");
     assert_eq!(ks[1], 1.0);
     assert!(depletion[11] < 100.0 && depth[11] == 1000.0, "the crop never runs out: {}", depletion[11]);
@@ -710,7 +737,7 @@ fn test_roots_grow_with_the_kc_curve_and_take_in_the_soil_below() {
 
 #[test]
 fn test_replanting_starts_the_roots_at_their_planting_depth_again() {
-    let crops = "\n[crop.grower]\nroot_depth = 1000\ninitial_root_depth = 250\nkc = 0, 0.4, 10, 1.0\nseason_len = 5\n";
+    let crops = "\n[crop.grower]\nroot_depth = 1000\ninitial_root_depth = 250\nkcb = 0, 0.4, 10, 1.0\nseason_len = 5\n";
     let mut model = run(&rig(crops, "evap = 0\ncrop_1 = grower\ncrop_1_plant = if(var.day.n == 1 || var.day.n == 7, 4, 0)"));
     let depth = s(&mut model, "crop_1_root_depth");
     assert_close(depth[4], 550.0, "day 4 of the first crop");
@@ -722,13 +749,13 @@ fn test_replanting_starts_the_roots_at_their_planting_depth_again() {
 
 #[test]
 fn test_initial_root_depth_is_checked_and_round_trips() {
-    let too_deep = rig("\n[crop.bad]\nroot_depth = 500\ninitial_root_depth = 500\nkc = 0, 0.4, 10, 1.0\n", "crop_1 = bad\ncrop_1_plant = 0");
+    let too_deep = rig("\n[crop.bad]\nroot_depth = 500\ninitial_root_depth = 500\nkcb = 0, 0.4, 10, 1.0\n", "crop_1 = bad\ncrop_1_plant = 0");
     let err = IniModelIO::read_model_string(&too_deep).err().map(|e| e.to_string()).unwrap_or_default();
     assert!(err.contains("initial_root_depth must be a positive number of mm less than root_depth (500)"), "got: {err}");
-    let flat = rig("\n[crop.bad]\nroot_depth = 500\ninitial_root_depth = 100\nkc = 1\n", "crop_1 = bad\ncrop_1_plant = 0");
+    let flat = rig("\n[crop.bad]\nroot_depth = 500\ninitial_root_depth = 100\nkcb = 1\n", "crop_1 = bad\ncrop_1_plant = 0");
     let err = IniModelIO::read_model_string(&flat).err().map(|e| e.to_string()).unwrap_or_default();
-    assert!(err.contains("needs a kc table that rises from its first value"), "got: {err}");
-    let ok = rig("\n[crop.grower]\nroot_depth = 1000\ninitial_root_depth = 250\nkc = 0, 0.4, 10, 1.0\n", "crop_1 = grower\ncrop_1_plant = 0");
+    assert!(err.contains("needs a kcb table that rises from its first value"), "got: {err}");
+    let ok = rig("\n[crop.grower]\nroot_depth = 1000\ninitial_root_depth = 250\nkcb = 0, 0.4, 10, 1.0\n", "crop_1 = grower\ncrop_1_plant = 0");
     let rendered = IniModelIO::model_to_string(&IniModelIO::read_model_string(&ok).expect("loads"));
     assert!(rendered.contains("initial_root_depth = 250"), "survives save:\n{rendered}");
     let plain = IniModelIO::model_to_string(&IniModelIO::read_model_string(&rig("", "crop_1 = deep\ncrop_1_plant = 0")).unwrap());
@@ -738,34 +765,37 @@ fn test_initial_root_depth_is_checked_and_round_trips() {
 #[test]
 fn test_p_is_adjusted_for_the_days_evapotranspiration_unless_the_crop_says_not() {
     // FAO-56 Table 22: the tabled p is for 5 mm/day; 0.04 more per mm less, 0.04 less per mm
-    // more, within 0.1 to 0.8. kc 1 so ETc is evap: 2 -> 0.62, 5 -> 0.5, 10 -> 0.3, 20 -> 0.1
+    // more, within 0.1 to 0.8. On the rig's wet surface the coefficient is kc_max 1.2 (kcb 1
+    // plus 0.2 of ke), so ETc is 1.2 x evap: 2 -> 0.604, 5 -> 0.46, 10 -> 0.22, 20 -> 0.1
     let plant = "crop_1 = shallow\ncrop_1_plant = if(var.day.n == 1, 4, 0)";
-    for (evap, p) in [(2.0, 0.62), (5.0, 0.5), (10.0, 0.3), (20.0, 0.1)] {
+    for (evap, p) in [(2.0, 0.604), (5.0, 0.46), (10.0, 0.22), (20.0, 0.1)] {
         let mut model = run(&rig("", &format!("evap = {evap}\n{plant}")));
         assert_close(s(&mut model, "crop_1_p")[0], p, &format!("p at {evap} mm/day"));
     }
-    // The stress follows the day's p: 60 mm down in a 50 mm bucket... use a deep crop, 100 mm,
-    // 60 down: at 10 mm/day p is 0.3, so ks = 40 / 70 instead of 40 / 50
+    // The stress follows the day's p: a deep crop, 100 mm, 60 down: at 12 mm/day of ETc p is
+    // 0.22, so ks = 40 / 78 instead of 40 / 50, and the surface's 0.2 is not stressed
     let mut model = run(&rig("", "evap = 10\ninitial_depletion = 60\ncrop_1 = deep\ncrop_1_plant = if(var.day.n == 1, 4, 0)"));
-    assert_close(s(&mut model, "crop_1_ks")[0], 40.0 / 70.0, "ks under the adjusted p");
-    assert_close(s(&mut model, "et")[0], 40.0 / 70.0 * 10.0, "and the day's ET with it");
+    assert_close(s(&mut model, "crop_1_ks")[0], 40.0 / 78.0, "ks under the adjusted p");
+    assert_close(s(&mut model, "et")[0], (40.0 / 78.0 + 0.2) * 10.0, "and the day's ET with it");
     // p_adjust = false: p as written, ks = 40 / 50
     let fixed = rig("", "evap = 10\ninitial_depletion = 60\ncrop_1 = deep\ncrop_1_plant = if(var.day.n == 1, 4, 0)")
-        .replace("[crop.deep]\nroot_depth = 1000\nkc = 1\n", "[crop.deep]\nroot_depth = 1000\nkc = 1\np_adjust = false\n");
+        .replace("[crop.deep]\nroot_depth = 1000\nkcb = 1\n", "[crop.deep]\nroot_depth = 1000\nkcb = 1\np_adjust = false\n");
     let mut model = run(&fixed);
     assert_close(s(&mut model, "crop_1_p")[0], 0.5, "p as written");
     assert_close(s(&mut model, "crop_1_ks")[0], 0.8, "ks under p as written");
-    // A p written outside 0.1 to 0.8 is its own bound: 0.99 under 2 mm/day stays 0.99, under
-    // 10 mm/day falls to 0.79
+    // A p written outside 0.1 to 0.8 is its own bound: 0.99 under 2.4 mm/day stays 0.99, under
+    // 12 mm/day falls to 0.71
     let extreme = rig("", "evap = 2\ncrop_1 = deep\ncrop_1_plant = if(var.day.n == 1, 4, 0)")
-        .replace("[crop.deep]\nroot_depth = 1000\nkc = 1\n", "[crop.deep]\nroot_depth = 1000\nkc = 1\np = 0.99\n");
+        .replace("[crop.deep]\nroot_depth = 1000\nkcb = 1\n", "[crop.deep]\nroot_depth = 1000\nkcb = 1\np = 0.99\n");
     let mut model = run(&extreme);
     assert_close(s(&mut model, "crop_1_p")[0], 0.99, "the modeller's p is the ceiling");
     let mut model = run(&extreme.replace("evap = 2", "evap = 10"));
-    assert_close(s(&mut model, "crop_1_p")[0], 0.79, "but it still falls with high ETc");
-    // The multiplier is in the ETc the adjustment sees: kc 1 x 0.5 at 10 mm/day is 5, so p stays 0.5
-    let mut model = run(&rig("", "evap = 10\ncrop_1 = deep\ncrop_1_plant = if(var.day.n == 1, 4, 0)\ncrop_1_kc_multiplier = 0.5"));
-    assert_close(s(&mut model, "crop_1_p")[0], 0.5, "ETc includes the multiplier");
+    assert_close(s(&mut model, "crop_1_p")[0], 0.71, "but it still falls with high ETc");
+    // The ETc the adjustment sees is kcb x multiplier + ke: halving kcb on a wet surface
+    // leaves the other half to the surface, so at 5 mm/day ETc is still 6 and p 0.46
+    let mut model = run(&rig("", "evap = 5\ncrop_1 = deep\ncrop_1_plant = if(var.day.n == 1, 4, 0)\ncrop_1_kc_multiplier = 0.5"));
+    assert_close(s(&mut model, "crop_1_ke")[0], 0.7, "the surface takes what the canopy leaves");
+    assert_close(s(&mut model, "crop_1_p")[0], 0.46, "ETc is kcb x multiplier + ke");
     // Not a number when nothing stands, and it round-trips
     assert!(s(&mut model, "crop_1_p").iter().all(|v| v.is_finite()));
     let mut model = run(&rig("", "evap = 5\ncrop_1 = deep\ncrop_1_plant = if(var.day.n == 3, 4, 0)"));
@@ -774,7 +804,7 @@ fn test_p_is_adjusted_for_the_days_evapotranspiration_unless_the_crop_says_not()
     assert!(rendered.contains("p_adjust = false"), "survives save:\n{rendered}");
     let plain = IniModelIO::model_to_string(&IniModelIO::read_model_string(&rig("", "crop_1 = deep\ncrop_1_plant = 0")).unwrap());
     assert!(!plain.contains("p_adjust"), "the default is not written");
-    let bad = rig("\n[crop.odd]\nroot_depth = 500\nkc = 1\np_adjust = maybe\n", "crop_1 = odd\ncrop_1_plant = 0");
+    let bad = rig("\n[crop.odd]\nroot_depth = 500\nkcb = 1\np_adjust = maybe\n", "crop_1 = odd\ncrop_1_plant = 0");
     let err = IniModelIO::read_model_string(&bad).err().map(|e| e.to_string()).unwrap_or_default();
     assert!(err.contains("p_adjust must be true or false"), "got: {err}");
 }
@@ -850,23 +880,22 @@ fn test_the_evaporation_layer_is_checked_and_round_trips() {
         Ok(mut model) => model.configure().err().map(|e| format!("{e:?}")).unwrap_or_default(),
     };
     let dual = "\n[crop.cotton_dual]\nroot_depth = 1000\nkcb = 1.0\n";
-    let e = err(&rig(dual, "crop_1 = cotton_dual\ncrop_1_plant = 0"));
-    assert!(e.contains("has a basal coefficient (kcb), so the field needs its evaporation layer"), "got: {e}");
     let e = err(&rig(dual, "tew = 20\ncrop_1 = cotton_dual\ncrop_1_plant = 0"));
-    assert!(e.contains("tew and rew go together"), "got: {e}");
+    assert!(e.contains("A field needs its surface evaporation layer: tew and rew"), "got: {e}");
     let e = err(&rig(dual, "tew = 8\nrew = 20\ncrop_1 = cotton_dual\ncrop_1_plant = 0"));
     assert!(e.contains("tew greater than rew"), "got: {e}");
-    let e = err(&rig("\n[crop.both]\nroot_depth = 500\nkc = 1\nkcb = 0.9\n", "crop_1 = both\ncrop_1_plant = 0"));
-    assert!(e.contains("has both 'kc' and 'kcb'"), "got: {e}");
+    let e = err(&rig("\n[crop.single]\nroot_depth = 500\nkc = 1\n", "crop_1 = single\ncrop_1_plant = 0"));
+    assert!(e.contains("has 'kc', a single coefficient") && e.contains("Coming from a single coefficient"), "got: {e}");
     let e = err(&rig("\n[crop.neither]\nroot_depth = 500\n", "crop_1 = neither\ncrop_1_plant = 0"));
-    assert!(e.contains("has no 'kc' (or 'kcb')"), "got: {e}");
+    assert!(e.contains("has no 'kcb'"), "got: {e}");
     let ok = rig(dual, "tew = 20\nrew = 8\nkc_max = 1.25\nwetted_fraction = 0.4\ncrop_1 = cotton_dual\ncrop_1_plant = 0");
     let rendered = IniModelIO::model_to_string(&IniModelIO::read_model_string(&ok).expect("loads"));
     for want in ["kcb = 1", "tew = 20", "rew = 8", "kc_max = 1.25", "wetted_fraction = 0.4"] {
         assert!(rendered.contains(want), "{want} survives save:\n{rendered}");
     }
     let plain = IniModelIO::model_to_string(&IniModelIO::read_model_string(&rig("", "crop_1 = deep\ncrop_1_plant = 0")).unwrap());
-    for absent in ["kcb", "tew", "rew", "kc_max", "wetted_fraction"] {
+    for absent in ["kc_max", "wetted_fraction"] {
         assert!(!plain.contains(absent), "{absent} absent stays absent");
     }
+    assert!(plain.contains("tew = 1000") && plain.contains("rew = 999"), "the layer is always written: it is required");
 }

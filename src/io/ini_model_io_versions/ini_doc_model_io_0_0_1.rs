@@ -140,7 +140,6 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
         let mut initial_root_depth: Option<f64> = None;
         let mut p: f64 = 0.5;
         let mut p_adjust: bool = true;
-        let mut kc: Option<crate::hydrology::crop::KcCurve> = None;
         let mut kcb: Option<crate::hydrology::crop::KcCurve> = None;
         let mut season_len: Option<u32> = None;
         for (key, ini_property) in &ini_section.properties {
@@ -157,7 +156,8 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     "false" => false,
                     _ => return Err(KalixIoError::Parse(format!("Error on line {}: p_adjust must be true or false for crop '{}', got '{}'", ini_property.line_number, crop_name, v))),
                 },
-                key_lower @ ("kc" | "kcb") => {
+                "kc" => return Err(KalixIoError::Validate(format!("Error on line {}: Crop '{}' has 'kc', a single coefficient; a crop declares its basal coefficient 'kcb' (FAO-56 Table 17). From a Kc table: 0.15 for the initial stage, 0.05 off the mid-season value, 0.05 to 0.10 off the end. See the field docs, 'Coming from a single coefficient'", ini_property.line_number, crop_name))),
+                key_lower @ "kcb" => {
                     let curve = if let Ok(constant) = v.parse::<f64>() {
                         crate::hydrology::crop::KcCurve::Constant(constant)
                     } else {
@@ -170,18 +170,15 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         crate::hydrology::crop::KcCurve::ByDay(Table::from_csv_string(v, 2, false)
                             .map_err(|e| KalixIoError::Parse(format!("Error on line {}: Could not parse {} for crop '{}' as a number or a two-column table: {}", ini_property.line_number, key_lower, crop_name, e)))?)
                     };
-                    if key_lower == "kc" { kc = Some(curve) } else { kcb = Some(curve) }
+                    kcb = Some(curve);
                 }
                 "season_len" => season_len = Some(v.parse::<u32>()
                     .map_err(|_| KalixIoError::Parse(format!("Error on line {}: season_len must be a whole number of days for crop '{}', got '{}'", ini_property.line_number, crop_name, v)))?),
                 other => return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected property '{}' in section '[{}]'", ini_property.line_number, other, section_name))),
             }
         }
-        let (curve, dual) = match (kc, kcb) {
-            (Some(_), Some(_)) => return Err(KalixIoError::Validate(format!("Error on line {}: Crop '{}' has both 'kc' and 'kcb'; a crop has one coefficient, single (kc) or basal (kcb)", ini_section.line_number, crop_name))),
-            (Some(kc), None) => (kc, false),
-            (None, Some(kcb)) => (kcb, true),
-            (None, None) => return Err(KalixIoError::Validate(format!("Error on line {}: Crop '{}' has no 'kc' (or 'kcb')", ini_section.line_number, crop_name))),
+        let Some(kcb) = kcb else {
+            return Err(KalixIoError::Validate(format!("Error on line {}: Crop '{}' has no 'kcb'", ini_section.line_number, crop_name)));
         };
         let crop = crate::hydrology::crop::Crop {
             name: crop_name.to_string(),
@@ -189,8 +186,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             initial_root_depth,
             p,
             p_adjust,
-            kc: curve,
-            dual,
+            kcb,
             season_len,
         };
         crop.validate().map_err(|e| KalixIoError::Validate(format!("Error on line {}: {}", ini_section.line_number, e)))?;
@@ -2019,7 +2015,7 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 ini_doc.set_property(section_name.as_str(), "available_water", format_f64(n.available_water).as_str());
                 set_property_unless_default(&mut ini_doc, section_name.as_str(), "initial_depletion", &format_f64(n.initial_depletion), "0");
                 set_property_unless_default(&mut ini_doc, section_name.as_str(), "efficiency", &format_f64(n.efficiency), "1");
-                set_property_unless_default(&mut ini_doc, section_name.as_str(), "interception", &format_f64(n.interception), "0.2");
+                set_property_unless_default(&mut ini_doc, section_name.as_str(), "interception", &format_f64(n.interception), "0");
                 set_property_unless_default(&mut ini_doc, section_name.as_str(), "return_fraction", &format_f64(n.return_fraction), "0");
                 if let Some(cn) = n.curve_number {
                     ini_doc.set_property(section_name.as_str(), "curve_number", format_f64(cn).as_str());
@@ -2088,11 +2084,11 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
         if !crop.p_adjust {
             ini_doc.set_property(section_name.as_str(), "p_adjust", "false");
         }
-        let kc = match &crop.kc {
-            crate::hydrology::crop::KcCurve::Constant(kc) => format_f64(*kc),
+        let kcb = match &crop.kcb {
+            crate::hydrology::crop::KcCurve::Constant(kcb) => format_f64(*kcb),
             crate::hydrology::crop::KcCurve::ByDay(table) => format_vec_as_multiline_table(&table.get_values_as_vec(), 2, 4),
         };
-        ini_doc.set_property(section_name.as_str(), if crop.dual { "kcb" } else { "kc" }, kc.as_str());
+        ini_doc.set_property(section_name.as_str(), "kcb", kcb.as_str());
         if let Some(days) = crop.season_len {
             ini_doc.set_property(section_name.as_str(), "season_len", days.to_string().as_str());
         }

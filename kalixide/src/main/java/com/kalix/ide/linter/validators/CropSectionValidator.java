@@ -22,9 +22,10 @@ import java.util.regex.Pattern;
  *   <li>Allowed properties: {@code root_depth} (required, positive mm),
  *       {@code initial_root_depth} (optional, positive mm below root_depth), {@code p_adjust}
  *       (optional, true or false), {@code p}
- *       (0 &le; p &lt; 1, default 0.5), {@code kc} (required: a non-negative number,
- *       or a two-column table of days since planting and kc, days non-negative and
- *       increasing, an optional two-label text header), {@code season_len}
+ *       (0 &le; p &lt; 1, default 0.5), {@code kcb} (required: the basal coefficient, a
+ *       non-negative number or a two-column table of days since planting and kcb, days
+ *       non-negative and increasing, an optional two-label text header; a {@code kc} line
+ *       is refused with the conversion rule), {@code season_len}
  *       (optional whole number of days, at least 1)</li>
  * </ul>
  */
@@ -160,12 +161,12 @@ public class CropSectionValidator implements ValidationStrategy {
                     }
                     break;
                 case "kc":
+                    result.addIssue(prop.getLineNumber(),
+                            "Crop '" + cropName + "' has 'kc', a single coefficient; a crop declares its basal coefficient 'kcb' "
+                                    + "(FAO-56 Table 17): 0.15 for the initial stage, 0.05 off the mid-season value, 0.05 to 0.10 off the end",
+                            ValidationRule.Severity.ERROR, "single_crop_coefficient");
+                    break;
                 case "kcb":
-                    if (hasKc) {
-                        result.addIssue(prop.getLineNumber(),
-                                "Crop '" + cropName + "' has both 'kc' and 'kcb'; a crop has one coefficient, single (kc) or basal (kcb)",
-                                ValidationRule.Severity.ERROR, "invalid_crop_kc");
-                    }
                     hasKc = true;
                     for (String error : checkKc(cropName, value)) {
                         result.addIssue(prop.getLineNumber(), error, ValidationRule.Severity.ERROR, "invalid_crop_kc");
@@ -181,7 +182,7 @@ public class CropSectionValidator implements ValidationStrategy {
                 default:
                     result.addIssue(prop.getLineNumber(),
                             "Unexpected property '" + prop.getKey() + "' in [" + sectionName
-                                    + "] (allowed: root_depth, initial_root_depth, p, p_adjust, kc or kcb, season_len)",
+                                    + "] (allowed: root_depth, initial_root_depth, p, p_adjust, kcb, season_len)",
                             ValidationRule.Severity.ERROR, "unexpected_crop_property");
                     break;
             }
@@ -194,26 +195,26 @@ public class CropSectionValidator implements ValidationStrategy {
         }
         if (!hasKc) {
             result.addIssue(section.getStartLine(),
-                    "Crop '" + cropName + "' has no 'kc' (or 'kcb')",
+                    "Crop '" + cropName + "' has no 'kcb'",
                     ValidationRule.Severity.ERROR, "missing_crop_kc");
         }
     }
 
     /**
-     * Validate a crop's kc: a non-negative number, or a two-column table of
-     * (days since planting, kc). Returns error messages, empty if well-formed.
+     * Validate a crop's kcb: a non-negative number, or a two-column table of
+     * (days since planting, kcb). Returns error messages, empty if well-formed.
      * Package-private for tests.
      */
     static List<String> checkKc(String cropName, String kc) {
         List<String> errors = new ArrayList<>();
         String trimmed = stripTrailingCommaAndWhitespace(kc);
         if (trimmed.trim().isEmpty()) {
-            errors.add("Crop '" + cropName + "': kc is empty");
+            errors.add("Crop '" + cropName + "': kcb is empty");
             return errors;
         }
         if (isFiniteNumber(trimmed)) {
             if (Double.parseDouble(trimmed) < 0) {
-                errors.add("Crop '" + cropName + "': kc must be a non-negative number, got " + trimmed);
+                errors.add("Crop '" + cropName + "': kcb must be a non-negative number, got " + trimmed);
             }
             return errors;
         }
@@ -224,39 +225,39 @@ public class CropSectionValidator implements ValidationStrategy {
         int bodyStart = 0;
         if (!isFiniteNumber(tokens[0])) {
             if (tokens.length < 2 || isFiniteNumber(tokens[1])) {
-                errors.add("Crop '" + cropName + "': kc must be a number, or a table of two columns (days since planting, kc) with an optional two-label header");
+                errors.add("Crop '" + cropName + "': kcb must be a number, or a table of two columns (days since planting, kcb) with an optional two-label header");
                 return errors;
             }
             bodyStart = 2;
         }
         int bodyLength = tokens.length - bodyStart;
         if (bodyLength == 0) {
-            errors.add("Crop '" + cropName + "': kc table has no data rows");
+            errors.add("Crop '" + cropName + "': kcb table has no data rows");
             return errors;
         }
         if (bodyLength % 2 != 0) {
-            errors.add("Crop '" + cropName + "': kc table must have an even number of values (days, kc pairs)");
+            errors.add("Crop '" + cropName + "': kcb table must have an even number of values (days, kcb pairs)");
             return errors;
         }
         double previousDay = Double.NEGATIVE_INFINITY;
         for (int i = bodyStart; i < tokens.length; i += 2) {
             int row = (i - bodyStart) / 2 + 1;
             if (!isFiniteNumber(tokens[i]) || !isFiniteNumber(tokens[i + 1])) {
-                errors.add("Crop '" + cropName + "': kc table row " + row + " is not a pair of finite numbers");
+                errors.add("Crop '" + cropName + "': kcb table row " + row + " is not a pair of finite numbers");
                 return errors;
             }
             double day = Double.parseDouble(tokens[i]);
             double value = Double.parseDouble(tokens[i + 1]);
             if (day < 0) {
-                errors.add("Crop '" + cropName + "': kc table days must be non-negative, got " + tokens[i] + " in row " + row);
+                errors.add("Crop '" + cropName + "': kcb table days must be non-negative, got " + tokens[i] + " in row " + row);
                 return errors;
             }
             if (value < 0) {
-                errors.add("Crop '" + cropName + "': kc table values must be non-negative, got " + tokens[i + 1] + " in row " + row);
+                errors.add("Crop '" + cropName + "': kcb table values must be non-negative, got " + tokens[i + 1] + " in row " + row);
                 return errors;
             }
             if (day <= previousDay) {
-                errors.add("Crop '" + cropName + "': kc table days must increase down the table, row " + row + " does not");
+                errors.add("Crop '" + cropName + "': kcb table days must increase down the table, row " + row + " does not");
                 return errors;
             }
             previousDay = day;

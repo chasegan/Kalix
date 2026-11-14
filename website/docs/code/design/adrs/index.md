@@ -90,6 +90,7 @@ repository has the complete record.
 
 Newest first.
 
+- [ADR-0020 — Field crops take the basal coefficient only](0020-field-crops-take-the-basal-coefficient.md)
 - [ADR-0019 — `distribute` shares one signed volume across a group by weight, capped and redistributed](0019-distribute-shares-a-volume-by-weight.md)
 - [ADR-0018 — A user's accounts line combines accounts with | and &, and holds no values](0018-account-combinations-name-accounts-not-values.md)
 - [ADR-0017 — Resolve every expression reference at load; check output entries for layout only](0017-resolve-references-at-load.md)

@@ -15,13 +15,15 @@ const ALL: &str = "node.paddock.crop_1_depletion\nnode.paddock.crop_1_orders_en_
 
 /// A supply storage above the field, `river_lag` steps of routing between,
 /// and a gauge below. `{field}` is the field's properties after area and
-/// available_water; `kc` and `p` lines go to the crop, and `order` is the
-/// crop's rule.
+/// available_water; `kcb` and `p` lines go to the crop, and `order` is the
+/// crop's rule. The evaporation layer never dries (rew just under tew, both
+/// huge), so the surface adds ke = kc_max − kcb = 0.2 to the crop's coefficient
+/// every day and the arithmetic stays in sight: ET = (ks × kcb + 0.2) × evap.
 fn rig(river_lag: usize, field: &str) -> String {
     let mut crop = String::new();
     let mut props = String::new();
     for line in field.lines() {
-        if line.starts_with("kc ") || line.starts_with("p ") || line.starts_with("p_adjust") {
+        if line.starts_with("kcb ") || line.starts_with("p ") || line.starts_with("p_adjust") {
             crop.push_str(line); crop.push('\n');
         } else if let Some(rule) = line.strip_prefix("order = ") {
             props.push_str("crop_1_order = "); props.push_str(rule); props.push('\n');
@@ -29,7 +31,8 @@ fn rig(river_lag: usize, field: &str) -> String {
             props.push_str(line); props.push('\n');
         }
     }
-    if !crop.contains("kc ") { crop.push_str("kc = 1\n"); }
+    if !crop.contains("kcb ") { crop.push_str("kcb = 1\n"); }
+    if !props.contains("tew") { props.push_str("tew = 1000\nrew = 999\n"); }
     format!(r#"
 [kalix]
 start = 2020-01-01
@@ -135,27 +138,29 @@ fn assert_balance_closes(model: &mut Model) {
 
 #[test]
 fn test_a_rain_fed_field_dries_fills_and_sheds_excess() {
-    // No order, so no supply. p = 0.5, kc = 1, evap = 4 mm. Rain 30 mm on day 3 and 80 mm on day 5.
-    let mut model = run(&rig(0, "evap = 4\nkc = 1\np = 0.5\ninitial_depletion = 20\nrain = if(var.day.n == 3, 30, if(var.day.n == 5, 80, 0))"));
+    // No order, so no supply. p = 0.5, kcb = 1, evap = 4 mm: (1 + 0.2) x 4 = 4.8 mm a day while
+    // unstressed. Rain 30 mm on day 3 and 80 mm on day 5.
+    let mut model = run(&rig(0, "evap = 4\nkcb = 1\np = 0.5\ninitial_depletion = 20\nrain = if(var.day.n == 3, 30, if(var.day.n == 5, 80, 0))"));
     let dep = s(&mut model, "depletion");
     let ks = s(&mut model, "ks");
     let et = s(&mut model, "et");
     let excess = s(&mut model, "excess");
     // depletion is the value at the end of each step.
-    // Day 1: opening depletion 20; ks = (100 - 20) / 50 = 1.6 -> 1; et = 4 mm = 8 ML; closes at 24
+    // Day 1: opening depletion 20, well inside the readily available water (p for 4.8 mm/day
+    // is 0.508, so 50.8 mm): ks 1; et = 4.8 mm = 9.6 ML; closes at 24.8
     assert_eq!(ks[0], 1.0);
-    assert_eq!(et[0], 4.0, "mm");
-    assert_eq!(s(&mut model, "et_vol")[0], 8.0, "ML");
-    assert_eq!(dep[0], 24.0);
-    // Day 2: 24 -> 28. Day 3: et 4 then rain 30: 28 + 4 - 30 = 2
-    assert_eq!(dep[1], 28.0);
+    assert_close(et[0], 4.8, "mm");
+    assert_close(s(&mut model, "et_vol")[0], 9.6, "ML");
+    assert_close(dep[0], 24.8, "day 1");
+    // Day 2: 24.8 -> 29.6. Day 3: et 4.8 then rain 30: 29.6 + 4.8 - 30 = 4.4
+    assert_close(dep[1], 29.6, "day 2");
     assert_eq!(excess[2], 0.0);
-    assert_eq!(dep[2], 2.0);
-    // Day 4: 2 -> 6. Day 5: et 4 then rain 80: 6 + 4 - 80 = -70, so excess 70 mm = 140 ML, closes full
-    assert_eq!(dep[3], 6.0);
-    assert_eq!(excess[4], 140.0);
+    assert_close(dep[2], 4.4, "day 3");
+    // Day 4: 4.4 -> 9.2. Day 5: et 4.8 then rain 80: 9.2 + 4.8 - 80 = -66, so excess 66 mm = 132 ML, closes full
+    assert_close(dep[3], 9.2, "day 4");
+    assert_close(excess[4], 132.0, "excess");
     assert_eq!(dep[4], 0.0);
-    assert_eq!(s(&mut model, "ds_1")[4], 140.0, "excess leaves down ds_1");
+    assert_close(s(&mut model, "ds_1")[4], 132.0, "excess leaves down ds_1");
     // A result named for a property reports the property: rain and evap in mm, rain_vol in ML
     assert_eq!(s(&mut model, "rain")[4], 80.0);
     assert_eq!(s(&mut model, "rain_vol")[4], 160.0);
@@ -166,17 +171,18 @@ fn test_a_rain_fed_field_dries_fills_and_sheds_excess() {
 
 #[test]
 fn test_stress_reduces_evapotranspiration_as_the_soil_dries() {
-    // Bone dry start, no rain: ks falls from (100 - 60)/50 = 0.8 towards 0 and et with it
-    // (p as written: with the FAO-56 adjustment, 10 mm/day of ETc would take it to 0.3)
-    let mut model = run(&rig(0, "evap = 10\nkc = 1\np = 0.5\np_adjust = false\ninitial_depletion = 60"));
+    // Dry start, no rain: ks falls from (100 - 60)/50 = 0.8 towards 0 and the transpiration
+    // with it; the wet surface's 0.2 is not stressed (p as written: with the FAO-56
+    // adjustment, 6 mm/day of ETc would take it to 0.46)
+    let mut model = run(&rig(0, "evap = 5\nkcb = 1\np = 0.5\np_adjust = false\ninitial_depletion = 60"));
     let ks = s(&mut model, "ks");
     let et = s(&mut model, "et");
     let dep = s(&mut model, "depletion");
     assert_eq!(ks[0], 0.8);
-    assert_eq!(et[0], 8.0, "0.8 x 1 x 10 mm");
-    assert_eq!(s(&mut model, "et_vol")[0], 16.0, "x 2 km2");
-    assert_eq!(dep[0], 68.0, "at the end of day 1");
-    assert_close(ks[1], 0.64, "ks on day 2");
+    assert_close(et[0], 5.0, "(0.8 x 1 + 0.2) x 5 mm");
+    assert_close(s(&mut model, "et_vol")[0], 10.0, "x 2 km2");
+    assert_close(dep[0], 65.0, "at the end of day 1");
+    assert_close(ks[1], 0.7, "ks on day 2: 35 / 50");
     assert!(ks.iter().zip(ks.iter().skip(1)).all(|(a, b)| b < a), "ks falls every day");
     assert!(dep.last().unwrap() < &100.0, "and the soil never quite empties");
     assert_balance_closes(&mut model);
@@ -184,24 +190,25 @@ fn test_stress_reduces_evapotranspiration_as_the_soil_dries() {
 
 #[test]
 fn test_irrigation_fills_the_room_left_after_rain_and_bypasses_the_rest() {
-    // Ordered 100 ML (50 mm) every day. Day 1: opening 40, et 2 mm -> 42, no rain: room 42 mm = 84 ML
-    // taken, 16 bypassed, closes full. Day 2: et 2 -> 2, rain 10 -> 0 with 8 mm excess, room 0: all 100 bypassed.
-    let mut model = run(&rig(0, "evap = 2\nkc = 1\np = 0.5\ninitial_depletion = 40\nrain = if(var.day.n == 2, 10, 0)\norder = 100"));
+    // Ordered 100 ML (50 mm) every day. Day 1: opening 40, et 2.4 mm -> 42.4, no rain: room
+    // 42.4 mm = 84.8 ML taken, 15.2 bypassed, closes full. Day 2: et 2.4 -> 2.4, rain 10 -> 0
+    // with 7.6 mm excess, room 0: all 100 bypassed.
+    let mut model = run(&rig(0, "evap = 2\nkcb = 1\np = 0.5\ninitial_depletion = 40\nrain = if(var.day.n == 2, 10, 0)\norder = 100"));
     assert_eq!(s(&mut model, "usflow")[0], 100.0);
-    assert_eq!(s(&mut model, "supply")[0], 84.0);
-    assert_eq!(s(&mut model, "bypass")[0], 16.0);
-    assert_eq!(s(&mut model, "depletion")[0], 0.0, "full after irrigation");
-    assert_eq!(s(&mut model, "excess")[1], 16.0, "8 mm of rain on a nearly full profile");
+    assert_close(s(&mut model, "supply")[0], 84.8, "supply");
+    assert_close(s(&mut model, "bypass")[0], 15.2, "bypass");
+    assert_close(s(&mut model, "depletion")[0], 0.0, "full after irrigation");
+    assert_close(s(&mut model, "excess")[1], 15.2, "7.6 mm of rain on a nearly full profile");
     assert_eq!(s(&mut model, "supply")[1], 0.0, "no room left after the rain");
     assert_eq!(s(&mut model, "bypass")[1], 100.0);
-    assert_eq!(s(&mut model, "ds_1")[1], 116.0);
+    assert_close(s(&mut model, "ds_1")[1], 115.2, "ds_1");
     assert_balance_closes(&mut model);
 }
 
 #[test]
 fn test_escape_leaves_the_model_and_the_take_allows_for_it() {
     // efficiency 0.8: room 40 mm = 80 ML at the soil needs 100 ML at the pump, of which 20 escapes
-    let mut model = run(&rig(0, "evap = 0\nkc = 1\ninitial_depletion = 40\nefficiency = 0.8\norder = 150"));
+    let mut model = run(&rig(0, "evap = 0\nkcb = 1\ninitial_depletion = 40\nefficiency = 0.8\norder = 150"));
     assert_eq!(s(&mut model, "supply")[0], 100.0);
     assert_close(s(&mut model, "escape")[0], 20.0, "escape");
     assert_eq!(s(&mut model, "bypass")[0], 50.0);
@@ -220,31 +227,41 @@ fn test_escape_leaves_the_model_and_the_take_allows_for_it() {
 fn test_the_default_rule_and_what_it_reads() {
     // The IDE template's rule, with a target of 20 mm: top the soil up to 20 mm depletion, at
     // most 120 mm a day, grossed up for escape, less what is already on its way. No travel time.
-    // The soil starts at 45 mm, inside the readily available water (p x capacity = 50), so
-    // ks = 1 and it dries 2 mm a day. The rule reads yesterday's closing depletion: on day 1
-    // there is none and it reads the fallback 0, so nothing is ordered and the soil closes at
-    // 47. Day 2 reads 47 and orders 2 km2 x 27 mm / 0.8 = 67.5 ML, of which 54 reach the soil:
-    // 47 + 2 - 27 = 22. From then on it orders the day's drying, 2 x 2 / 0.8 = 5.
-    let mut model = run(&rig(0, "evap = 2\nkc = 1\ninitial_depletion = 45\nefficiency = 0.8\norder = this.area * clamp(this.crop_1_depletion[-1, 0] - 20, 0, 120) / this.efficiency - this.crop_1_orders_en_route[-1, 0]"));
-    assert_eq!(s(&mut model, "order")[..4], [0.0, 67.5, 5.0, 5.0]);
-    assert_eq!(s(&mut model, "depletion")[..4], [47.0, 22.0, 22.0, 22.0], "held at the target from day 2");
+    // The soil starts at 45 mm, inside the readily available water (p for 2.4 mm/day is
+    // 0.604, so 60.4 mm), so ks = 1 and it dries 2.4 mm a day. The rule reads yesterday's
+    // closing depletion: on day 1 there is none and it reads the fallback 0, so nothing is
+    // ordered and the soil closes at 47.4. Day 2 reads 47.4 and orders 2 km2 x 27.4 mm / 0.8 =
+    // 68.5 ML, of which 54.8 reach the soil: 47.4 + 2.4 - 27.4 = 22.4. From then on it orders
+    // the day's drying, 2 x 2.4 / 0.8 = 6.
+    let mut model = run(&rig(0, "evap = 2\nkcb = 1\ninitial_depletion = 45\nefficiency = 0.8\norder = this.area * clamp(this.crop_1_depletion[-1, 0] - 20, 0, 120) / this.efficiency - this.crop_1_orders_en_route[-1, 0]"));
+    for (t, want) in [0.0, 68.5, 6.0, 6.0].iter().enumerate() {
+        assert_close(s(&mut model, "order")[t], *want, &format!("order on day {}", t + 1));
+    }
+    for (t, want) in [47.4, 22.4, 22.4, 22.4].iter().enumerate() {
+        assert_close(s(&mut model, "depletion")[t], *want, &format!("depletion on day {}, held at the target from day 2", t + 1));
+    }
     assert_eq!(s(&mut model, "orders_en_route")[1], 0.0, "no travel time: an order arrives the day it is placed, nothing is ever en route");
     assert_balance_closes(&mut model);
 }
 
 #[test]
 fn test_orders_en_route_stop_the_deficit_being_ordered_again_while_water_travels() {
-    // 3 steps of travel time, drying 1 mm a day. Day 1 reads the fallback and orders nothing.
-    // Day 2 reads 46 and orders 52. Without the en-route term days 3 and 4 would order the
-    // whole deficit again; with it they order the day's drying only, and the 52 arrives on
-    // day 5.
-    let mut model = run(&rig(3, "evap = 1\nkc = 1\ninitial_depletion = 45\norder = this.area * clamp(this.crop_1_depletion[-1, 0] - 20, 0, 120) - this.crop_1_orders_en_route[-1, 0]"));
-    assert_eq!(s(&mut model, "order")[..5], [0.0, 52.0, 2.0, 2.0, 2.0]);
+    // 3 steps of travel time, drying 1.2 mm a day. Day 1 reads the fallback and orders
+    // nothing. Day 2 reads 46.2 and orders 52.4. Without the en-route term days 3 and 4 would
+    // order the whole deficit again; with it they order the day's drying only, and the 52.4
+    // arrives on day 5.
+    let mut model = run(&rig(3, "evap = 1\nkcb = 1\ninitial_depletion = 45\norder = this.area * clamp(this.crop_1_depletion[-1, 0] - 20, 0, 120) - this.crop_1_orders_en_route[-1, 0]"));
+    let check = |model: &mut Model, name: &str, want: [f64; 5]| {
+        for (t, w) in want.iter().enumerate() {
+            assert_close(s(model, name)[t], *w, &format!("{name} on day {}", t + 1));
+        }
+    };
+    check(&mut model, "order", [0.0, 52.4, 2.4, 2.4, 2.4]);
     // On its way at the end of each day: today's order included, the one arriving today not
-    assert_eq!(s(&mut model, "orders_en_route")[..5], [0.0, 52.0, 54.0, 56.0, 6.0]);
-    assert_eq!(s(&mut model, "order_due")[..5], [0.0, 0.0, 0.0, 0.0, 52.0]);
-    assert_eq!(s(&mut model, "usflow")[4], 52.0, "the first order arrives on day 5");
-    assert_eq!(s(&mut model, "depletion")[4], 24.0, "49 at the start of day 5, + 1 of et, - 26 delivered");
+    check(&mut model, "orders_en_route", [0.0, 52.4, 54.8, 57.2, 7.2]);
+    check(&mut model, "order_due", [0.0, 0.0, 0.0, 0.0, 52.4]);
+    assert_close(s(&mut model, "usflow")[4], 52.4, "the first order arrives on day 5");
+    assert_close(s(&mut model, "depletion")[4], 24.8, "49.8 at the start of day 5, + 1.2 of et, - 26.2 delivered");
     assert_balance_closes(&mut model);
 }
 
@@ -252,46 +269,47 @@ fn test_orders_en_route_stop_the_deficit_being_ordered_again_while_water_travels
 fn test_depletion_is_the_end_of_step_state() {
     // depletion is reported at the end of the step, as a storage's volume is, so a rule reads
     // yesterday's value with an offset: today's does not exist yet when the order is placed.
-    let mut model = run(&rig(0, "evap = 5\nkc = 1\ninitial_depletion = 10\norder = this.crop_1_depletion[-1, 0]"));
+    let mut model = run(&rig(0, "evap = 5\nkcb = 1\ninitial_depletion = 10\norder = this.crop_1_depletion[-1, 0]"));
     assert_eq!(s(&mut model, "order")[0], 0.0, "nothing to read on the first step");
     assert_eq!(s(&mut model, "order")[1], s(&mut model, "depletion")[0]);
-    let err = load_err(&rig(0, "evap = 5\nkc = 1\norder = this.crop_1_depletion"));
+    let err = load_err(&rig(0, "evap = 5\nkcb = 1\norder = this.crop_1_depletion"));
     assert!(err.contains("no value yet") && err.contains("[-1, 0.0]"), "got: {err}");
 }
 
 #[test]
 fn test_interception_takes_the_first_of_the_rain() {
-    // Rain reaches the soil only beyond interception x evap: with evap 4 and the default 0.2,
-    // the first 0.8 mm of a day's rain is intercepted and lost. 3 mm of rain puts 2.2 on the
-    // soil; 0.5 mm is intercepted entirely.
-    let mut model = run(&rig(0, "evap = 4\nkc = 0\ninitial_depletion = 50\nrain = if(var.day.n == 1, 3, if(var.day.n == 2, 0.5, 0))").replace("interception = 0\n", ""));
+    // Rain reaches the soil only beyond interception x evap: with evap 4 and Source
+    // Irrigator's 0.2, the first 0.8 mm of a day's rain is intercepted and lost. 3 mm of rain
+    // puts 2.2 on the soil; 0.5 mm is intercepted entirely. (Bare ground, kcb 0, evaporates
+    // 1.2 x 4 = 4.8 a day from its wet surface.)
+    let mut model = run(&rig(0, "evap = 4\nkcb = 0\ninitial_depletion = 50\nrain = if(var.day.n == 1, 3, if(var.day.n == 2, 0.5, 0))").replace("interception = 0\n", "interception = 0.2\n"));
     assert_eq!(s(&mut model, "rain")[..2], [3.0, 0.5]);
     assert_close(s(&mut model, "intercepted")[0], 0.8, "day 1");
-    assert_close(s(&mut model, "depletion")[0], 47.8, "50 - (3 - 0.8)");
+    assert_close(s(&mut model, "depletion")[0], 52.6, "50 + 4.8 - (3 - 0.8)");
     assert_close(s(&mut model, "intercepted")[1], 0.5, "day 2: all of it");
-    assert_close(s(&mut model, "depletion")[1], 47.8, "nothing reached the soil");
+    assert_close(s(&mut model, "depletion")[1], 57.4, "nothing reached the soil");
     assert_balance_closes(&mut model);
-    // Written as 0, rain is taken as given
-    let mut model = run(&rig(0, "evap = 4\nkc = 0\ninitial_depletion = 50\nrain = 3"));
+    // Left at the default of 0, rain is taken as given
+    let mut model = run(&rig(0, "evap = 4\nkcb = 0\ninitial_depletion = 50\nrain = 3"));
     assert_eq!(s(&mut model, "intercepted")[0], 0.0);
-    assert_eq!(s(&mut model, "depletion")[0], 47.0);
+    assert_close(s(&mut model, "depletion")[0], 51.8, "50 + 4.8 - 3");
 }
 
 #[test]
 fn test_return_flow_is_the_share_of_excess_the_farm_catches() {
-    // 100 ML ordered against 42 mm of room (84 ML): 16 bypassed, and bypass goes down ds_1
-    // whole. Day 2: 8 mm of excess (16 ML); with return_fraction 0.75, 12 leaves on ds_2 as
-    // return flow and 4 goes down ds_1 with the bypass. Nothing is lost.
-    let mut model = run(&rig(0, "evap = 2\nkc = 1\np = 0.5\ninitial_depletion = 40\nrain = if(var.day.n == 2, 10, 0)\norder = 100\nreturn_fraction = 0.75"));
-    assert_eq!(s(&mut model, "bypass")[0], 16.0);
+    // 100 ML ordered against 42.4 mm of room (84.8 ML): 15.2 bypassed, and bypass goes down
+    // ds_1 whole. Day 2: 7.6 mm of excess (15.2 ML); with return_fraction 0.75, 11.4 leaves on
+    // ds_2 as return flow and 3.8 goes down ds_1 with the bypass. Nothing is lost.
+    let mut model = run(&rig(0, "evap = 2\nkcb = 1\np = 0.5\ninitial_depletion = 40\nrain = if(var.day.n == 2, 10, 0)\norder = 100\nreturn_fraction = 0.75"));
+    assert_close(s(&mut model, "bypass")[0], 15.2, "bypass");
     assert_eq!(s(&mut model, "return_flow")[0], 0.0, "no excess, nothing to return");
-    assert_eq!(s(&mut model, "ds_1")[0], 16.0, "bypass is not subject to the fraction");
-    assert_eq!(s(&mut model, "excess")[1], 16.0);
+    assert_close(s(&mut model, "ds_1")[0], 15.2, "bypass is not subject to the fraction");
+    assert_close(s(&mut model, "excess")[1], 15.2, "excess");
     assert_eq!(s(&mut model, "bypass")[1], 100.0);
-    assert_eq!(s(&mut model, "return_flow")[1], 12.0, "16 x 0.75");
-    assert_eq!(s(&mut model, "ds_2")[1], 12.0);
-    assert_eq!(s(&mut model, "ds_1")[1], 104.0, "bypass + the other 4");
-    assert_eq!(s(&mut model, "dsflow")[1], 116.0);
+    assert_close(s(&mut model, "return_flow")[1], 11.4, "15.2 x 0.75");
+    assert_close(s(&mut model, "ds_2")[1], 11.4, "ds_2");
+    assert_close(s(&mut model, "ds_1")[1], 103.8, "bypass + the other 3.8");
+    assert_close(s(&mut model, "dsflow")[1], 115.2, "dsflow");
     assert_balance_closes(&mut model);
 }
 
@@ -308,7 +326,7 @@ end = 2020-01-05
 
 [crop.grass]
 root_depth = 1000
-kc = 1
+kcb = 1
 
 [var.day]
 phase = ras
@@ -336,6 +354,8 @@ type = field
 loc = 0, 20
 area = 2
 available_water = 100
+tew = 1000
+rew = 999
 fallow = grass
 interception = 0
 return_fraction = 0.8
@@ -397,15 +417,15 @@ fn test_field_validation() {
 
 #[test]
 fn test_field_round_trips_every_property() {
-    let ini = rig(0, "evap = 4\nrain = 1\nkc = 0.9\np = 0.6\ninitial_depletion = 20\nefficiency = 0.8\nreturn_fraction = 0.7\norder = 5");
+    let ini = rig(0, "evap = 4\nrain = 1\nkcb = 0.9\np = 0.6\ninitial_depletion = 20\nefficiency = 0.8\nreturn_fraction = 0.7\norder = 5").replace("interception = 0\n", "interception = 0.2\n");
     let model = IniModelIO::read_model_string(&ini).expect("model should load");
     let rendered = IniModelIO::model_to_string(&model);
-    for line in ["area = 2", "available_water = 100", "evap = 4", "rain = 1", "kc = 0.9", "p = 0.6", "initial_depletion = 20", "efficiency = 0.8", "interception = 0", "return_fraction = 0.7", "fallow = grass", "crop_1 = grass", "crop_1_plant = 2", "crop_1_order = 5"] {
+    for line in ["area = 2", "available_water = 100", "tew = 1000", "rew = 999", "evap = 4", "rain = 1", "kcb = 0.9", "p = 0.6", "initial_depletion = 20", "efficiency = 0.8", "interception = 0.2", "return_fraction = 0.7", "fallow = grass", "crop_1 = grass", "crop_1_plant = 2", "crop_1_order = 5"] {
         assert!(rendered.contains(line), "'{line}' survives save:\n{rendered}");
     }
     let reloaded = IniModelIO::read_model_string(&rendered).expect("canonical render should re-load");
     assert_eq!(IniModelIO::model_to_string(&reloaded), rendered);
-    // Defaults are not written
+    // Defaults are not written: the rig's own interception line is removed so the default applies
     let plain = IniModelIO::model_to_string(&IniModelIO::read_model_string(&rig(0, "").replace("interception = 0\n", "")).unwrap());
     for key in ["p =", "efficiency =", "interception =", "return_fraction =", "initial_depletion ="] {
         assert!(!plain.contains(key), "default '{key}' is not written:\n{plain}");
