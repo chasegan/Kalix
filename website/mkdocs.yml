@@ -228,6 +228,7 @@ nav:
               - "0017 Resolve references at load": code/design/adrs/0017-resolve-references-at-load.md
               - "0018 Account combinations name accounts, not values": code/design/adrs/0018-account-combinations-name-accounts-not-values.md
               - "0019 distribute shares a volume by weight": code/design/adrs/0019-distribute-shares-a-volume-by-weight.md
+              - "0020 Field crops take the basal coefficient only": code/design/adrs/0020-field-crops-take-the-basal-coefficient.md
           - Website:
               - code/design/website/index.md
   # Contact (docs/contact.md) runs inside the Material theme but hides both
