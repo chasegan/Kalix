@@ -30,47 +30,47 @@ class CropSectionValidatorTest {
             initial_root_depth = 200
             p = 0.65
             p_adjust = false
-            kc = Day, Kc,
-                 0,   0.35,
-                 70,  1.2,
-                 180, 0.6,
+            kcb = Day, Kcb,
+                 0,   0.15,
+                 70,  1.15,
+                 180, 0.5,
             season_len = 180
 
             [crop.fallow]
             root_depth = 600
-            kc = 0.4
+            kcb = 0
             """);
     }
 
     @Test
     @DisplayName("Invalid crop names should be flagged")
     void testInvalidCropName() {
-        assertHasIssue("[crop.Cotton]\nroot_depth = 900\nkc = 1\n", "Invalid crop name");
-        assertHasIssue("[crop.a.b]\nroot_depth = 900\nkc = 1\n", "Invalid crop name");
+        assertHasIssue("[crop.Cotton]\nroot_depth = 900\nkcb = 1\n", "Invalid crop name");
+        assertHasIssue("[crop.a.b]\nroot_depth = 900\nkcb = 1\n", "Invalid crop name");
     }
 
     @Test
     @DisplayName("Missing required properties should be flagged")
     void testMissingProperties() {
-        assertHasIssue("[crop.cotton]\nkc = 1\n", "has no 'root_depth'");
-        assertHasIssue("[crop.cotton]\nroot_depth = 900\n", "has no 'kc' (or 'kcb')");
-        assertHasIssue("[crop.cotton]\nroot_depth = 900\nkc = 1\nkcb = 0.9\n", "has both 'kc' and 'kcb'");
+        assertHasIssue("[crop.cotton]\nkcb = 1\n", "has no 'root_depth'");
+        assertHasIssue("[crop.cotton]\nroot_depth = 900\n", "has no 'kcb'");
+        assertHasIssue("[crop.cotton]\nroot_depth = 900\nkc = 1\n", "has 'kc', a single coefficient");
         assertNoIssues("[crop.cotton]\nroot_depth = 900\nkcb = 0, 0.15, 60, 1.1, 180, 0.5\n");
     }
 
     @Test
     @DisplayName("Bad values should be flagged")
     void testBadValues() {
-        assertHasIssue("[crop.cotton]\nroot_depth = 0\nkc = 1\n", "root_depth must be a positive number");
-        assertHasIssue("[crop.cotton]\nroot_depth = deep\nkc = 1\n", "root_depth must be a positive number");
-        assertHasIssue("[crop.cotton]\nroot_depth = 900\np = 1\nkc = 1\n", "p must be at least 0 and less than 1");
-        assertHasIssue("[crop.cotton]\nroot_depth = 900\nkc = -1\n", "kc must be a non-negative number");
-        assertHasIssue("[crop.cotton]\nroot_depth = 900\nkc = 1\nseason_len = 0\n", "season_len must be a whole number of days");
-        assertHasIssue("[crop.cotton]\nroot_depth = 900\nkc = 1\nseason_len = 90.5\n", "season_len must be a whole number of days");
-        assertHasIssue("[crop.cotton]\nroot_depth = 900\nkc = 1\nyield = 2\n", "Unexpected property 'yield'");
-        assertHasIssue("[crop.cotton]\nroot_depth = 900\ninitial_root_depth = 0\nkc = 1\n", "initial_root_depth must be a positive number");
-        assertHasIssue("[crop.cotton]\nroot_depth = 900\ninitial_root_depth = 900\nkc = 1\n", "initial_root_depth must be less than root_depth");
-        assertHasIssue("[crop.cotton]\nroot_depth = 900\np_adjust = maybe\nkc = 1\n", "p_adjust must be true or false");
+        assertHasIssue("[crop.cotton]\nroot_depth = 0\nkcb = 1\n", "root_depth must be a positive number");
+        assertHasIssue("[crop.cotton]\nroot_depth = deep\nkcb = 1\n", "root_depth must be a positive number");
+        assertHasIssue("[crop.cotton]\nroot_depth = 900\np = 1\nkcb = 1\n", "p must be at least 0 and less than 1");
+        assertHasIssue("[crop.cotton]\nroot_depth = 900\nkcb = -1\n", "kcb must be a non-negative number");
+        assertHasIssue("[crop.cotton]\nroot_depth = 900\nkcb = 1\nseason_len = 0\n", "season_len must be a whole number of days");
+        assertHasIssue("[crop.cotton]\nroot_depth = 900\nkcb = 1\nseason_len = 90.5\n", "season_len must be a whole number of days");
+        assertHasIssue("[crop.cotton]\nroot_depth = 900\nkcb = 1\nyield = 2\n", "Unexpected property 'yield'");
+        assertHasIssue("[crop.cotton]\nroot_depth = 900\ninitial_root_depth = 0\nkcb = 1\n", "initial_root_depth must be a positive number");
+        assertHasIssue("[crop.cotton]\nroot_depth = 900\ninitial_root_depth = 900\nkcb = 1\n", "initial_root_depth must be less than root_depth");
+        assertHasIssue("[crop.cotton]\nroot_depth = 900\np_adjust = maybe\nkcb = 1\n", "p_adjust must be true or false");
     }
 
     @Test
@@ -81,7 +81,7 @@ class CropSectionValidatorTest {
         assertTrue(CropSectionValidator.checkKc("c", "-1, 0.3, 30, 0.5").stream().anyMatch(e -> e.contains("non-negative")));
         assertTrue(CropSectionValidator.checkKc("c", "0, -0.3, 30, 0.5").stream().anyMatch(e -> e.contains("non-negative")));
         assertTrue(CropSectionValidator.checkKc("c", "Day, 0.3, 30, 0.5").stream().anyMatch(e -> e.contains("two-label header")));
-        assertTrue(CropSectionValidator.checkKc("c", "Day, Kc").stream().anyMatch(e -> e.contains("no data rows")));
+        assertTrue(CropSectionValidator.checkKc("c", "Day, Kcb").stream().anyMatch(e -> e.contains("no data rows")));
         assertTrue(CropSectionValidator.checkKc("c", "").stream().anyMatch(e -> e.contains("is empty")));
     }
 
@@ -90,15 +90,15 @@ class CropSectionValidatorTest {
     void testGoodKc() {
         assertTrue(CropSectionValidator.checkKc("c", "0.95").isEmpty());
         assertTrue(CropSectionValidator.checkKc("c", "0, 0.3, 30, 0.5, 90, 1.1,").isEmpty(), "trailing comma tolerated");
-        assertTrue(CropSectionValidator.checkKc("c", "Day, Kc, 0, 0.3, 30, 0.5").isEmpty());
+        assertTrue(CropSectionValidator.checkKc("c", "Day, Kcb, 0, 0.3, 30, 0.5").isEmpty());
         assertTrue(CropSectionValidator.checkKc("c", "10, 0.5").isEmpty(), "one row is a constant");
     }
 
     @Test
     @DisplayName("A field's fallow and crop slots must name declared crops, and slots must be complete and unbroken")
     void testFieldCropReferences() {
-        String crops = "[crop.bare]\nroot_depth = 500\nkc = 0\n\n[crop.cotton]\nroot_depth = 900\nkc = 1\n\n";
-        assertNoIssues(crops + "[node.f]\ntype = field\nloc = 0, 0\narea = 1\navailable_water = 100\nfallow = bare\ncrop_1 = cotton\ncrop_1_plant = 1\n");
+        String crops = "[crop.bare]\nroot_depth = 500\nkcb = 0\n\n[crop.cotton]\nroot_depth = 900\nkcb = 1\n\n";
+        assertNoIssues(crops + "[node.f]\ntype = field\nloc = 0, 0\narea = 1\navailable_water = 100\ntew = 20\nrew = 8\nfallow = bare\ncrop_1 = cotton\ncrop_1_plant = 1\n");
         assertHasIssue(crops + "[node.f]\ntype = field\nloc = 0, 0\nfallow = lucerne\n", "No crop 'lucerne' is declared for the fallow");
         assertHasIssue(crops + "[node.f]\ntype = field\nloc = 0, 0\nfallow = bare\ncrop_1 = lucerne\ncrop_1_plant = 1\n", "No crop 'lucerne' is declared for crop_1");
         assertHasIssue(crops + "[node.f]\ntype = field\nloc = 0, 0\nfallow = bare\ncrop_1 = cotton\ncrop_1_order = 5\n", "crop_1 needs crop_1_plant");
@@ -109,7 +109,7 @@ class CropSectionValidatorTest {
     @Test
     @DisplayName("Crop property keys are read regardless of case, as the engine reads them")
     void testKeyCase() {
-        assertNoIssues("[crop.cotton]\nRoot_Depth = 900\nKC = 1\n");
+        assertNoIssues("[crop.cotton]\nRoot_Depth = 900\nKCB = 1\n");
     }
 
     private ValidationResult run(String ini) {

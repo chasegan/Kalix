@@ -210,12 +210,14 @@ acc.scheme.committed
 #[test]
 fn test_supply_outlet_orders_are_committed_too() {
     let ini = lagged_model(12000.0, "30", "ds_2 = paddock")
-        .replace("[node.dam]", "[crop.bare]\nroot_depth = 1000\nkc = 0\n\n[crop.thirsty]\nroot_depth = 1000\nkc = 0\n\n[node.dam]")
+        .replace("[node.dam]", "[crop.bare]\nroot_depth = 1000\nkcb = 0\n\n[crop.thirsty]\nroot_depth = 1000\nkcb = 0\n\n[node.dam]")
         .replace("[node.sink]", r#"[node.paddock]
 type = field
 loc = 10, 25
 area = 1
 available_water = 1000
+tew = 20
+rew = 8
 initial_depletion = 1000
 fallow = bare
 crop_1 = thirsty
@@ -461,7 +463,7 @@ fn test_planned_diversion_is_still_capped_by_the_balance_of_the_day() {
 fn test_supply_outlet_delivery_is_planned_at_the_arriving_order() {
     let ini = lagged_model(12000.0, "0", "ds_2 = paddock")
         .replace("a,    1000, 100,", "a,    1000, 10,")
-        .replace("[node.dam]", "[crop.bare]\nroot_depth = 1000\nkc = 0\n\n[crop.thirsty]\nroot_depth = 1000\nkc = 0\n\n[node.dam]")
+        .replace("[node.dam]", "[crop.bare]\nroot_depth = 1000\nkcb = 0\n\n[crop.thirsty]\nroot_depth = 1000\nkcb = 0\n\n[node.dam]")
         .replace("[node.user]", "[node.tributary]\ntype = inflow\nloc = 0, 15\ninflow = 100\nds_1 = user\n\n[node.user]")
         .replace("ds_1 = user\n\n[node.tributary]", "ds_1 = tributary\n\n[node.tributary]")
         .replace("[node.sink]", r#"[node.paddock]
@@ -469,6 +471,8 @@ type = field
 loc = 10, 25
 area = 1
 available_water = 1000
+tew = 20
+rew = 8
 initial_depletion = 1000
 fallow = bare
 crop_1 = thirsty

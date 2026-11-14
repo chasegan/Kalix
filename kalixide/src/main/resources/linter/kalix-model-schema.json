@@ -491,6 +491,8 @@
         "loc",
         "area",
         "available_water",
+        "tew",
+        "rew",
         "fallow"
       ],
       "optional_params": [
@@ -501,8 +503,6 @@
         "return_fraction",
         "initial_depletion",
         "curve_number",
-        "tew",
-        "rew",
         "kc_max",
         "wetted_fraction",
         "crop_1",
@@ -579,7 +579,7 @@
           "type": "number",
           "min": 1,
           "max": 100,
-          "description": "USDA-NRCS curve number (CN2, average antecedent condition) for storm runoff off the paddock surface, the day's curve set by the evaporation layer's depletion (ASCE Manual 70): needs tew and rew, and kcb on every crop and the fallow; omitted, rain runs off only when the profile is full. Daily steps only"
+          "description": "USDA-NRCS curve number (CN2, average antecedent condition) for storm runoff off the paddock surface, the day's curve set by the evaporation layer's depletion (ASCE Manual 70); omitted, rain runs off only when the profile is full. Daily steps only"
         },
         "available_water": {
           "type": "number",
@@ -589,7 +589,7 @@
         "tew": {
           "type": "number",
           "min": 0,
-          "description": "Total evaporable water of the surface evaporation layer [mm] (FAO-56 Table 19), for crops with a basal coefficient (kcb); goes with rew"
+          "description": "Total evaporable water of the surface evaporation layer [mm] (FAO-56 Table 19: a clay about 28, a loam 20, a sand 9); goes with rew"
         },
         "rew": {
           "type": "number",
