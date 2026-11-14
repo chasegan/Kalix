@@ -599,8 +599,8 @@ in the model, on `ds_1` and `ds_2`.
 
 ## Provenance
 
-Kalix does not invent crop models. Every rule in the field node is taken from a published model,
-and this table says which; the few things that are Kalix's own are marked as such. Source has two
+Each process in the field node follows a published, established model, and this table says which.
+The few things that are Kalix's own are marked as such. Source has two
 crop models, the Irrigator Demand Model and IQQM Crop Model 2; the field follows Irrigator.
 
 | Part | What it does | Where it comes from |
