@@ -264,53 +264,79 @@ it. Below the deepest roots on the field nothing draws, so water that passes is 
 left there, below the fallow's roots, until the next deep-rooted crop reaches it.</figcaption>
 </figure>
 
-In this order:
+The node runs these steps in this order.
 
-1. **Planting**, so that the day's orders and fluxes use the day's areas. The rules it reads
-   (`crop_N_plant`, `crop_N_viable_area`) are read in the order phase,
-   like `crop_N_order`, before any node's flow phase has run, so they see the previous step's
-   values (`[-1, 0]`); a field outside every regulated zone has no order phase and reads them
-   at the start of its flow phase instead. Harvest: a crop whose
-   days since planting reach its `season_len` goes back to the fallow. Abandonment: a crop's
-   area becomes `min(area, crop_N_viable_area)`, or 0 under the built-in rule when its stress
-   coefficient at the start of the day is 0.05 or below; what leaves goes to the fallow.
-   Planting: a slot with no crop whose `crop_N_plant` is above zero takes that much from
-   the fallow, at most what the fallow has. Every move carries area with its water, layer by
-   layer, in proportion to area: the giver's wetness does not change, and the receiver's is the
-   area-weighted mix. Where a root zone shrinks (a deep crop's land going to a shallower
-   fallow) the bucket's water is spread to one wetness over the layers it covered, each taking its share by capacity, and the deeper ones
-   keep it; where it grows, the new bucket pools the layers it reaches, with whatever each held.
-   Nothing is created or lost in a move. Root growth: a crop with an `initial_root_depth`
-   reaches today's depth first, taking the soil it grows into, and that soil's water, into its
-   bucket, so the day's capacity and stress are the day's. A new crop's roots start at their
-   planting depth.
-2. **Stress**, for each partition, from the depletion `D` of its bucket at the start of the day:
-   `ks = clamp((TAW − D) / ((1 − p) × TAW), 0, 1)`, with `TAW` the bucket's capacity and `p` the
-   crop's for the day: its `p` plus 0.04 for every mm the day's unstressed evapotranspiration
-   `(kcb × kc_multiplier + ke) × evap` falls short of 5, less 0.04 for every mm over, held between 0.1 and
-   0.8 (FAO-56 Table 22; `p_adjust = false` uses `p` as written). The crop transpires freely
-   while it has used less than `p` of its bucket, and less and less as the soil dries beyond
-   that (FAO-56, equation 84). For a crop this is settled when planting runs, with its
-   coefficient, so `crop_N_ks`, `crop_N_kc` and `crop_N_p` are there for the day's rules.
-3. **Evapotranspiration.** `et = (ks × kcb × kc_multiplier + ke) × evap`, no more than the
-   water the bucket holds, with `kcb` from the crop's curve at its days since planting, the
-   slot's `crop_N_kc_multiplier`, 1 unless written, and `ke` from the surface; the stress is on
-   the transpiration only. The fallow's `kcb` is its number, 0 for bare ground. See
-   [The basal coefficient](#the-basal-coefficient) for `ke`.
+1. **Planting, harvest and abandonment.** These run first, so that the day's orders and
+   fluxes use the day's areas. The rules they read, `crop_N_plant` and `crop_N_viable_area`,
+   are read in the order phase, like `crop_N_order`, before any node's flow phase has run, so
+   they see the previous step's values (`[-1, 0]`). A field outside every regulated zone has
+   no order phase and reads them at the start of its flow phase instead.
+
+   A crop whose days since planting reach its `season_len` is harvested and its land goes
+   back to the fallow. A crop's area then becomes `min(area, crop_N_viable_area)`. Under the
+   built-in rule it becomes 0 when the crop's stress coefficient at the start of the day is
+   0.05 or below. What leaves goes to the fallow. A slot with no crop whose `crop_N_plant` is
+   above zero then takes that much land from the fallow, at most what the fallow has.
+
+   Every move carries land with its water, layer by layer, in proportion to area. The giver's
+   wetness does not change. The receiver's wetness is the area-weighted mix. Where a root zone
+   shrinks, as when a deep crop's land goes to a shallower fallow, the bucket's water is spread
+   to one wetness over the layers it covered, each taking its share by capacity, and the deeper
+   layers keep theirs. Where a root zone grows, the new bucket pools the layers it reaches with
+   whatever each held. Nothing is created or lost in a move.
+
+   A crop with an `initial_root_depth` then grows its roots to today's depth. The soil it grows
+   into joins its bucket with the water it holds, so the day's capacity and stress are the
+   day's. A new crop's roots start at their planting depth.
+
+2. **Stress.** Each partition's stress coefficient comes from the depletion `D` of its bucket
+   at the start of the day:
+
+   ```
+   ks = clamp((TAW − D) / ((1 − p) × TAW), 0, 1)
+   ```
+
+   `TAW` is the bucket's capacity. `p` is the crop's depletion fraction for the day. The crop
+   transpires freely while it has used less than `p` of its bucket, and less and less as the
+   soil dries beyond that (FAO-56 equation 84).
+
+   FAO-56 Table 22 tables `p` for a crop using 5 mm a day and adjusts it for the day's
+   unstressed evapotranspiration, `ETc = (kcb × kc_multiplier + ke) × evap`. `p` rises by 0.04
+   for every mm `ETc` is below 5 and falls by 0.04 for every mm above, within 0.1 to 0.8. A
+   crop with `p_adjust = false` uses its `p` as written.
+
+   For a crop this step runs when planting runs, together with its coefficient, so
+   `crop_N_ks`, `crop_N_kc` and `crop_N_p` are there for the day's rules.
+
+3. **Evapotranspiration.** Each partition evaporates
+
+   ```
+   et = (ks × kcb × kc_multiplier + ke) × evap
+   ```
+
+   and no more than the water its bucket holds. `kcb` is the crop's curve at its days since
+   planting. `kc_multiplier` is the slot's `crop_N_kc_multiplier`, 1 unless written. `ke` is
+   the soil surface's coefficient; see [The basal coefficient](#the-basal-coefficient). The
+   stress applies to the transpiration only. The fallow's `kcb` is its number, 0 for bare
+   ground.
+
 4. **Rain.** With a `curve_number`, each partition first sheds storm runoff by how dry its
-   own surface is (see [Storm runoff](#storm-runoff)). The rest goes on the soil, less
-   `intercepted = min(rain, interception × evap)`, nothing unless `interception` is written.
-   What would take a bucket below zero drains
-   into the layers below it, filling each in turn; what passes the last layer leaves with the
-   runoff as `excess`.
-5. **Irrigation.** Each crop in the ground takes from what arrives up to its own `order_due`,
-   and no more than its bucket has room for after the rain, allowing for the share that
-   escapes: `room / efficiency`; when there is not enough for every order, lower slots are
-   served first. Water arriving beyond the orders is a forced watering the
-   modeller intended: it is poured over the crops in the ground so as to level their depletion,
-   driest first, each again capped by its room. The fallow is never irrigated. What no crop can
-   take is `bypass`. Of what is taken, `escape = supply × (1 − efficiency)` and the rest
-   infiltrates. So irrigation never overfills a root zone, whatever was ordered.
+   own surface is; see [Storm runoff](#storm-runoff). The rest falls on the soil, less
+   `intercepted = min(rain, interception × evap)`, which is nothing unless `interception` is
+   written. Rain that would take a bucket below zero drains into the layers below it, filling
+   each in turn. What passes the last layer leaves with the runoff as `excess`.
+
+5. **Irrigation.** Each crop in the ground takes from what arrives up to its own `order_due`.
+   It takes no more than its bucket has room for after the rain, allowing for the share that
+   escapes, which is `room / efficiency`. When there is not enough for every order, lower
+   slots are served first.
+
+   Water arriving beyond the orders is a forced watering the modeller intended. It is poured
+   over the crops in the ground so as to level their depletion, driest first, each again
+   capped by its room. The fallow is never irrigated. What no crop can take is `bypass`.
+
+   Of what is taken, `escape = supply × (1 − efficiency)` and the rest infiltrates. Irrigation
+   therefore never overfills a root zone, whatever was ordered.
 
 <figure markdown class="kx-figure--plain">
 ![The water balance of one partition: rain, interception and storm runoff above the surface; the root bucket with its depletion; irrigation in and escape out; evapotranspiration up; overflow down through the layers below the roots; excess leaving to ds_1 and ds_2](../assets/docs-nodes-field/water-balance.svg)
