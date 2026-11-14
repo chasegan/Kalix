@@ -599,8 +599,8 @@ in the model, on `ds_1` and `ds_2`.
 
 ## Provenance
 
-The table below names the published model that each process in the field node follows. The few
-things that are Kalix's own are marked as such. Source has two
+Each process in the field node follows an established method from a published model. The table
+below names the model for each process. The few things that are Kalix's own are marked as such. Source has two
 crop models, the Irrigator Demand Model and IQQM Crop Model 2; the field follows Irrigator.
 
 | Part | What it does | Where it comes from |
