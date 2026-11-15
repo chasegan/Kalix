@@ -239,26 +239,16 @@ class TreeFileOperations {
 
     /**
      * Generates a default duplicate name using the pattern "name (1).ext". If that name already
-     * exists, tries "name (2).ext", "name (3).ext", etc., until finding an available name.
+     * exists, tries "name (2).ext", "name (3).ext", etc., until finding an available name. The
+     * counter goes before the whole extension, so a copy of {@code flows.csv.gz} is still a
+     * {@code .csv.gz}. A folder has no extension.
      */
-    private static String generateDuplicateName(File file) {
+    static String generateDuplicateName(File file) {
         String fileName = file.getName();
         if (!file.exists()) { return fileName; }
-        File parentDir = file.getParentFile();
-
-        // Split filename into base and extension
-        int dotIndex = fileName.lastIndexOf('.');
-        String baseName;
-        String extension;
-
-        if (dotIndex > 0 && !file.isDirectory()) {
-            baseName = fileName.substring(0, dotIndex);
-            extension = fileName.substring(dotIndex); // includes the dot
-        } else {
-            baseName = fileName;
-            extension = "";
-        }
-        return FileNames.free(parentDir, baseName, extension).getName();
+        String extension = file.isDirectory() ? "" : FileNames.suffixOf(fileName);
+        String baseName = fileName.substring(0, fileName.length() - extension.length());
+        return FileNames.free(file.getParentFile(), baseName, extension).getName();
     }
 
     // --- Delete ---
