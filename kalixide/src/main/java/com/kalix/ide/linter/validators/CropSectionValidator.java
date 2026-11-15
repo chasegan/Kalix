@@ -20,8 +20,7 @@ import java.util.regex.Pattern;
  * <ul>
  *   <li>Crop names: a lowercase letter, then lowercase letters, digits and underscores</li>
  *   <li>Allowed properties: {@code root_depth} (required, positive mm),
- *       {@code initial_root_depth} (optional, positive mm below root_depth), {@code p_adjust}
- *       (optional, true or false), {@code p}
+ *       {@code initial_root_depth} (optional, positive mm below root_depth), {@code p}
  *       (0 &le; p &lt; 1, default 0.5), {@code kcb} (required: the basal coefficient, a
  *       non-negative number or a two-column table of days since planting and kcb, days
  *       non-negative and increasing, an optional two-label text header; a {@code kc} line
@@ -153,13 +152,6 @@ public class CropSectionValidator implements ValidationStrategy {
                                 ValidationRule.Severity.ERROR, "invalid_crop_p");
                     }
                     break;
-                case "p_adjust":
-                    if (!value.equalsIgnoreCase("true") && !value.equalsIgnoreCase("false")) {
-                        result.addIssue(prop.getLineNumber(),
-                                "Crop '" + cropName + "': p_adjust must be true or false, got '" + value + "'",
-                                ValidationRule.Severity.ERROR, "invalid_crop_p_adjust");
-                    }
-                    break;
                 case "kc":
                     result.addIssue(prop.getLineNumber(),
                             "Crop '" + cropName + "' has 'kc', a single coefficient; a crop declares its basal coefficient 'kcb' "
@@ -182,7 +174,7 @@ public class CropSectionValidator implements ValidationStrategy {
                 default:
                     result.addIssue(prop.getLineNumber(),
                             "Unexpected property '" + prop.getKey() + "' in [" + sectionName
-                                    + "] (allowed: root_depth, initial_root_depth, p, p_adjust, kcb, season_len)",
+                                    + "] (allowed: root_depth, initial_root_depth, p, kcb, season_len)",
                             ValidationRule.Severity.ERROR, "unexpected_crop_property");
                     break;
             }

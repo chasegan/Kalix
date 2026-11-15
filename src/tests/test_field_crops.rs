@@ -242,13 +242,13 @@ fn test_water_below_one_crops_roots_is_there_for_the_next() {
     // spreads: 12 in the top 500 mm, 12 below. The fallow (rooted to 500) then holds 12 down on
     // top and dries 6 a day itself (bare, kc_max x evap) to 18, then 24, and the layer below
     // remembers its 12. Day 7 a shallow crop is planted into that: it starts 24 down and dries
-    // 6 to 30. Day 8 it opens past p x 50 = 25, so ks = 20 / 25 = 0.8 and it dries (0.8 + 0.2)
-    // x 5 = 5 to 35; 47 mm of rain fills it with 12 to spare, which the layer below takes (12
+    // 6 to 30. Its p of 0.54 reads 0.5 at 6 mm/day of unstressed ETc. Day 8 it opens past
+    // p x 50 = 25, so ks = 20 / 25 = 0.8 and it dries (0.8 + 0.2) x 5 = 5 to 35; 47 mm of rain fills it with 12 to spare, which the layer below takes (12
     // down to 0): no excess. Day 9, 60 mm: the bucket takes its 6, the layer is full, and 54 mm
     // over 4 km2 leaves. Without the layer's memory the 12 would have left on day 8.
     let ini = rig("", "evap = 5\ncrop_1 = deep\ncrop_1_plant = if(var.day.n == 1, 4, 0)\ncrop_2 = shallow\ncrop_2_plant = if(var.day.n == 7, 4, 0)\nrain = if(var.day.n == 8, 47, if(var.day.n == 9, 60, 0))")
         .replace("[crop.deep]\nroot_depth = 1000\nkcb = 1\n", "[crop.deep]\nroot_depth = 1000\nkcb = 1\nseason_len = 4\n")
-        .replace("[crop.shallow]\nroot_depth = 500\nkcb = 1\n", "[crop.shallow]\nroot_depth = 500\nkcb = 1\np_adjust = false\n");
+        .replace("[crop.shallow]\nroot_depth = 500\nkcb = 1\n", "[crop.shallow]\nroot_depth = 500\nkcb = 1\np = 0.54\n");
     let mut model = run(&ini);
     assert_eq!(s(&mut model, "crop_1_depletion")[..4], [6.0, 12.0, 18.0, 24.0]);
     assert!(s(&mut model, "crop_1_days")[4].is_nan(), "harvested on day 5");
@@ -763,7 +763,23 @@ fn test_initial_root_depth_is_checked_and_round_trips() {
 }
 
 #[test]
-fn test_p_is_adjusted_for_the_days_evapotranspiration_unless_the_crop_says_not() {
+fn test_the_fallows_p_is_adjusted_too() {
+    // A grassed fallow holds the whole field: a 50 mm bucket, 30 down (60 over the metre), at
+    // 5 mm/day. Its unstressed ETc is (1 + 0.2) x 5 = 6 mm/day, so its p of 0.54 reads 0.5 and ks = 20 / 25
+    // = 0.8: ET is (0.8 + 0.2) x 5 = 5 mm, 20 ML over 4 km2. Held at 0.54, ks would be 20 / 23
+    // and ET 5.35 mm. Day 2 opens 35 down: ks = 15 / 25 = 0.6 and ET 4 mm.
+    let ini = rig("\n[crop.grass]\nroot_depth = 500\nkcb = 1\np = 0.54\n", "evap = 5\ninitial_depletion = 60\ncrop_1 = deep\ncrop_1_plant = 0")
+        .replace("fallow = bare", "fallow = grass");
+    let mut model = run(&ini);
+    assert_close(s(&mut model, "et")[0], 5.0, "ET under the fallow's adjusted p");
+    assert_close(s(&mut model, "et_vol")[0], 20.0, "x 4 km2");
+    assert_close(s(&mut model, "fallow_depletion")[0], 35.0, "at the end of day 1");
+    assert_close(s(&mut model, "et")[1], 4.0, "day 2: ks = 15 / 25");
+    assert_close(s(&mut model, "fallow_depletion")[1], 39.0, "and 4 more down");
+}
+
+#[test]
+fn test_p_is_adjusted_for_the_days_evapotranspiration() {
     // FAO-56 Table 22: the tabled p is for 5 mm/day; 0.04 more per mm less, 0.04 less per mm
     // more, within 0.1 to 0.8. On the rig's wet surface the coefficient is kc_max 1.2 (kcb 1
     // plus 0.2 of ke), so ETc is 1.2 x evap: 2 -> 0.604, 5 -> 0.46, 10 -> 0.22, 20 -> 0.1
@@ -777,12 +793,6 @@ fn test_p_is_adjusted_for_the_days_evapotranspiration_unless_the_crop_says_not()
     let mut model = run(&rig("", "evap = 10\ninitial_depletion = 60\ncrop_1 = deep\ncrop_1_plant = if(var.day.n == 1, 4, 0)"));
     assert_close(s(&mut model, "crop_1_ks")[0], 40.0 / 78.0, "ks under the adjusted p");
     assert_close(s(&mut model, "et")[0], (40.0 / 78.0 + 0.2) * 10.0, "and the day's ET with it");
-    // p_adjust = false: p as written, ks = 40 / 50
-    let fixed = rig("", "evap = 10\ninitial_depletion = 60\ncrop_1 = deep\ncrop_1_plant = if(var.day.n == 1, 4, 0)")
-        .replace("[crop.deep]\nroot_depth = 1000\nkcb = 1\n", "[crop.deep]\nroot_depth = 1000\nkcb = 1\np_adjust = false\n");
-    let mut model = run(&fixed);
-    assert_close(s(&mut model, "crop_1_p")[0], 0.5, "p as written");
-    assert_close(s(&mut model, "crop_1_ks")[0], 0.8, "ks under p as written");
     // A p written outside 0.1 to 0.8 is its own bound: 0.99 under 2.4 mm/day stays 0.99, under
     // 12 mm/day falls to 0.71
     let extreme = rig("", "evap = 2\ncrop_1 = deep\ncrop_1_plant = if(var.day.n == 1, 4, 0)")
@@ -796,17 +806,10 @@ fn test_p_is_adjusted_for_the_days_evapotranspiration_unless_the_crop_says_not()
     let mut model = run(&rig("", "evap = 5\ncrop_1 = deep\ncrop_1_plant = if(var.day.n == 1, 4, 0)\ncrop_1_kc_multiplier = 0.5"));
     assert_close(s(&mut model, "crop_1_ke")[0], 0.7, "the surface takes what the canopy leaves");
     assert_close(s(&mut model, "crop_1_p")[0], 0.46, "ETc is kcb x multiplier + ke");
-    // Not a number when nothing stands, and it round-trips
+    // Not a number when nothing stands
     assert!(s(&mut model, "crop_1_p").iter().all(|v| v.is_finite()));
     let mut model = run(&rig("", "evap = 5\ncrop_1 = deep\ncrop_1_plant = if(var.day.n == 3, 4, 0)"));
     assert!(s(&mut model, "crop_1_p")[0].is_nan());
-    let rendered = IniModelIO::model_to_string(&IniModelIO::read_model_string(&fixed).expect("loads"));
-    assert!(rendered.contains("p_adjust = false"), "survives save:\n{rendered}");
-    let plain = IniModelIO::model_to_string(&IniModelIO::read_model_string(&rig("", "crop_1 = deep\ncrop_1_plant = 0")).unwrap());
-    assert!(!plain.contains("p_adjust"), "the default is not written");
-    let bad = rig("\n[crop.odd]\nroot_depth = 500\nkcb = 1\np_adjust = maybe\n", "crop_1 = odd\ncrop_1_plant = 0");
-    let err = IniModelIO::read_model_string(&bad).err().map(|e| e.to_string()).unwrap_or_default();
-    assert!(err.contains("p_adjust must be true or false"), "got: {err}");
 }
 
 #[test]

@@ -72,8 +72,7 @@ digits and underscores, starting with a letter.
 | --- | --- |
 | root\_depth (compulsory) | How deep the crop roots when fully grown [mm]. Its bucket holds `available_water × root_depth / 1000` mm of water between full and empty. Example: `root_depth = 900` |
 | initial\_root\_depth (optional) | How deep the roots are at planting [mm]. They grow to `root_depth` as the crop's `kcb` rises from its first value to its peak, in step with it, as FAO-56 and pyfao56 grow them; the soil they grow into joins the bucket with the water it holds. Needs a `kcb` table that rises. Omitted, the roots are at `root_depth` from the day of planting, as Source's Irrigator has them. Example: `initial_root_depth = 200` |
-| p (optional) | The depletion fraction: the share of the bucket the crop can use before stress begins, for a crop using about 5 mm/day (FAO-56 Table 22). Default 0.5. Example: `p = 0.65` |
-| p\_adjust (optional) | Whether `p` is adjusted each day for the crop's evapotranspiration, as FAO-56's Table 22 says to and pyfao56 does: `p + 0.04 × (5 − (kcb × kc_multiplier + ke) × evap)`, held between 0.1 and 0.8, or between `p` and that range when `p` is written outside it. Default true. Write `false` to use `p` as written, as Source's Irrigator does. Example: `p_adjust = false` |
+| p (optional) | The depletion fraction: the share of the bucket the crop can use before stress begins, for a crop using about 5 mm/day (FAO-56 Table 22). The node adjusts it each day for the crop's evapotranspiration, as the table's footnote says to. Step 2 of [How the node works](#how-the-node-works) gives the rule. Default 0.5. Example: `p = 0.65` |
 | kcb (compulsory) | The basal crop coefficient (FAO-56 Table 17): the crop's transpiration alone, as a number or a table of (days since planting, kcb) with the FAO-56 curve as its rows, interpolated between rows and held flat beyond the first and last. A text header row is allowed. The soil surface evaporates separately, from the field's evaporation layer (`tew`, `rew`), by a coefficient `ke` the node works out each day from how wet the surface is and how much ground the canopy leaves bare; see [The basal coefficient](#the-basal-coefficient). A single coefficient `kc` is refused: see [Coming from a single coefficient](#coming-from-a-single-coefficient). Example: `kcb = 0, 0.15, 80, 1.10, 140, 1.10, 180, 0.40` |
 | season\_len (optional) | Days from planting to harvest. Omitted, the crop is a perennial and is never harvested. Example: `season_len = 180` |
 
@@ -157,7 +156,7 @@ in a dry spell. A model that calibrates to diversions keeps doing so through
 | crop\_N\_area | The area under slot N's crop today [km²]; 0 when nothing is in the ground. Written when planting runs, before any order rule, so `this.crop_N_area` with no offset is today's area |
 | crop\_N\_days | Days since planting, 0 on the day it is planted; not a number when nothing is in the ground. Written when planting runs, like `crop_N_area` |
 | crop\_N\_root\_depth | How deep the crop's roots reach today [mm]: `initial_root_depth` at planting, growing to `root_depth`; `root_depth` throughout for a crop with no initial depth. Not a number when nothing is in the ground. Written when planting runs |
-| crop\_N\_p | The depletion fraction used today: the crop's `p` adjusted for the day's evapotranspiration, or `p` as written with `p_adjust = false`. Not a number when nothing is in the ground. Written when planting runs |
+| crop\_N\_p | The depletion fraction used today: the crop's `p` adjusted for the day's evapotranspiration. Not a number when nothing is in the ground. Written when planting runs |
 | crop\_N\_ke | The soil evaporation coefficient today, from the surface layer's wetness and the ground the canopy leaves bare. Not a number when nothing is in the ground. Written when planting runs |
 | crop\_N\_depletion | How far the crop's root zone is below full at the end of the step [mm]: 0 is full, the bucket's capacity is empty. A state, reported at the end of the step like a storage's `volume`; the irrigation rule reads the previous step's value, `this.crop_N_depletion[-1, 0]`, the soil at the start of today. Not a number when nothing is in the ground |
 | crop\_N\_ks | The crop's stress coefficient this step, 0 to 1, from the depletion at the start of the day. Written the moment it is computed, before the viable-area rule reads it, so `this.crop_N_ks` with no offset is today's. On the morning a crop is abandoned it is the stress that was read; not a number when nothing stands at the start of the day |
@@ -305,9 +304,16 @@ The node runs these steps in this order.
    soil dries beyond that (FAO-56 equation 84).
 
    FAO-56 Table 22 tables `p` for a crop using 5 mm a day and adjusts it for the day's
-   unstressed evapotranspiration, `ETc = (kcb × kc_multiplier + ke) × evap`. `p` rises by 0.04
-   for every mm `ETc` is below 5 and falls by 0.04 for every mm above, within 0.1 to 0.8. A
-   crop with `p_adjust = false` uses its `p` as written.
+   unstressed evapotranspiration:
+
+   ```
+   ETc = (kcb × kc_multiplier + ke) × evap
+   p   = clamp(p_table + 0.04 × (5 − ETc), min(p_table, 0.1), max(p_table, 0.8))
+   ```
+
+   `p_table` is the crop's `p` as written. It rises by 0.04 for every mm `ETc` is below 5 and
+   falls by 0.04 for every mm above, within 0.1 to 0.8. A `p` written above 0.8 is that crop's
+   ceiling, and the adjustment can only lower it; a `p` written below 0.1 is its floor.
 
    For a crop this step runs when planting runs, together with its coefficient, so
    `crop_N_ks`, `crop_N_kc` and `crop_N_p` are there for the day's rules.
@@ -614,7 +620,7 @@ crop models, the Irrigator Demand Model and IQQM Crop Model 2; the field follows
 | Bucket capacity | `available_water × root_depth`, and the depletion fraction `p` | FAO-56 equations 82 and 83, Tables 19 and 22 |
 | Root growth | Roots from `initial_root_depth` to `root_depth` in step with the kcb curve's rise; the soil reached joins the bucket with its water | FAO-56 Chapter 8; pyfao56 grows the roots with the coefficient. Omitted, the fixed root zone of Source Irrigator |
 | Stress coefficient | `ks` from 1 at `p` of the bucket used to 0 at empty, on the opening depletion | FAO-56 equation 84; pyfao56's convention for when it is read |
-| Depletion fraction for the day | `p` adjusted by 0.04 per mm of the day's unstressed ET either side of 5 mm, within 0.1 to 0.8 | FAO-56 Table 22, footnote; pyfao56 applies it. `p_adjust = false` is Source Irrigator's constant `p` |
+| Depletion fraction for the day | `p` adjusted by 0.04 per mm of the day's unstressed ET either side of 5 mm, within 0.1 to 0.8 | FAO-56 Table 22, footnote; pyfao56 applies it. Source Irrigator holds `p` constant |
 | Evapotranspiration | `(ks × kcb × kc_multiplier + ke) × evap`, no more than the water held; `ke` from a surface layer that dries in two stages, over the ground the canopy leaves bare and irrigation wets | FAO-56 Chapter 7, the dual crop coefficient: equations 69 to 77, Tables 17, 19 and 20, with the canopy-cover exponent taken as 1 and transpiration from the surface layer ignored, as FAO-56 allows for all but shallow-rooted crops. The multiplier is FAO-56's Chapter 9 adjustment left to the modeller. The single coefficient of Chapter 6 is not offered; see [Coming from a single coefficient](#coming-from-a-single-coefficient) |
 | Basal coefficient curve | A table by days since planting, interpolated, flat beyond its ends | FAO-56 Chapter 7, Table 17, on the stage lengths of Table 11 |
 | Interception | `min(rain − runoff, interception × evap)` off every rain day, 0 unless written | Source Irrigator, equation 7. FAO-56 has no deduction: its Chapter 7 notes small wettings evaporate from the surface, which `ke` models |
