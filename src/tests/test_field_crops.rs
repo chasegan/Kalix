@@ -763,6 +763,22 @@ fn test_initial_root_depth_is_checked_and_round_trips() {
 }
 
 #[test]
+fn test_the_fallows_p_is_adjusted_too() {
+    // A grassed fallow holds the whole field: a 50 mm bucket, 30 down (60 over the metre), at
+    // 5 mm/day. Its unstressed ETc is (1 + 0.2) x 5 = 6 mm/day, so its p of 0.54 reads 0.5 and ks = 20 / 25
+    // = 0.8: ET is (0.8 + 0.2) x 5 = 5 mm, 20 ML over 4 km2. Held at 0.54, ks would be 20 / 23
+    // and ET 5.35 mm. Day 2 opens 35 down: ks = 15 / 25 = 0.6 and ET 4 mm.
+    let ini = rig("\n[crop.grass]\nroot_depth = 500\nkcb = 1\np = 0.54\n", "evap = 5\ninitial_depletion = 60\ncrop_1 = deep\ncrop_1_plant = 0")
+        .replace("fallow = bare", "fallow = grass");
+    let mut model = run(&ini);
+    assert_close(s(&mut model, "et")[0], 5.0, "ET under the fallow's adjusted p");
+    assert_close(s(&mut model, "et_vol")[0], 20.0, "x 4 km2");
+    assert_close(s(&mut model, "fallow_depletion")[0], 35.0, "at the end of day 1");
+    assert_close(s(&mut model, "et")[1], 4.0, "day 2: ks = 15 / 25");
+    assert_close(s(&mut model, "fallow_depletion")[1], 39.0, "and 4 more down");
+}
+
+#[test]
 fn test_p_is_adjusted_for_the_days_evapotranspiration() {
     // FAO-56 Table 22: the tabled p is for 5 mm/day; 0.04 more per mm less, 0.04 less per mm
     // more, within 0.1 to 0.8. On the rig's wet surface the coefficient is kc_max 1.2 (kcb 1
