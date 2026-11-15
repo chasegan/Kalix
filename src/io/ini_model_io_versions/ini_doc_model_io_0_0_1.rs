@@ -168,7 +168,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 }
                 "season_len" => season_len = Some(v.parse::<u32>()
                     .map_err(|_| KalixIoError::Parse(format!("Error on line {}: season_len must be a whole number of days for crop '{}', got '{}'", ini_property.line_number, crop_name, v)))?),
-                other => return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected property '{}' in section '[{}]'", ini_property.line_number, other, section_name))),
+                other => return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected property '{}' in section '[{}]' (a crop takes root_depth, initial_root_depth, p, kcb and season_len)", ini_property.line_number, other, section_name))),
             }
         }
         let Some(kcb) = kcb else {
