@@ -29,7 +29,8 @@ showed the Source header as rows, with no error.
 - Manifesto §2.2 — what you read is what runs. The model file names the
   data file, and the name alone must say how it is read.
 - Manifesto §2.3 — behaviour on failure must be traceable. A file Kalix
-  cannot read should be refused by name, not parsed into nonsense.
+  cannot read must fail with the file and line named, and must never be
+  shown as data.
 - Manifesto §2.5 — built for practitioners who want control. A modeller may
   have reasons for a file name that Kalix does not need to know.
 - Manifesto §2.8 — less is more. A list of permitted extensions is one more
@@ -47,16 +48,20 @@ everywhere, or only where Kalix knows what a Source result is.
 
 ## Decision
 
-Chosen option: **1**. A compressed Source result is refused by name in the
-IDE and in `kalix convert`, and nowhere else.
+Chosen option: **1**, because it keeps a freedom modellers already have and
+loses nothing in correctness. A compressed Source result is refused by name
+in the IDE and in `kalix convert`, and nowhere else. §4 and §6 were already
+in force and are recorded here so the subject sits in one place.
 
-1. **The file name decides the format.** `.pxt` is Pixie, `.csv.zip` is a
-   CSV in a one-entry zip archive, and `.csv.gz` is a CSV in a gzip stream.
-   The test ignores case. A `format` argument, where one exists, only picks
-   a default file name. The name is what the modeller sees, so nothing else
-   decides the bytes.
+1. **The file name decides the format.** `.pxt` is Pixie, and so is `.pxb`
+   for an output or in `kalix convert`. `.csv.zip` is a CSV in a one-entry
+   zip archive, and `.csv.gz` is a CSV in a gzip stream. Model inputs and
+   outputs ignore case in this test. The name is what the modeller sees, so
+   nothing else decides the bytes. `save_results` is the one place with a
+   `format` argument. There it chooses between CSV and Pixie, and among the
+   CSV forms the name alone decides the compression.
 2. **Any other name is plain CSV in the engine.** This holds for model
-   inputs and for model outputs, with no exceptions. A modeller can name
+   inputs and for model outputs. A modeller can name
    inputs `rain.001` and `rain.002`, or `flows.txt`, and they load. That
    freedom costs nothing to keep, and a file that is not CSV fails at the
    row that cannot be read, with the file and line named.
@@ -72,9 +77,10 @@ IDE and in `kalix convert`, and nowhere else.
    compressed or not.
 5. **The IDE refuses a compressed Source result by name.** The IDE reads
    Source results, but only uncompressed. Its classifier does not count
-   `.res.csv.zip` or `.res.csv.gz` as compressed CSV, and opening, plotting
-   or saving under such a name gives a not-supported message. Without this
-   nothing fails: the header is shown as data.
+   `.res.csv.zip` or `.res.csv.gz` as compressed CSV. Opening one, loading
+   it into a plot or a dataset, comparing it, or saving under such a name
+   gives a not-supported message. Without this nothing fails: the header is
+   shown as data.
 6. **A Pixie input is named by its `.pxt`.** Naming the `.pxb` in `[data]`
    is an error that gives the `.pxt` to use. One spelling means one source
    name.
@@ -83,7 +89,8 @@ IDE and in `kalix convert`, and nowhere else.
 
 - ✅ A modeller reads the format off the name in the model file.
 - ✅ No list of permitted extensions to maintain for model inputs.
-- ✅ The engine's rule for model inputs and outputs has no exceptions.
+- ✅ The engine's rule for model inputs and outputs does not single out
+  any kind of file.
 - ❌ A Source result named in `[data]` fails with a date-parse error at its
   header, not with a message that says what the file is. Accepted: the
   error names the file and the line.
@@ -119,10 +126,11 @@ IDE and in `kalix convert`, and nowhere else.
 
 The first file loads as CSV under §2. The second is decompressed and loaded
 under §1. The third is decompressed under §3 and stops the load in the CSV
-parser, at the second line of the Source header:
+parser, at the second line of the Source header. The error names the model
+line and the full path, and ends:
 
 ```
-Could not parse date 'Missing data value' with any known format in './data/results.res.csv.gz' line 2
+Could not parse date 'Missing data value' with any known format in '<path>/data/results.res.csv.gz' line 2
 ```
 
 In the IDE, opening `results.res.csv.gz` gives the message from §5.
@@ -131,16 +139,20 @@ In the IDE, opening `results.res.csv.gz` gives the message from §5.
 
 ## Enforcement
 
-- **Structural**: §1 is held by one classifier per stack,
-  `csv_io::csv_compression` in the engine and
+- **Structural**: for §1, the compression is decided by one classifier per
+  stack, `csv_io::csv_compression` in the engine and
   `CompressedCsvFormat.compressionOf` in the IDE, which the read and write
   paths both use. §2 is pinned by
   `test_an_unknown_extension_is_read_and_written_as_csv`. §4 is pinned by
-  the tests in `convert.rs`. §5 is pinned by `CsvGzDataViewTest`,
-  `FileCategoryTest` and `SeriesFileWriterTest`. §6 is held by
+  the tests in `convert.rs`. For §5, `CsvGzDataViewTest`,
+  `FileCategoryTest` and `SeriesFileWriterTest` pin the classifier, the
+  file category and the two writers. §6 is held by
   `TimeseriesInput::read_source`.
-- **Advisory**: §3 is the absence of a check, so it is held by review, as
-  is the claim that no further path reads a data file by some other rule.
+- **Advisory**: the Pixie test in §1 is repeated at each read and write
+  site. §3 is the absence of a check. The messages §5 shows on opening,
+  plotting, dataset loading, comparing and Save Results have no tests,
+  since each needs a display. All three are held by review, as is the claim
+  that no further path reads a data file by some other rule.
 
 ## Links and references
 
@@ -150,3 +162,5 @@ In the IDE, opening `results.res.csv.gz` gives the message from §5.
   introduced `.csv.zip` and the rule that the name decides the bytes.
 
 ## Amendments
+
+*None yet.*
