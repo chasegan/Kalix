@@ -48,10 +48,19 @@ public final class DataViewOpener {
      * whole-file text read there, so everything here must stay bounded and cheap.
      */
     public static DataViewSession openFor(File file) throws IOException {
+        return openFor(file, PreferenceKeys.DATAVIEW_ZIP_MEMORY_LIMIT_MB.get() * 1024L * 1024L);
+    }
+
+    /**
+     * As {@link #openFor(File)}, with the compressed CSV in-memory limit given
+     * by the caller rather than read from the preference. Tests use this so
+     * they never write the stored preference.
+     */
+    static DataViewSession openFor(File file, long compressedLimitBytes) throws IOException {
         String name = file.getName().toLowerCase(Locale.ROOT);
         // Longest suffix first — the .res.csv test below cannot see a compressed CSV.
         if (CompressedCsvFormat.isCompressedCsv(name)) {
-            return openCompressedCsv(file);
+            return openCompressedCsv(file, compressedLimitBytes);
         }
         if (name.endsWith(".res.csv")) {
             try {
@@ -65,13 +74,13 @@ public final class DataViewOpener {
 
     /**
      * The compressed CSV contract: decompress the whole payload
-     * to memory — bounded while it runs by the in-memory limit preference,
-     * a cross that throws {@link CompressedCsvFormat.TooLargeException} with
-     * the honest reason — then serve it through the ordinary session machinery
-     * over an in-memory channel.
+     * to memory — bounded while it runs by {@code limitBytes} (the in-memory
+     * limit preference), a cross that throws
+     * {@link CompressedCsvFormat.TooLargeException} with the honest reason —
+     * then serve it through the ordinary session machinery over an in-memory
+     * channel.
      */
-    private static DataViewSession openCompressedCsv(File file) throws IOException {
-        long limitBytes = PreferenceKeys.DATAVIEW_ZIP_MEMORY_LIMIT_MB.get() * 1024L * 1024L;
+    private static DataViewSession openCompressedCsv(File file, long limitBytes) throws IOException {
         byte[] text = CompressedCsvFormat.decompressBounded(file, limitBytes);
         return DataViewSession.open(ByteSource.ofMemory(file.toPath(), text), 0L, null, List.of());
     }

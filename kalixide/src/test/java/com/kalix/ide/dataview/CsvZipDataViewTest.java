@@ -3,7 +3,6 @@ package com.kalix.ide.dataview;
 import com.kalix.ide.io.CompressedCsvFormat;
 import com.kalix.ide.io.CsvZipFormat;
 import com.kalix.ide.io.ZipArchive;
-import com.kalix.ide.preferences.PreferenceKeys;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -89,15 +88,10 @@ class CsvZipDataViewTest {
     @Test
     void overLimitZipIsRefusedWithTheHonestReason() throws IOException {
         Path zip = zipFile("big.csv.zip", "big.csv", "Date,flow\n2020-01-01,1.5\n".repeat(64));
-        int old = PreferenceKeys.DATAVIEW_ZIP_MEMORY_LIMIT_MB.get();
-        try {
-            PreferenceKeys.DATAVIEW_ZIP_MEMORY_LIMIT_MB.set(0);
-            CompressedCsvFormat.TooLargeException e = assertThrows(CompressedCsvFormat.TooLargeException.class,
-                () -> DataViewOpener.openFor(zip.toFile()));
-            assertTrue(e.getMessage().contains("in-memory limit"), e.getMessage());
-        } finally {
-            PreferenceKeys.DATAVIEW_ZIP_MEMORY_LIMIT_MB.set(old);
-        }
+        // The limit is passed in: setting the preference would write the developer's real settings.
+        CompressedCsvFormat.TooLargeException e = assertThrows(CompressedCsvFormat.TooLargeException.class,
+            () -> DataViewOpener.openFor(zip.toFile(), 0L));
+        assertTrue(e.getMessage().contains("in-memory limit"), e.getMessage());
     }
 
     @Test
