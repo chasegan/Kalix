@@ -41,5 +41,5 @@ pip: "pip install kalix==0.4.10"
     - A take is limited to what the balance can be debited for, which is `balance / debit_factor`. A regulated user's order is limited and committed the same way, and `order_accounts` follow the same rule.
     - `[ras.*]` actions are not factored. They work in the units of the balance.
     - `acc.<name>.debit_factor` can be read in expressions and recorded in `[outputs]`.
-    - A model without the column runs as before.
+    - A model without the column gives the results it gave before.
 - `kalix simulate` now stops with an error and a non-zero exit code when the output file or the mass balance report cannot be written. Before, it printed the error, then `Done!`, and exited with 0.

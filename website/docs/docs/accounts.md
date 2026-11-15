@@ -23,8 +23,8 @@ you can reference and record individually.
 
 ## Accounts are pure state
 
-An account holds a name, a `size`, a running balance and, where one is
-declared, a [debit factor](#debit-factor). It holds nothing else.
+An account holds a name, a `size`, a running balance and a
+[debit factor](#debit-factor). It holds nothing else.
 It has **no behaviour and no calendar**: a row never resets, never refills, and
 never schedules anything. Every change to a balance is either a [`[ras.*]`
 action](ras.md) or a water user's take. A group that no RAS targets is
@@ -72,9 +72,9 @@ action  = set(0.9 * self.pair.balance)   # pool = 0.9 x smith's remaining balanc
 ## Debit factor
 
 In some schemes an account's balance is set from the water available at the
-source, and each megalitre a user diverts costs the account more than a
+source. Each megalitre a user diverts then costs the account more than a
 megalitre, to cover the loss in delivering it. The `debit_factor` column says
-how much more:
+how much more.
 
 ```ini
 [acc.entitlements]
@@ -83,43 +83,49 @@ accounts = name,  size, debit_factor,
            jones, 420,  1.05,
 ```
 
-A user node that diverts a volume from an account debits the account by this
-much:
+A user node that takes a volume from an account debits the account by the
+take times the factor.
 
 ```
 debit = debit_factor × take
 ```
 
 A take is limited to what can be debited without the balance going below
-zero. So the take an account covers is:
+zero. The take available from an account is its balance over the factor.
 
 ```
-take covered = balance / debit_factor
+available take = balance / debit_factor
 ```
 
-With a balance of 120 ML and a factor of 1.2, `smith` covers a take of 100 ML.
-That take debits 120 ML and leaves the account empty.
+With a balance of 120 ML and a factor of 1.2, the take available from `smith`
+is 100 ML. That take debits 120 ML and leaves the account empty.
 
-The factor applies to everything a user node does with the account:
+The factor applies to everything a user node does with the account.
 
-- **The diversion.** An [unregulated user](unregulated-user.md#accounts) and
-  a [regulated user](regulated-user.md#accounts) are both limited by the take
-  their accounts cover, and debited the take times the factor.
-- **The order.** A regulated user's order is limited by
-  `(balance − committed) / debit_factor`. The accepted order is committed as
-  the order times the factor, so `committed` stays in the units of the
-  balance.
-- **Order accounts.** An account in `order_accounts` authorises
-  `balance / debit_factor` of an order. When the order is placed it is debited
-  the part of the order it authorises, times the factor.
+An [unregulated user](unregulated-user.md#accounts) and a
+[regulated user](regulated-user.md#accounts) are both limited by the take
+available from their accounts. Each is debited the take times the factor.
+
+A regulated user's order is limited by the order available from the account.
+
+```
+available order = (balance − committed) / debit_factor
+```
+
+The accepted order is committed as the order times the factor. So `committed`
+stays in the units of the balance.
+
+An account in `order_accounts` authorises an order of `balance / debit_factor`.
+When the order is placed, the account is debited the part of the order it
+authorises, times the factor.
 
 In a list or a [combination](#combining-accounts) each account uses its own
-factor. In `a | b` the take covered is the sum of what each covers. In `a & b`
-it is the smaller of the two, and each side is debited the take times its own
-factor.
+factor. In `a | b` the take available is the sum of what is available from
+each. In `a & b` it is the smaller of the two, and each side is debited the
+take times its own factor.
 
 The factor applies to nothing else. A [`[ras.*]`](ras.md) action works in the
-units of the balance: `debit(5)` takes 5 ML from the balance whatever the
+units of the balance. `debit(5)` takes 5 ML from the balance, whatever the
 factor is.
 
 The `debits`, `use` and `committed` series are in the units of the balance.
@@ -127,7 +133,7 @@ They record what was debited and committed, not what was diverted. The
 diversion is the user node's `diversion` result.
 
 A factor of 1 is the same as no factor. A model whose factors are all 1 gives
-the results it gives without the column, and runs the same code.
+the results it gives without the column.
 
 The factor belongs to the account. Two users who draw on one account are
 debited at the same factor.
@@ -288,9 +294,11 @@ Note that this is the allocation *held*, which can differ from the percentage
 an `allocate` action announces (see [`ras.<name>.pct`](ras.md)) — `allocate`
 never reduces an account's allocation, and other actions can increase it.
 
+An account's `debit_factor` is fixed for the whole run, and reads the same
+way as `size` does below.
+
 `size` and `initial` are also group aggregates — the sum of member sizes and
-opening balances — but like their per-account counterparts above, and like an
-account's `debit_factor`, they're
+opening balances — but like their per-account counterparts above, they're
 fixed for the whole run rather than computed, so they read cleanly
 *everywhere*, from the very first line of the model, with no write-timing
 caveat and (like [`const.*`](constants.md)) no
