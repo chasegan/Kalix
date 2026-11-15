@@ -56,8 +56,8 @@ Chosen option: **1**.
    exact tree walk and no solver is needed.
 5. **The plain list keeps its own field and code.** A combination is a second
    representation chosen at load, and the phases are instantiated on a const
-   for it, so a model on the plain list runs the instructions it ran before,
-   plus one test per phase to choose. A node result for the combined
+   for it, so a model on the plain list avoids the tree's overheads: it walks
+   its list directly, and pays one test per phase to choose. A node result for the combined
    availability waits for a use case (Manifesto §2.7).
 
 Option 2 names something each node uses once. Option 3 moves policy out of
@@ -114,4 +114,10 @@ mixed without parentheses`.
 
 ## Amendments
 
-*None yet.*
+- *2026-11-15* — §5 reworded, with #520 (account debit factors). It said a
+  model on the plain list "runs the instructions it ran before". That was
+  written in haste and claimed more than was meant. The decision is that the
+  plain list avoids the tree's overheads, and §5 now says so. #520 adds a
+  division and a multiplication per account to every user's phases, the plain
+  list's among them. Its factor is a column on the account and not a value on
+  the line, so §3 stands.
