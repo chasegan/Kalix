@@ -129,8 +129,9 @@ impl CropSlot {
         self.ke_today = ke;
         self.few_today = few;
         self.kc_used = self.kcb_today + ke;
-        // FAO-56 Table 22's adjustment of p for the day's ETc (Crop::p_for, unrolled onto
-        // the slot's own precomputed numbers for the hot path)
+        // FAO-56 Table 22's adjustment of p for the day's ETc, footnote 2: p + 0.04 (5 − ETc)
+        // within 0.1 to 0.8, or within p's own bound when p is written outside that range. On
+        // the slot's precomputed numbers for the hot path
         self.p_today = (self.p_base - 0.04 * self.kc_used * evap_mm).clamp(self.p_lo, self.p_hi);
         self.ks = stress(&self.partition, self.p_today);
         self.opened = true;
