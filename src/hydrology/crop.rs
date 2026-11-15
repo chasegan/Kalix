@@ -64,10 +64,6 @@ pub struct Crop {
     /// Depletion fraction: stress begins beyond p of the bucket. FAO-56 Table 22's
     /// values are for a crop using about 5 mm/day
     pub p: f64,
-    /// Adjust p for the day's evapotranspiration, as FAO-56 Table 22's footnote
-    /// says to and pyfao56 does: p + 0.04 (5 − ETc), within 0.1 to 0.8. False
-    /// uses p as written, as Source Irrigator does.
-    pub p_adjust: bool,
     /// The basal coefficient Kcb (FAO-56 Chapter 7, Table 17): the crop
     /// transpires by it; the soil surface evaporates by Ke from the field's
     /// evaporation layer
@@ -85,12 +81,8 @@ impl Crop {
     /// is `etc_mm`: the tabled p adjusted by 0.04 per mm either side of 5 mm/day,
     /// held between 0.1 and 0.8 (FAO-56 Table 22, footnote 2). A p written
     /// outside that range is its own bound, so a modeller's extreme p stands.
-    /// With p_adjust false, p as written.
     #[inline]
     pub fn p_for(&self, etc_mm: f64) -> f64 {
-        if !self.p_adjust {
-            return self.p;
-        }
         (self.p + 0.2 - 0.04 * etc_mm).clamp(self.p.min(0.1), self.p.max(0.8))
     }
 

@@ -51,13 +51,12 @@ pub struct CropSlot {
     opened: bool,                         // today's opening state (days, root depth, kc, p, ks) has been settled and recorded by planting
     kc_multiplier_read: f64,              // what the multiplier gave today; 1 when none is written; NaN when the crop does not stand
     kc_used: f64,                         // the coefficient used for today's ET: the curve times the multiplier; NaN when the crop does not stand
-    p_today: f64,                         // the depletion fraction used today, adjusted for the day's ETc unless the crop says not; NaN when the crop does not stand
+    p_today: f64,                         // the depletion fraction used today, adjusted for the day's ETc; NaN when the crop does not stand
     kcb_today: f64,                       // the basal coefficient the stress applies to: the curve times the multiplier
     ke_today: f64,                        // the soil evaporation coefficient; NaN when the crop does not stand
     few_today: f64,                       // the exposed and wetted share of the ground, which the evaporation layer's balance is over
     grows: bool,                          // the crop's: it has an initial_root_depth, so the roots grow each day
-    p_adjust: bool,                       // the crop's p_adjust, and its adjustment precomputed: p_base − 0.04 × ETc within p_lo..p_hi
-    p_base: f64,
+    p_base: f64,                          // the crop's p adjustment precomputed: p_base − 0.04 × ETc within p_lo..p_hi
     p_lo: f64,
     p_hi: f64,
 
@@ -69,7 +68,6 @@ impl CropSlot {
     pub fn new(crop: Crop) -> Self {
         Self {
             grows: crop.initial_root_depth.is_some(),
-            p_adjust: crop.p_adjust,
             p_base: crop.p + 0.2,
             p_lo: crop.p.min(0.1),
             p_hi: crop.p.max(0.8),
@@ -133,7 +131,7 @@ impl CropSlot {
         self.kc_used = self.kcb_today + ke;
         // FAO-56 Table 22's adjustment of p for the day's ETc (Crop::p_for, unrolled onto
         // the slot's own precomputed numbers for the hot path)
-        self.p_today = if self.p_adjust { (self.p_base - 0.04 * self.kc_used * evap_mm).clamp(self.p_lo, self.p_hi) } else { self.crop.p };
+        self.p_today = (self.p_base - 0.04 * self.kc_used * evap_mm).clamp(self.p_lo, self.p_hi);
         self.ks = stress(&self.partition, self.p_today);
         self.opened = true;
         let values = [(9, multiplier), (10, self.kc_used), (12, self.p_today), (3, self.ks), (13, self.ke_today)];
@@ -312,7 +310,7 @@ pub struct FieldNode {
     evap_today: f64,                // today's reference evapotranspiration, read when planting runs
     evap_layer: EvapLayer,          // tew, rew, kc_max and wetted_fraction together
     fallow_kc: f64,                 // the fallow's basal coefficient, a number (0 for bare soil)
-    fallow_p: (bool, f64, f64, f64), // the fallow's p adjustment: on, p_base, p_lo, p_hi; off: p in p_base
+    fallow_p: (f64, f64, f64),      // the fallow's p adjustment precomputed: p_base, p_lo, p_hi
     cn_dry: f64,                    // the dry and wet curves (CN1, CN3) derived from curve_number
     cn_wet: f64,
     usflow: f64,
@@ -608,7 +606,7 @@ impl Node for FieldNode {
         }
         self.evap_layer = EvapLayer { tew, rew, kc_max: self.kc_max, fw: self.wetted_fraction };
         self.fallow_kc = fallow.kcb.at(0.0);
-        self.fallow_p = if fallow.p_adjust { (true, fallow.p + 0.2, fallow.p.min(0.1), fallow.p.max(0.8)) } else { (false, fallow.p, 0.0, 0.0) };
+        self.fallow_p = (fallow.p + 0.2, fallow.p.min(0.1), fallow.p.max(0.8));
         // The fallow is never planted, so days since planting mean nothing to it
         if matches!(fallow.kcb, crate::hydrology::crop::KcCurve::ByDay(_)) {
             return Err(format!("Error in node '{}'. The fallow's kcb must be a number, not a table by days since planting: a fallow is never planted (crop '{}').", self.name, fallow.name));
@@ -785,8 +783,8 @@ impl Node for FieldNode {
             let runoff_mm = curve.map_or(0.0, |(dry, wet)| curve_number_runoff(dry, wet, &layer, &self.fallow_partition, rain_mm));
             let intercepted_mm = (rain_mm - runoff_mm).min(self.interception * evap_mm);
             let effective_rain_mm = rain_mm - runoff_mm - intercepted_mm;
-            let (adjust, p_base, p_lo, p_hi) = self.fallow_p;
-            let p = if adjust { (p_base - 0.04 * (kcb + ke) * evap_mm).clamp(p_lo, p_hi) } else { p_base };
+            let (p_base, p_lo, p_hi) = self.fallow_p;
+            let p = (p_base - 0.04 * (kcb + ke) * evap_mm).clamp(p_lo, p_hi);
             let (_, et_mm, excess_mm) = soil_day(&self.profile, &mut self.fallow_partition, p, kcb, ke, evap_mm, effective_rain_mm);
             layer.day(&mut self.fallow_partition, ke * evap_mm, few, effective_rain_mm);
             intercepted_ml += intercepted_mm * self.fallow_partition.area;
