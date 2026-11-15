@@ -190,7 +190,13 @@ class CsvGzDataViewTest {
     void extensionTestCoversBothFormats() {
         assertEquals(".csv.gz", CompressedCsvFormat.extensionOf("FLOWS.CSV.GZ"));
         assertEquals(".csv.zip", CompressedCsvFormat.extensionOf("flows.csv.zip"));
-        assertTrue(CompressedCsvFormat.isCompressedCsv("results.res.csv.gz"));
+        assertFalse(CompressedCsvFormat.isCompressedCsv("results.res.csv.gz"),
+            "a compressed Source result is not a compressed CSV");
+        assertTrue(CompressedCsvFormat.isCompressedSourceResult("results.res.csv.gz"));
+        assertTrue(CompressedCsvFormat.isCompressedSourceResult("RESULTS.RES.CSV.ZIP"));
+        assertFalse(CompressedCsvFormat.isCompressedSourceResult("results.res.csv"));
+        assertFalse(CompressedCsvFormat.isCompressedSourceResult("flows.csv.gz"));
+        assertFalse(CompressedCsvFormat.isCompressedSourceResult(null));
         assertFalse(CompressedCsvFormat.isCompressedCsv("flows.csv"));
         assertFalse(CompressedCsvFormat.isCompressedCsv("archive.tar.gz"));
         assertFalse(CompressedCsvFormat.isCompressedCsv(null));

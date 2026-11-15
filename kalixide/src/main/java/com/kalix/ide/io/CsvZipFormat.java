@@ -40,9 +40,9 @@ public final class CsvZipFormat {
     private CsvZipFormat() {
     }
 
-    /** Whether the file name (or path) names a zip-compressed CSV. */
+    /** Whether the file name (or path) names a zip-compressed CSV; a {@code .res.csv.zip} does not. */
     public static boolean isCsvZip(String fileName) {
-        return fileName != null && fileName.toLowerCase(Locale.ROOT).endsWith(EXTENSION);
+        return CompressedCsvFormat.compressionOf(fileName) == CompressedCsvFormat.Compression.ZIP;
     }
 
     /**

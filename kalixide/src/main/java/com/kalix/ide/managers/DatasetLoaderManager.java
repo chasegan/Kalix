@@ -224,7 +224,12 @@ public class DatasetLoaderManager {
 
         // ".res.csv" must be tested before ".csv" — the latter would otherwise swallow it.
         // (Compressed CSV collides with neither; the importer decompresses it by name.)
-        if (SourceResCsvFormat.isResCsv(fileName)) {
+        if (CompressedCsvFormat.isCompressedSourceResult(fileName)) {
+            logger.warn("{}: {}", fileName, CompressedCsvFormat.COMPRESSED_SOURCE_RESULT_NOT_SUPPORTED);
+            if (statusUpdater != null) {
+                statusUpdater.accept(file.getName() + ": " + CompressedCsvFormat.COMPRESSED_SOURCE_RESULT_NOT_SUPPORTED);
+            }
+        } else if (SourceResCsvFormat.isResCsv(fileName)) {
             loadResCsvDataset(file);
         } else if (CompressedCsvFormat.isCsvOrCompressedCsv(fileName)) {
             loadCsvDataset(file);

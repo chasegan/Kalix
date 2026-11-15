@@ -141,6 +141,13 @@ public class FileOperationsManager {
             return;
         }
 
+        if (CompressedCsvFormat.isCompressedSourceResult(file.getName())) {
+            DialogUtils.showError(parentComponent,
+                CompressedCsvFormat.COMPRESSED_SOURCE_RESULT_NOT_SUPPORTED, AppConstants.ERROR_FILE_OPEN);
+            statusUpdateCallback.accept(AppConstants.ERROR_FAILED_TO_OPEN + file.getName());
+            return;
+        }
+
         // A large data file never enters an editor buffer — the tab's virtual views
         // read it directly (docs/data-file-viewer.md). Everything else loads as text.
         KalixDocument document;

@@ -53,6 +53,9 @@ public final class SeriesFileWriter {
             throw new IllegalArgumentException(
                 "Source result CSV (.res.csv) can't be written here. Save as .csv, .csv.zip, .csv.gz or .pxt.");
         }
+        if (CompressedCsvFormat.isCompressedSourceResult(name)) {
+            throw new IllegalArgumentException(CompressedCsvFormat.COMPRESSED_SOURCE_RESULT_NOT_SUPPORTED);
+        }
         if (!CompressedCsvFormat.isCsvOrCompressedCsv(name)) {
             file = new File(file.getAbsolutePath() + ".csv");
         }

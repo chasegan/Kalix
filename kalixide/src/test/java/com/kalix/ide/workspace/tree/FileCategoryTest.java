@@ -28,6 +28,9 @@ class FileCategoryTest {
         assertEquals(FileCategory.DATA, FileCategory.ofName("rain.csv.gz"));
         assertEquals(FileCategory.SOURCE_RESULT, FileCategory.ofName("results.res.csv"));
         assertEquals(FileCategory.SOURCE_RESULT, FileCategory.ofName("RESULTS.RES.CSV"));
+        // A compressed Source result is neither data nor a Source result: nothing reads one.
+        assertEquals(FileCategory.OTHER, FileCategory.ofName("results.res.csv.zip"));
+        assertEquals(FileCategory.OTHER, FileCategory.ofName("results.res.csv.gz"));
         assertEquals(FileCategory.DATA, FileCategory.ofName("series.pxt"));
         assertEquals(FileCategory.DATA, FileCategory.ofName("series.PXB"));
         assertEquals(FileCategory.OTHER, FileCategory.ofName("notes.md"));

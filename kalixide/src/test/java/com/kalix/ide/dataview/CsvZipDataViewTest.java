@@ -133,9 +133,9 @@ class CsvZipDataViewTest {
     void extensionTestCoversTheDoubleExtensionFamily() {
         assertTrue(CsvZipFormat.isCsvZip("flows.csv.zip"));
         assertTrue(CsvZipFormat.isCsvZip("FLOWS.CSV.ZIP"));
-        // A .res.csv.zip matches by suffix and opens as a plain zip CSV view —
-        // no special Source-result support (out of scope by decision).
-        assertTrue(CsvZipFormat.isCsvZip("results.res.csv.zip"));
+        // A .res.csv.zip is not read as a zip CSV: compressed Source results
+        // are refused by name, as the engine refuses them.
+        assertFalse(CsvZipFormat.isCsvZip("results.res.csv.zip"));
         assertFalse(CsvZipFormat.isCsvZip("flows.csv"));
         assertFalse(CsvZipFormat.isCsvZip("archive.zip"),
             "a plain zip is an archive, not a dataset");

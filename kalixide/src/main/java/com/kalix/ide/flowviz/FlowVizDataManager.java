@@ -166,7 +166,10 @@ public class FlowVizDataManager {
         String fileName = file.getName().toLowerCase();
         // ".res.csv" must be tested before ".csv" — the latter would otherwise swallow it.
         // (Compressed CSV collides with neither; the importer decompresses it by name.)
-        if (SourceResCsvFormat.isResCsv(fileName)) {
+        if (CompressedCsvFormat.isCompressedSourceResult(fileName)) {
+            DialogUtils.showError(parentFrame,
+                file.getName() + ": " + CompressedCsvFormat.COMPRESSED_SOURCE_RESULT_NOT_SUPPORTED, "Load Error");
+        } else if (SourceResCsvFormat.isResCsv(fileName)) {
             loadResCsvFile(file);
         } else if (CompressedCsvFormat.isCsvOrCompressedCsv(fileName)) {
             loadCsvFile(file);

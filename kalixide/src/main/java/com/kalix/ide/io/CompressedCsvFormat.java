@@ -79,8 +79,30 @@ public final class CompressedCsvFormat {
         }
     }
 
-    /** The wrapper {@code fileName} (or a path) names; {@link Compression#NONE} for anything else. */
+    /** Shown wherever a compressed Source result is refused. */
+    public static final String COMPRESSED_SOURCE_RESULT_NOT_SUPPORTED =
+        "Compressed Source result files (.res.csv.zip, .res.csv.gz) are not supported."
+            + " Unzip or gunzip the file, then use the .res.csv.";
+
+    /**
+     * The wrapper {@code fileName} (or a path) names; {@link Compression#NONE} for anything else.
+     * A compressed Source result ({@code .res.csv.zip}, {@code .res.csv.gz}) is not a compressed
+     * CSV: nothing reads one, so it is {@link Compression#NONE} here and is refused by name
+     * (see {@link #isCompressedSourceResult}).
+     */
     public static Compression compressionOf(String fileName) {
+        Compression wrapper = wrapperOf(fileName);
+        return wrapper != Compression.NONE && wrapsSourceResult(fileName, wrapper) ? Compression.NONE : wrapper;
+    }
+
+    /** Whether the name is a Source result inside a zip or gzip wrapper, which Kalix does not read. */
+    public static boolean isCompressedSourceResult(String fileName) {
+        Compression wrapper = wrapperOf(fileName);
+        return wrapper != Compression.NONE && wrapsSourceResult(fileName, wrapper);
+    }
+
+    /** The wrapper the name's suffix alone implies, whatever sits inside it. */
+    private static Compression wrapperOf(String fileName) {
         if (fileName == null) {
             return Compression.NONE;
         }
@@ -91,6 +113,12 @@ public final class CompressedCsvFormat {
             }
         }
         return Compression.NONE;
+    }
+
+    /** Whether the name minus the wrapper's own suffix ({@code .zip}, {@code .gz}) is a {@code .res.csv}. */
+    private static boolean wrapsSourceResult(String fileName, Compression wrapper) {
+        int wrapperSuffix = wrapper.extension().length() - ".csv".length();
+        return SourceResCsvFormat.isResCsv(fileName.substring(0, fileName.length() - wrapperSuffix));
     }
 
     /** Whether the file name (or path) names a compressed CSV. */
