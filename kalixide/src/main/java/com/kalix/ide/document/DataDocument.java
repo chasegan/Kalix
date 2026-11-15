@@ -9,6 +9,7 @@ import com.kalix.ide.dataview.VirtualLineNumberGutter;
 import com.kalix.ide.dataview.VirtualTextArea;
 import com.kalix.ide.editor.KalixCsvTokenMaker;
 import com.kalix.ide.io.CompressedCsvFormat;
+import com.kalix.ide.io.FileErrors;
 import com.kalix.ide.preferences.PreferenceKeys;
 
 import org.slf4j.Logger;
@@ -21,6 +22,7 @@ import javax.swing.text.BadLocationException;
 import java.awt.Component;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.FileSystemException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -285,10 +287,13 @@ public class DataDocument extends KalixDocument {
     /** One refresh: resume in place if the file purely grew, else rebuild and swap. Worker thread. */
     private void refreshOnce() {
         DataViewSession current = dataViewSession;
-        if (current != null && current.tryResumeAppend()) {
-            return; // pure growth (or already tailing): views extend in place
-        }
         File target = getFile(); // Save As may have re-pointed the document; read the new bytes
+        if (current != null && current.tryResumeAppend()) {
+            // Pure growth (or already tailing): views extend in place. The views
+            // are current again, so a banner left by an earlier failed refresh goes.
+            SwingUtilities.invokeLater(() -> setBannerText(readOnlyBannerText(target)));
+            return;
+        }
         try {
             DataViewSession fresh = DataViewOpener.openFor(target);
             SwingUtilities.invokeLater(() -> setBannerText(readOnlyBannerText(target)));
@@ -323,7 +328,8 @@ public class DataDocument extends KalixDocument {
             // short). The old session stays, and as above it must not pass for
             // current. The next refresh that succeeds restores the banner.
             logger.warn("Data view refresh failed for {}: {}", target, e.getMessage());
-            String reason = e.getMessage() != null ? e.getMessage() : e.toString();
+            // A file-system exception's message is only the path: give its reason.
+            String reason = e instanceof FileSystemException fse ? FileErrors.reason(fse) : FileErrors.describe(e);
             SwingUtilities.invokeLater(() -> setBannerText(
                 "Read only — the file changed and can't be read (" + reason
                     + "); showing the PREVIOUS content"));

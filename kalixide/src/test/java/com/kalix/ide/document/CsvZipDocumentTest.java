@@ -120,6 +120,11 @@ class CsvZipDocumentTest {
             Files.write(file, gzip("Date,flow\n2020-01-01,1.5\n2020-01-02,2.5\n"));
             ((DataDocument) doc).refreshDataViewFromDisk();
             awaitBanner(primary, "Read only (.csv.gz");
+
+            // A file-system failure's own message is only the path: the banner gives the reason.
+            Files.delete(file);
+            ((DataDocument) doc).refreshDataViewFromDisk();
+            awaitBanner(primary, "can't be read (not found)");
         } finally {
             doc.dispose();
         }
