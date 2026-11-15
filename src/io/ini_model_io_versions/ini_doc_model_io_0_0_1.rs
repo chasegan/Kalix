@@ -2317,8 +2317,9 @@ fn parse_account_table(flat: &str, model: &mut Model) -> Result<AccountTableData
                     debit_factor = cell.parse::<f64>()
                         .map_err(|_| format!("Invalid debit factor '{}' for account '{}': must be a number",
                             cell, table_name))?;
-                    // A factor of zero would let the account cover any take, and a negative
-                    // one would credit it. NaN fails the comparison and is refused with them.
+                    // A factor of zero would make any take available from the account, and a
+                    // negative one would credit it. NaN fails the comparison and is refused
+                    // with them.
                     if !(debit_factor > 0.0 && debit_factor.is_finite()) {
                         return Err(format!("Account '{}' has debit factor {}: it must be a finite number greater than 0",
                             table_name, cell));
@@ -2565,7 +2566,7 @@ fn format_account_group_table(manager: &crate::hydrology::accounts::account_mana
                 out.push_str(&format!("{}, ", pair_name));
             }
             if has_debit_factor {
-                // The shortest text that reads back as the same number, not format_f64, which
+                // The fewest digits that read back as the same number, not format_f64, which
                 // keeps ten decimal places. A factor is often a long reciprocal (1 / 0.95), and
                 // it multiplies every take, so a rounded one changes the results.
                 out.push_str(&format!("{}, ", account.debit_factor));

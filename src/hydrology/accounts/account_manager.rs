@@ -460,7 +460,7 @@ impl AccountManager {
     /// What is still uncommitted in an account, in the balance's own units:
     /// the balance less the orders already en route, floored at zero (a RAS
     /// cut can leave the committed orders above the balance until they fall
-    /// due). Read by tests; the nodes read the order this covers
+    /// due). Read by tests; the nodes read the order available from it
     /// (get_account_available_order).
     pub fn get_account_uncommitted_balance(&self, account_id: usize) -> f64 {
         let account = &self.accounts[account_id];

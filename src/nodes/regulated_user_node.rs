@@ -389,8 +389,9 @@ impl RegulatedUserNode {
         // user's own order takes what is left - the same order of service as at flow time.
         //
         // All of this is in the units of the order. The order available from an account
-        // is its uncommitted balance over its debit factor, and is committed, or an order account debited,
-        // the order times its factor. With a factor of 1 the two units are the same (#520).
+        // is its uncommitted balance over its debit factor. The account is committed, or an
+        // order account debited, the order times its factor. With a factor of 1 the two
+        // units are the same (#520).
         //
         // A combination (`COMBINED`) does the same through the tree: `|` sums what each side
         // can cover and is committed left to right, `&` takes the least and is committed on

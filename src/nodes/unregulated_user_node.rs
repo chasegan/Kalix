@@ -321,11 +321,11 @@ impl UnregulatedUserNode {
             }
         }
 
-        // Restrict take based on accounts if applicable: the take available
-        // from an account is its balance over its debit factor (#520), and
-        // available volume is
-        // the sum across the ordered account list, or what the combination
-        // makes available (`|` sums, `&` takes the least; account_tree.rs)
+        // Restrict take based on accounts if applicable. The take available
+        // from an account is its balance over its debit factor (#520). The
+        // available volume is the sum across the ordered account list, or
+        // what the combination makes available (`|` sums, `&` takes the
+        // least; account_tree.rs)
         if COMBINED {
             available = available.min(self.account_tree.available_take(_account_manager));
         } else if !self.account_idxs.is_empty() {
