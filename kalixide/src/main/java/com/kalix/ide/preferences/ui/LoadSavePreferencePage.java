@@ -24,7 +24,7 @@ public class LoadSavePreferencePage extends AbstractPreferencePage {
     private JCheckBox promptSaveOnExitCheckBox;
     private JSpinner largeFileGateSpinner;
     private JSpinner plotMaxRowsSpinner;
-    private JSpinner zipMemoryLimitSpinner;
+    private JSpinner compressedCsvLimitSpinner;
 
     /**
      * @param onAutoReloadChanged notified with the new value after the auto-reload
@@ -122,19 +122,19 @@ public class LoadSavePreferencePage extends AbstractPreferencePage {
         // decompresses.
         gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 1;
         gbc.weightx = 0; gbc.fill = GridBagConstraints.NONE;
-        JLabel zipLimitLabel = new JLabel("Open compressed CSV up to (decompressed MB):");
-        zipLimitLabel.setToolTipText("Compressed CSV files (.csv.zip, .csv.gz) open read-only, decompressed into "
+        JLabel compressedCsvLimitLabel = new JLabel("Open compressed CSV up to (decompressed MB):");
+        compressedCsvLimitLabel.setToolTipText("Compressed CSV files (.csv.zip, .csv.gz) open read-only, decompressed into "
             + "memory. Files whose decompressed size exceeds this limit are refused with the reason "
             + "shown in the tab.");
-        formPanel.add(zipLimitLabel, gbc);
+        formPanel.add(compressedCsvLimitLabel, gbc);
 
         gbc.gridx = 1; gbc.gridy = 4;
-        zipMemoryLimitSpinner = new JSpinner(new SpinnerNumberModel(
-            (int) PreferenceKeys.DATAVIEW_ZIP_MEMORY_LIMIT_MB.get(), 16, 2000, 128));
-        zipMemoryLimitSpinner.setToolTipText(zipLimitLabel.getToolTipText());
-        zipMemoryLimitSpinner.addChangeListener(e ->
-            PreferenceKeys.DATAVIEW_ZIP_MEMORY_LIMIT_MB.set((Integer) zipMemoryLimitSpinner.getValue()));
-        formPanel.add(zipMemoryLimitSpinner, gbc);
+        compressedCsvLimitSpinner = new JSpinner(new SpinnerNumberModel(
+            (int) PreferenceKeys.DATAVIEW_COMPRESSED_CSV_MEMORY_LIMIT_MB.get(), 16, 2000, 128));
+        compressedCsvLimitSpinner.setToolTipText(compressedCsvLimitLabel.getToolTipText());
+        compressedCsvLimitSpinner.addChangeListener(e ->
+            PreferenceKeys.DATAVIEW_COMPRESSED_CSV_MEMORY_LIMIT_MB.set((Integer) compressedCsvLimitSpinner.getValue()));
+        formPanel.add(compressedCsvLimitSpinner, gbc);
 
         add(formPanel, BorderLayout.NORTH);
     }

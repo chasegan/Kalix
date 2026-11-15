@@ -653,7 +653,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             // Bounded by the same in-memory limit the data viewer honours.
             if (CompressedCsvFormat.isCompressedCsv(file.getName())) {
                 long limit = com.kalix.ide.preferences.PreferenceKeys
-                    .DATAVIEW_ZIP_MEMORY_LIMIT_MB.get() * 1024L * 1024L;
+                    .DATAVIEW_COMPRESSED_CSV_MEMORY_LIMIT_MB.get() * 1024L * 1024L;
                 return new String(CompressedCsvFormat.decompressBounded(file, limit),
                     java.nio.charset.StandardCharsets.UTF_8);
             }

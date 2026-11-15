@@ -165,7 +165,7 @@ public final class PreferenceKeys {
      * never trusted). Over the bound the tab refuses honestly with the
      * reason, never a dialog.
      */
-    public static final Pref<Integer> DATAVIEW_ZIP_MEMORY_LIMIT_MB =
+    public static final Pref<Integer> DATAVIEW_COMPRESSED_CSV_MEMORY_LIMIT_MB =
         Pref.fileInt("dataview.zipMemoryLimitMb", 1024);
 
     /** External editor command template. */

@@ -48,7 +48,7 @@ public final class DataViewOpener {
      * whole-file text read there, so everything here must stay bounded and cheap.
      */
     public static DataViewSession openFor(File file) throws IOException {
-        return openFor(file, PreferenceKeys.DATAVIEW_ZIP_MEMORY_LIMIT_MB.get() * 1024L * 1024L);
+        return openFor(file, PreferenceKeys.DATAVIEW_COMPRESSED_CSV_MEMORY_LIMIT_MB.get() * 1024L * 1024L);
     }
 
     /**
