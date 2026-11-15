@@ -72,7 +72,7 @@ digits and underscores, starting with a letter.
 | --- | --- |
 | root\_depth (compulsory) | How deep the crop roots when fully grown [mm]. Its bucket holds `available_water × root_depth / 1000` mm of water between full and empty. Example: `root_depth = 900` |
 | initial\_root\_depth (optional) | How deep the roots are at planting [mm]. They grow to `root_depth` as the crop's `kcb` rises from its first value to its peak, in step with it, as FAO-56 and pyfao56 grow them; the soil they grow into joins the bucket with the water it holds. Needs a `kcb` table that rises. Omitted, the roots are at `root_depth` from the day of planting, as Source's Irrigator has them. Example: `initial_root_depth = 200` |
-| p (optional) | The depletion fraction: the share of the bucket the crop can use before stress begins, for a crop using about 5 mm/day (FAO-56 Table 22). The node adjusts it each day for the crop's evapotranspiration, as the table's footnote says to; see step 2 of [How the node works](#how-the-node-works). Default 0.5. Example: `p = 0.65` |
+| p (optional) | The depletion fraction: the share of the bucket the crop can use before stress begins, for a crop using about 5 mm/day (FAO-56 Table 22). The node adjusts it each day for the crop's evapotranspiration, as the table's footnote says to. Step 2 of [How the node works](#how-the-node-works) gives the rule. Default 0.5. Example: `p = 0.65` |
 | kcb (compulsory) | The basal crop coefficient (FAO-56 Table 17): the crop's transpiration alone, as a number or a table of (days since planting, kcb) with the FAO-56 curve as its rows, interpolated between rows and held flat beyond the first and last. A text header row is allowed. The soil surface evaporates separately, from the field's evaporation layer (`tew`, `rew`), by a coefficient `ke` the node works out each day from how wet the surface is and how much ground the canopy leaves bare; see [The basal coefficient](#the-basal-coefficient). A single coefficient `kc` is refused: see [Coming from a single coefficient](#coming-from-a-single-coefficient). Example: `kcb = 0, 0.15, 80, 1.10, 140, 1.10, 180, 0.40` |
 | season\_len (optional) | Days from planting to harvest. Omitted, the crop is a perennial and is never harvested. Example: `season_len = 180` |
 
@@ -304,9 +304,16 @@ The node runs these steps in this order.
    soil dries beyond that (FAO-56 equation 84).
 
    FAO-56 Table 22 tables `p` for a crop using 5 mm a day and adjusts it for the day's
-   unstressed evapotranspiration, `ETc = (kcb × kc_multiplier + ke) × evap`. `p` rises by 0.04
-   for every mm `ETc` is below 5 and falls by 0.04 for every mm above, within 0.1 to 0.8. A `p`
-   written outside that range is its own bound.
+   unstressed evapotranspiration:
+
+   ```
+   ETc = (kcb × kc_multiplier + ke) × evap
+   p   = clamp(p_table + 0.04 × (5 − ETc), min(p_table, 0.1), max(p_table, 0.8))
+   ```
+
+   `p_table` is the crop's `p` as written. It rises by 0.04 for every mm `ETc` is below 5 and
+   falls by 0.04 for every mm above, within 0.1 to 0.8. A `p` written above 0.8 is that crop's
+   ceiling, and the adjustment can only lower it; a `p` written below 0.1 is its floor.
 
    For a crop this step runs when planting runs, together with its coefficient, so
    `crop_N_ks`, `crop_N_kc` and `crop_N_p` are there for the day's rules.
