@@ -542,3 +542,20 @@ fn test_compressed_source_results_are_refused_by_name_on_read_and_write() {
         assert!(!std::path::Path::new(path).exists(), "nothing is written");
     }
 }
+
+#[test]
+fn test_an_unknown_extension_is_read_and_written_as_csv() {
+    // ADR-0021 §2: a name the engine does not recognise is plain CSV, so a
+    // modeller may name inputs rain.001, rain.002 and so on.
+    let path = env::temp_dir().join(format!("kalix_{}_rain.001", process::id()));
+    let path = path.to_str().unwrap();
+    fs::write(path, "Date,rain\n2020-01-01,1.5\n2020-01-02,2.5\n").unwrap();
+    let series = read_ts(path).expect("an unknown extension reads as CSV");
+    assert_eq!(series[0].values, vec![1.5, 2.5]);
+
+    let refs: Vec<&Timeseries> = series.iter().collect();
+    write_ts(path, refs).expect("and writes as CSV");
+    let written = fs::read_to_string(path).unwrap();
+    fs::remove_file(path).unwrap();
+    assert!(written.contains("2020-01-01,1.5"), "{written}");
+}
