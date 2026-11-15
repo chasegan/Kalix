@@ -788,10 +788,13 @@ class TreeFileOperations {
      */
     void gunzipFile(File file) {
         File target = GzipFile.decompressedTarget(file);
-        if (target.isFile() && !confirmOverwrite(List.of(target.getName()), "Gunzip")) {
+        // Replace only what the user was asked about: a file that appears after this check
+        // makes the write fail with "already exists" rather than vanish.
+        boolean replace = target.isFile();
+        if (replace && !confirmOverwrite(List.of(target.getName()), "Gunzip")) {
             return;
         }
-        offEdt(() -> GzipFile.decompress(file, target), error -> {
+        offEdt(() -> GzipFile.decompress(file, target, replace), error -> {
             if (error != null) {
                 JOptionPane.showMessageDialog(parent, error, "Gunzip", JOptionPane.WARNING_MESSAGE);
             }

@@ -44,7 +44,7 @@ class GzipFileTest {
         Files.delete(src.toPath());
         File back = GzipFile.decompressedTarget(gz);
         assertEquals(src, back);
-        GzipFile.decompress(gz, back);
+        GzipFile.decompress(gz, back, false);
         assertArrayEquals(CSV.getBytes(StandardCharsets.UTF_8), Files.readAllBytes(back.toPath()));
     }
 
@@ -97,7 +97,7 @@ class GzipFileTest {
     void failedDecompressKeepsTheFileItWouldReplace() throws IOException {
         Path bogus = Files.writeString(tempDir.resolve("flows.csv.gz"), "not gzip");
         Path existing = Files.writeString(tempDir.resolve("flows.csv"), "keep me");
-        assertThrows(IOException.class, () -> GzipFile.decompress(bogus.toFile(), existing.toFile()));
+        assertThrows(IOException.class, () -> GzipFile.decompress(bogus.toFile(), existing.toFile(), true));
         assertEquals("keep me", Files.readString(existing));
         try (var files = Files.list(tempDir)) {
             assertEquals(2, files.count(), "no temporary file left behind");
@@ -122,7 +122,7 @@ class GzipFileTest {
         File target = tempDir.resolve("flows.gz").toFile();
         Files.copy(gz.toPath(), target.toPath());
 
-        IOException e = assertThrows(IOException.class, () -> GzipFile.decompress(target, folder.toFile()));
+        IOException e = assertThrows(IOException.class, () -> GzipFile.decompress(target, folder.toFile(), true));
         assertTrue(FileErrors.describe(e).contains("folder"), FileErrors.describe(e));
         assertEquals("keep me", Files.readString(folder.resolve("inside.txt")));
     }
@@ -161,8 +161,20 @@ class GzipFileTest {
         File gz = GzipFile.compressedTarget(src);
         GzipFile.compress(src, gz);
         Files.writeString(src.toPath(), "old");
-        GzipFile.decompress(gz, src);
+        GzipFile.decompress(gz, src, true);
         assertEquals(CSV, Files.readString(src.toPath()));
+    }
+
+    @Test
+    void decompressRefusesAnExistingFileItWasNotToldToReplace() throws IOException {
+        File src = csv("flows.csv");
+        File gz = GzipFile.compressedTarget(src);
+        GzipFile.compress(src, gz);
+        Files.writeString(src.toPath(), "old");
+        IOException e = assertThrows(IOException.class, () -> GzipFile.decompress(gz, src, false));
+        assertTrue(FileErrors.describe(e).contains("already exists"), FileErrors.describe(e));
+        assertEquals("old", Files.readString(src.toPath()), "the existing file is untouched");
+        assertFalse(Files.exists(StagedFile.stagingFor(src.toPath())), "no staging file is left");
     }
 
     @Test

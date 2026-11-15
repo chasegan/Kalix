@@ -57,12 +57,15 @@ public final class GzipFile {
     }
 
     /**
-     * Gunzips {@code src} to {@code dst}, replacing an existing file at {@code dst} only once the
-     * whole stream has decompressed, so a corrupt archive never costs the file it would replace.
-     * A folder at {@code dst} is refused. Concatenated members are read as one stream, as gzip does.
+     * Gunzips {@code src} to {@code dst}. An existing file at {@code dst} is refused unless
+     * {@code replace} is set, which the caller sets only when the user agreed to overwrite it;
+     * a file that appears there unasked is therefore never lost. With {@code replace}, the
+     * existing file is swapped only once the whole stream has decompressed, so a corrupt
+     * archive never costs the file it would replace. A folder at {@code dst} is refused.
+     * Concatenated members are read as one stream, as gzip does.
      */
-    public static void decompress(File src, File dst) throws IOException {
-        StagedFile.write(dst.toPath(), true, out -> {
+    public static void decompress(File src, File dst, boolean replace) throws IOException {
+        StagedFile.write(dst.toPath(), replace, out -> {
             try (InputStream in = CompressedCsvFormat.gunzip(Files.newInputStream(src.toPath()))) {
                 in.transferTo(out);
             }
