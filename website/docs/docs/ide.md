@@ -249,7 +249,7 @@ Derived series appear under **Derived series** in the Run Manager's source tree,
 
 **A derived series lasts as long as its source.** Removing a run or a dataset removes its derived series too, as it does the run's other series. To keep a total past its source, save it first. Derived series also last only for the session.
 
-**Managing derived series.** Right-click a derived series in the source tree to **Copy inputs** (its inputs to the clipboard, one per line), or to **Save…**, **Rename…** or **Delete** it. Right-click a group to save or delete all of its derived series, or **Derived series** itself to delete every derived series. Derived series save as CSV, zipped CSV or Pixie, one column per derived series.
+**Managing derived series.** Right-click a derived series in the source tree to **Copy inputs** (its inputs to the clipboard, one per line), or to **Save…**, **Rename…** or **Delete** it. Right-click a group to save or delete all of its derived series, or **Derived series** itself to delete every derived series. Derived series save as CSV, compressed CSV (`.csv.zip` or `.csv.gz`) or Pixie, one column per derived series.
 
 ## Error log
 
