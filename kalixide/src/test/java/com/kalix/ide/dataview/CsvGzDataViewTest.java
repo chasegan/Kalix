@@ -20,7 +20,6 @@ import java.util.zip.GZIPOutputStream;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -72,6 +71,9 @@ class CsvGzDataViewTest {
         Path gz = gzFile("tail.csv.gz", "Date,flow\n2020-01-01,1.5\n");
         try (DataViewSession session = DataViewOpener.openFor(gz.toFile())) {
             await("indexing complete", session::isIndexingComplete);
+            assertArrayEquals(new String[] {"Date", "flow"}, session.columnNames(), "the decompressed header");
+            assertTrue(session.linesBlocking(0, session.lineCount()).contains("2020-01-01,1.5"),
+                "the decompressed row is served");
             assertFalse(session.tryResumeAppend(), "no growth to resume: caller must rebuild");
         }
     }
@@ -171,12 +173,12 @@ class CsvGzDataViewTest {
         Path empty = Files.write(tempDir.resolve("empty.csv.gz"), new byte[0]);
         IOException e = assertThrows(IOException.class,
             () -> CompressedCsvFormat.decompressBounded(empty.toFile(), 1024));
-        assertNotNull(e.getMessage(), "empty file");
+        assertTrue(String.valueOf(e.getMessage()).contains("empty or cut short"), "empty file: " + e.getMessage());
 
         byte[] whole = gzip("Date,q\n2020-01-01,1.0\n");
         Path cut = Files.write(tempDir.resolve("cut.csv.gz"), Arrays.copyOf(whole, whole.length - 4));
         e = assertThrows(IOException.class, () -> CompressedCsvFormat.decompressBounded(cut.toFile(), 1024));
-        assertNotNull(e.getMessage(), "trailer cut short");
+        assertTrue(String.valueOf(e.getMessage()).contains("cut short"), "trailer cut short: " + e.getMessage());
     }
 
     @Test

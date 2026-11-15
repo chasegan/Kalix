@@ -473,12 +473,15 @@ fn test_read_ts_refuses_truncated_gzip() {
         body.push_str(&format!("2020-02-{day:02},{day}.0\n"));
     }
     let bytes = gzip_bytes(body.as_bytes());
-    for cut in [8, 12] {
+    // The message is pinned so the refusal is known to come from the gzip
+    // layer, not from a CSV row that happened to be malformed.
+    for (cut, reason) in [(8, "unexpected end of file"), (12, "incomplete deflate stream")] {
         let path = gz_scratch(&format!("truncated_{cut}.csv.gz"));
         fs::write(&path, &bytes[..bytes.len() - cut]).unwrap();
         let result = read_ts(&path);
         fs::remove_file(&path).ok();
-        assert!(result.is_err(), "gzip cut by {cut} bytes must not read as data");
+        let err = result.err().unwrap_or_else(|| panic!("gzip cut by {cut} bytes must not read as data"));
+        assert!(format!("{err}").contains(reason), "cut {cut}: {err}");
     }
 }
 
@@ -496,7 +499,8 @@ fn test_read_ts_refuses_trailing_garbage_after_gzip() {
         fs::write(&path, bytes).unwrap();
         let result = read_ts(&path);
         fs::remove_file(&path).ok();
-        assert!(result.is_err(), "{name}: bytes after the last member must not be ignored");
+        let err = result.err().unwrap_or_else(|| panic!("{name}: bytes after the last member must not be ignored"));
+        assert!(format!("{err}").contains("invalid gzip header"), "{name}: {err}");
     }
 }
 

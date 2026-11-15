@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -86,11 +87,30 @@ class GzipFileTest {
     }
 
     @Test
-    void failedCompressLeavesNoPartialFile() {
+    void failedCompressLeavesNoPartialFile() throws IOException {
         File missing = tempDir.resolve("missing.csv").toFile();
         File target = tempDir.resolve("missing.csv.gz").toFile();
         assertThrows(IOException.class, () -> GzipFile.compress(missing, target));
         assertFalse(target.exists());
+        try (var files = Files.list(tempDir)) {
+            assertEquals(0, files.count(), "no staging file left behind");
+        }
+    }
+
+    @Test
+    void aDecompressThatFailsPartWayKeepsTheFileItWouldReplace() throws IOException {
+        // Large enough that rows are written out before the cut is reached.
+        File src = Files.writeString(tempDir.resolve("big.csv"), CSV.repeat(50_000)).toFile();
+        File gz = GzipFile.compressedTarget(src);
+        GzipFile.compress(src, gz);
+        byte[] whole = Files.readAllBytes(gz.toPath());
+        Files.write(gz.toPath(), Arrays.copyOf(whole, whole.length / 2));
+        Files.writeString(src.toPath(), "keep me");
+        assertThrows(IOException.class, () -> GzipFile.decompress(gz, src, true));
+        assertEquals("keep me", Files.readString(src.toPath()));
+        try (var files = Files.list(tempDir)) {
+            assertEquals(2, files.count(), "no staging file left behind");
+        }
     }
 
     @Test
