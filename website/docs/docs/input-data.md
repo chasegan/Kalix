@@ -153,12 +153,18 @@ Rules for CSV files are as follows:
 
 ### Compressed CSV files (.csv.zip, .csv.gz)
 
-A compressed CSV is an ordinary CSV file (all the rules above apply) inside a compression wrapper. Kalix reads and writes both kinds as model input data, as simulation output (`kalix simulate -o results.csv.gz`), and in [`kalix convert`](cli.md#kalix-convert). In the IDE they open read-only (decompressed into memory, bounded by a preference). A compressed Source result file (`.res.csv.zip` or `.res.csv.gz`) is not supported. Unzip or gunzip it first.
+A compressed CSV is an ordinary CSV file that has been compressed. All the rules above apply to it. Kalix reads and writes two kinds, `.csv.zip` and `.csv.gz`. Both work as model input data, as simulation output (`kalix simulate -o results.csv.gz`), and in [`kalix convert`](cli.md#kalix-convert).
 
-- **`.csv.zip`** is a standard zip archive holding **exactly one file**. This is the convention pandas reads and writes natively (`df.to_csv("flows.csv.zip")`), and any zip tool or OS file manager can create or unpack one. An archive holding more than one file is refused, exactly as pandas refuses it.
-- **`.csv.gz`** is a gzip stream: what `gzip flows.csv` produces, and what pandas writes for `df.to_csv("flows.csv.gz")`. A file made of several gzip members joined end to end is read as one. A file that is cut short is refused. A file with other bytes after its gzip data is refused when a model runs. The IDE opens such a file and shows the rows that come before those bytes. In the IDE's file tree, right-click a `.csv` and choose **Gzip** to make one, or right-click a `.gz` and choose **Gunzip** to unpack it.
+In the IDE a compressed CSV opens read-only. It is decompressed into memory, up to the size set by `Open compressed CSV up to (decompressed MB)` in the Load and Save preferences.
 
-Both are the compression options everyone recognises; Pixie remains the faster, smaller Kalix-native alternative.
+- `.csv.zip` is a zip archive that holds one file. pandas reads and writes this form (`df.to_csv("flows.csv.zip")`), and any zip tool can create or unpack one. An archive that holds more than one file is refused. pandas refuses it too.
+- `.csv.gz` is the file that `gzip flows.csv` produces. pandas writes the same form with `df.to_csv("flows.csv.gz")`. A file made of several gzip members joined end to end is read as one. A file that is cut short is refused. A file with other bytes after its gzip data is refused when a model runs. The IDE opens such a file and shows the rows that come before those bytes.
+
+In the IDE's file tree, right-click a `.csv` and choose **Gzip** to make a `.csv.gz`. Right-click a `.gz` and choose **Gunzip** to unpack it.
+
+A compressed Source result file (`.res.csv.zip` or `.res.csv.gz`) is not supported. Unzip or gunzip it first.
+
+Pixie files are smaller and faster to read than either kind of compressed CSV.
 
 ### Pixie binary files (.pxt + .pxb)
 
