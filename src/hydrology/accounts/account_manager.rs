@@ -377,13 +377,6 @@ impl AccountManager {
         self.accounts[account_id].debits_this_period += amount;
     }
 
-    /// What a user node's take of one unit debits from this account
-    /// (Account::debit_factor).
-    #[inline]
-    pub fn get_account_debit_factor(&self, account_id: usize) -> f64 {
-        self.accounts[account_id].debit_factor
-    }
-
     /// The take an account's balance covers: the balance, floored at zero, over
     /// its debit factor. A division and not a multiplication by a stored
     /// reciprocal, so that 120 at a factor of 1.2 covers 100 and not
@@ -466,9 +459,8 @@ impl AccountManager {
     /// What is still uncommitted in an account, in the balance's own units:
     /// the balance less the orders already en route, floored at zero (a RAS
     /// cut can leave the committed orders above the balance until they fall
-    /// due). The order it covers is this over the account's debit factor
+    /// due). Read by tests; the nodes read the order this covers
     /// (get_account_uncommitted_take_cover).
-    #[inline]
     pub fn get_account_uncommitted_balance(&self, account_id: usize) -> f64 {
         let account = &self.accounts[account_id];
         (account.balance - account.committed).max(0.0)
