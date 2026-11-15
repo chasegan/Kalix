@@ -540,11 +540,16 @@ fn test_an_unknown_extension_is_read_and_written_as_csv() {
     let series = read_ts(path).expect("an unknown extension reads as CSV");
     assert_eq!(series[0].values, vec![1.5, 2.5]);
 
+    // Written to a second name, so the assertion cannot be met by the input file.
+    let out = env::temp_dir().join(format!("kalix_{}_rain.002", process::id()));
+    let out = out.to_str().unwrap();
     let refs: Vec<&Timeseries> = series.iter().collect();
-    write_ts(path, refs).expect("and writes as CSV");
-    let written = fs::read_to_string(path).unwrap();
-    fs::remove_file(path).unwrap();
-    assert!(written.contains("2020-01-01,1.5"), "{written}");
+    let result = write_ts(out, refs);
+    let written = fs::read_to_string(out);
+    fs::remove_file(path).ok();
+    fs::remove_file(out).ok();
+    result.expect("and writes as CSV");
+    assert!(written.expect("the output exists as text").contains("2020-01-01,1.5"));
 }
 
 /// `flows.csv.gz` as the gzip tool writes it (`gzip -k flows.csv`, Apple gzip
