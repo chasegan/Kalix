@@ -20,8 +20,8 @@ use crate::timeseries::Timeseries;
 pub enum TsFileFormat {
     /// Date-indexed CSV: plain `.csv`, or the same grammar compressed as
     /// `.csv.zip` (one entry per archive, pandas' convention) or `.csv.gz`
-    /// with the same convention. The compression is read off the name by
-    /// [`csv_io::csv_compression`].
+    /// (a gzip stream, which has no entries). The compression is read off
+    /// the name by [`csv_io::csv_compression`].
     Csv,
     /// The Pixie pair (`.pxt` metadata + `.pxb` Gorilla-compressed values);
     /// either half names the dataset, and both halves are always written.
