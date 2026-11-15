@@ -122,6 +122,10 @@ class AccountingGrammarLintTest {
         List<ValidationIssue> issues = lint(bad);
         assertTrue(issues.stream().anyMatch(i -> i.getMessage().contains("Unknown field for account group")),
                 "unknown group field should be reported, got:\n" + describe(issues));
+        // An account has a debit factor; a group has none (#520)
+        String groupFactor = MODEL.replace("acc.avl.closing_balance", "acc.avl.debit_factor");
+        assertTrue(lint(groupFactor).stream().anyMatch(i -> i.getMessage().contains("Unknown field for account group")),
+                "a group has no debit_factor");
     }
 
     @Test

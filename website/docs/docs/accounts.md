@@ -23,7 +23,8 @@ you can reference and record individually.
 
 ## Accounts are pure state
 
-An account holds a name, a `size`, and a running balance — nothing else.
+An account holds a name, a `size`, a running balance and a
+[debit factor](#debit-factor). It holds nothing else.
 It has **no behaviour and no calendar**: a row never resets, never refills, and
 never schedules anything. Every change to a balance is either a [`[ras.*]`
 action](ras.md) or a water user's take. A group that no RAS targets is
@@ -40,6 +41,7 @@ are the *verbs*. See [Allocation systems](allocation-systems.md) for the why.
 | `size` | yes | Account size [ML] — the entitlement volume that percentages are taken of. May be an expression. |
 | `initial` | no (defaults to 0) | Opening balance [ML] at the start of the run, within `[0, size]`. |
 | `pair` | no | <a name="pair"></a><a name="co_acc"></a>Paired account — a reference to an account declared elsewhere, not a declaration. The pairing is **symmetric**: declare it on either account's row, and `[ras.*]` action arguments read the other end as [`self.pair.<field>`](ras.md#self) from both sides. An account can be in at most one pair. Nothing else about a paired account is special — it is drawn on via a user's `accounts` list like any account. |
+| `debit_factor` | no (defaults to 1) | What a user's take of 1 ML debits from the account. A finite number greater than 0. See [Debit factor](#debit-factor). |
 
 Columns are addressed by the header, not by position, so `name, size, initial`
 and `name, initial, size` are equivalent. An **unknown column name is a load
@@ -66,6 +68,76 @@ targets = acc.pools
 trigger = start_water_year(7)
 action  = set(0.9 * self.pair.balance)   # pool = 0.9 x smith's remaining balance
 ```
+
+## Debit factor
+
+In some schemes an account's balance is set from the water available at the
+source. Each megalitre a user diverts then costs the account more than a
+megalitre, to cover the loss in delivering it. The `debit_factor` column says
+how much more.
+
+```ini
+[acc.entitlements]
+accounts = name,  size, debit_factor,
+           smith, 150,  1.2,
+           jones, 420,  1.05,
+```
+
+A user node that takes a volume from an account debits the account by the
+take times the factor.
+
+```
+debit = debit_factor × take
+```
+
+A take is limited to what can be debited without the balance going below
+zero. The take available from an account is its balance over the factor.
+
+```
+take available = balance / debit_factor
+```
+
+With a balance of 120 ML and a factor of 1.2, the take available from `smith`
+is 100 ML. That take debits 120 ML and leaves the account empty.
+
+The factor applies to everything a user node does with the account. An
+[unregulated user](unregulated-user.md#accounts) and a
+[regulated user](regulated-user.md#accounts) are both limited and debited this
+way.
+
+A [regulated user](regulated-user.md#accounts) also commits each order it
+places to the account until the order falls due. The order available from an
+account allows for what is already committed, and is never below zero.
+
+```
+order available = max(0, balance − committed) / debit_factor
+```
+
+The accepted order is committed as the order times the factor. So `committed`
+stays in the units of the balance.
+
+An account in `order_accounts` authorises an order up to the take available
+from it. When the order is placed, the account is debited the part of the
+order it authorises, times the factor.
+
+In a list or a [combination](#combining-accounts) each account uses its own
+factor. In `a | b` the take available is the sum of what is available from
+each. In `a & b` it is the smaller of the two, and each side is debited the
+take times its own factor.
+
+The factor applies to nothing else. A [`[ras.*]`](ras.md) action works in the
+units of the balance. `debit(5)` takes 5 ML from the balance, whatever the
+factor is.
+
+The `debits`, `use` and `committed` series are in the units of the balance.
+They record what was debited and committed, not what was diverted. The
+diversion is the user node's `diversion` result.
+
+A factor of 1 is the same as no factor. A model whose factors are all 1 gives
+the results it gives without the column.
+
+The factor belongs to the account. Two users who draw on one account are
+debited at the same factor.
 
 ## Referencing accounts from nodes
 
@@ -190,13 +262,14 @@ Account state is published as ordinary series — readable in any
 | --- | --- |
 | `acc.<name>.opening_balance` | Balance after the RAS step, before any take — a stable snapshot every expression reader sees regardless of node order. |
 | `acc.<name>.closing_balance` | Balance at the end of the step. |
-| `acc.<name>.debits` | Water taken by users this step (not policy changes). |
+| `acc.<name>.debits` | What users' takes debited this step (not policy changes). With a [debit factor](#debit-factor) this is the take times the factor. |
 | `acc.<name>.allocation` | Allocation to date: balance plus use since the last reset (see [Allocation systems](allocation-systems.md)). |
 | `acc.<name>.allocation_pct` | Allocation as a percentage (nominally 0-100) of the account size. `NaN` for a zero-size account (and NaN counts as true in a [condition](dynamic-expressions.md), so a bare `acc.<name>.allocation_pct` trigger on such an account fires every step). The allocation percentage may be >100% — the allocations are not clamped to the account `size`. |
-| `acc.<name>.use` | Water taken since the last `reset_allocation` — the use term of the allocation. Fed only by user takes, like `debits`. |
+| `acc.<name>.use` | What users' takes have debited since the last `reset_allocation` — the use term of the allocation. Fed only by user takes, like `debits`. |
 | `acc.<name>.committed` | Orders accepted by [regulated users](regulated-user.md#accounts) against this account and not yet due, as the step's ordering begins — their best guess of the diversions to come. A forecast, not a debit: the balance does not move until the water is diverted, and `opening_balance − committed` is the headroom the step's orders are capped by. Each order leaves the tally on the step after it falls due, delivered or not. Written before ordering, like `opening_balance`. |
 | `acc.<name>.size` | Account size, as declared. |
 | `acc.<name>.initial` | Opening balance at the start of the run, as declared (defaults to 0 if omitted). |
+| `acc.<name>.debit_factor` | The [debit factor](#debit-factor), as declared (1 if omitted). Fixed for the run, like `size`. An account group has no `debit_factor`. |
 
 <a id="groups"></a>`opening_balance`, `closing_balance`, `debits`, `allocation`,
 `use` and `committed` are also published for the **group aggregate**, summed over its
@@ -221,6 +294,9 @@ member's value. Members drift apart when:
 Note that this is the allocation *held*, which can differ from the percentage
 an `allocate` action announces (see [`ras.<name>.pct`](ras.md)) — `allocate`
 never reduces an account's allocation, and other actions can increase it.
+
+An account's `debit_factor` is fixed for the whole run, and reads the same
+way as `size` does below.
 
 `size` and `initial` are also group aggregates — the sum of member sizes and
 opening balances — but like their per-account counterparts above, they're

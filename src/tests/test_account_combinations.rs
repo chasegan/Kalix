@@ -279,13 +279,13 @@ fn commit_overflow_under_a_pipe_root_goes_on_its_first_account() {
         AccountsProperty::Tree(tree) => tree,
         other => panic!("expected a tree, got {:?}", other),
     };
-    assert_eq!(tree.uncommitted(manager), 15.0);
+    assert_eq!(tree.available_order(manager), 15.0);
     tree.commit(manager, 40.0, 0);
     let committed = |idx: usize| manager.get_account(idx).unwrap().committed;
     assert_eq!(committed(b), 5.0, "the pair covers 5");
     assert_eq!(committed(cap), 5.0, "the same 5 on each side of the &");
     assert_eq!(committed(a), 35.0, "a's 10 plus the 25 the whole could not cover");
-    assert_eq!(tree.uncommitted(manager), 0.0);
+    assert_eq!(tree.available_order(manager), 0.0);
 }
 
 #[test]
@@ -317,7 +317,7 @@ fn commit_overflow_goes_on_the_first_account_of_each_side_that_fell_short() {
         AccountsProperty::Tree(tree) => tree,
         other => panic!("expected a tree, got {:?}", other),
     };
-    assert_eq!(tree.uncommitted(manager), 15.0);
+    assert_eq!(tree.available_order(manager), 15.0);
     tree.commit(manager, 40.0, 0);
     assert_eq!(manager.get_account_uncommitted_balance(a), 0.0);
     assert_eq!(manager.get_account_uncommitted_balance(b), 0.0);
@@ -326,7 +326,7 @@ fn commit_overflow_goes_on_the_first_account_of_each_side_that_fell_short() {
     assert_eq!(committed(a), 35.0, "a's 10 plus the 25 the left side could not cover");
     assert_eq!(committed(b), 5.0);
     assert_eq!(committed(big), 40.0);
-    assert_eq!(tree.uncommitted(manager), 0.0);
+    assert_eq!(tree.available_order(manager), 0.0);
 }
 
 // ------------------------------------------------------------------------------------------

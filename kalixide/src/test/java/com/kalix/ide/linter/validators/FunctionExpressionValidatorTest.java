@@ -805,6 +805,13 @@ class FunctionExpressionValidatorTest {
         // smith is not a section, so it reads as an account: 'size' is fine
         assertTrue(validator.validate("acc.smith.size", context).isEmpty(),
                 "account size should be valid");
+
+        // An account has a debit factor and a group has none (#520)
+        assertTrue(validator.validate("acc.smith.debit_factor", context).isEmpty(),
+                "account debit_factor should be valid");
+        assertTrue(validator.validate("acc.gs_annual.debit_factor", context).stream()
+                        .anyMatch(e -> e.contains("Unknown field for account group")),
+                "a group has no debit_factor");
     }
 
     // ==================== Helper Methods ====================

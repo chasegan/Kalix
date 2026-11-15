@@ -165,23 +165,27 @@ impl RegulatedUserNode {
         self.order_account_idxs = account_idxs;
     }
 
-    fn total_account_balance(&self, account_manager: &AccountManager) -> f64 {
+    /// The take available from the regular accounts: each balance, floored at zero, over
+    /// the account's debit factor.
+    fn total_available_take(&self, account_manager: &AccountManager) -> f64 {
         self.account_idxs.iter()
-            .map(|&idx| account_manager.get_account_balance(idx).max(0.0))
+            .map(|&idx| account_manager.get_account_available_take(idx))
             .sum()
     }
 
-    /// What the regular accounts can still cover: each balance less the orders
-    /// already committed against it, floored at zero account by account.
-    fn total_account_uncommitted(&self, account_manager: &AccountManager) -> f64 {
+    /// The order available from the regular accounts: each balance less the orders
+    /// already committed against it, floored at zero account by account, over the
+    /// account's debit factor.
+    fn total_available_order(&self, account_manager: &AccountManager) -> f64 {
         self.account_idxs.iter()
-            .map(|&idx| account_manager.get_account_uncommitted_balance(idx))
+            .map(|&idx| account_manager.get_account_available_order(idx))
             .sum()
     }
 
-    fn total_order_account_balance(&self, account_manager: &AccountManager) -> f64 {
+    /// The order the order accounts can authorise.
+    fn total_order_account_available_take(&self, account_manager: &AccountManager) -> f64 {
         self.order_account_idxs.iter()
-            .map(|&idx| account_manager.get_account_balance(idx).max(0.0))
+            .map(|&idx| account_manager.get_account_available_take(idx))
             .sum()
     }
 }
@@ -384,17 +388,22 @@ impl RegulatedUserNode {
         // Where the cap bites, the supply outlets are served first, in outlet order, and the
         // user's own order takes what is left - the same order of service as at flow time.
         //
+        // All of this is in the units of the order. The order available from an account
+        // is its uncommitted balance over its debit factor. The account is committed, or an
+        // order account debited, the order times its factor. With a factor of 1 the two
+        // units are the same (#520).
+        //
         // A combination (`COMBINED`) does the same through the tree: `|` sums what each side
         // can cover and is committed left to right, `&` takes the least and is committed on
         // every side (account_tree.rs).
         if COMBINED || !self.account_idxs.is_empty() || !self.order_account_idxs.is_empty() {
             let regular_available = if COMBINED {
-                self.account_tree.uncommitted(_account_manager)
+                self.account_tree.available_order(_account_manager)
             } else {
-                self.total_account_uncommitted(_account_manager)
+                self.total_available_order(_account_manager)
             };
-            let order_balance = self.total_order_account_balance(_account_manager);
-            let mut remaining = regular_available + order_balance;
+            let order_account_available = self.total_order_account_available_take(_account_manager);
+            let mut remaining = regular_available + order_account_available;
             let mut outlet_orders_accepted = 0.0;
             if SUPPLY_OUTLETS {
                 for supply_outlet in &mut self.supply_outlets {
@@ -416,25 +425,17 @@ impl RegulatedUserNode {
                 let mut to_commit = order_placed;
                 for &account_idx in &self.account_idxs {
                     if to_commit <= 0.0 { break; }
-                    let commit = to_commit.min(_account_manager.get_account_uncommitted_balance(account_idx));
-                    if commit > 0.0 {
-                        _account_manager.commit_account(account_idx, commit, self.order_travel_time);
-                        to_commit -= commit;
-                    }
+                    to_commit -= _account_manager.commit_account_for_order(account_idx, to_commit, self.order_travel_time);
                 }
                 if to_commit > 0.0 {
-                    _account_manager.commit_account(self.account_idxs[0], to_commit, self.order_travel_time);
+                    _account_manager.commit_account_for_order_unchecked(self.account_idxs[0], to_commit, self.order_travel_time);
                 }
             }
 
             let mut excess = (order_placed - regular_available).max(0.0);
             for &account_idx in &self.order_account_idxs {
                 if excess <= 0.0 { break; }
-                let debit = excess.min(_account_manager.get_account_balance(account_idx).max(0.0));
-                if debit > 0.0 {
-                    _account_manager.debit_account(account_idx, debit);
-                    excess -= debit;
-                }
+                excess -= _account_manager.debit_account_for_take(account_idx, excess);
             }
         }
 
@@ -523,36 +524,32 @@ impl RegulatedUserNode {
         // opportunistic take gets what remains. The whole take is debited, the
         // supply outlets' share included: it is the user's water.
         if COMBINED || !self.account_idxs.is_empty() {
-            let balance = if COMBINED {
-                self.account_tree.balance(_account_manager)
+            let available_take = if COMBINED {
+                self.account_tree.available_take(_account_manager)
             } else {
-                self.total_account_balance(_account_manager)
+                self.total_available_take(_account_manager)
             };
             if SUPPLY_OUTLETS {
-                let mut remaining_balance = balance;
+                let mut remaining_available = available_take;
                 outlet_take = 0.0;
                 for supply_outlet in &mut self.supply_outlets {
-                    supply_outlet.flow = supply_outlet.flow.min(remaining_balance);
-                    remaining_balance -= supply_outlet.flow;
+                    supply_outlet.flow = supply_outlet.flow.min(remaining_available);
+                    remaining_available -= supply_outlet.flow;
                     outlet_take += supply_outlet.flow;
                 }
-                own_regulated = own_regulated.min(remaining_balance);
+                own_regulated = own_regulated.min(remaining_available);
                 diversion_regulated = outlet_take + own_regulated;
             } else {
-                diversion_regulated = diversion_regulated.min(balance);
+                diversion_regulated = diversion_regulated.min(available_take);
             }
-            diversion_opportunistic = diversion_opportunistic.min(balance - diversion_regulated);
+            diversion_opportunistic = diversion_opportunistic.min(available_take - diversion_regulated);
             let mut remaining = diversion_regulated + diversion_opportunistic;
             if COMBINED {
                 self.account_tree.debit(_account_manager, remaining);
             } else {
                 for &account_idx in &self.account_idxs {
                     if remaining <= 0.0 { break; }
-                    let take = remaining.min(_account_manager.get_account_balance(account_idx).max(0.0));
-                    if take > 0.0 {
-                        _account_manager.debit_account(account_idx, take);
-                        remaining -= take;
-                    }
+                    remaining -= _account_manager.debit_account_for_take(account_idx, remaining);
                 }
             }
         }

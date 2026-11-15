@@ -115,6 +115,9 @@ what is committed:
 
 `order ≤ Σ max(0, balance − committed)`, over the accounts listed
 
+With a [debit factor](accounts.md#debit-factor), each term is divided by the
+account's factor.
+
 The commitment is a forecast of the diversion to come, never a debit. On the
 step an order falls due the whole order leaves the commitment, delivered or not;
 what is then diverted is debited, and what is not is still in the balance and
@@ -136,6 +139,19 @@ the delivery down it is planned at the order as it arrived, and `ds_2_order_due`
 is the part the user could order. One consequence: when users share an account,
 the one upstream diverts first and may take water released for an order placed
 downstream.
+
+Where an account has a [debit factor](accounts.md#debit-factor), an accepted
+order is committed as the order times the factor. The delivery available from
+the account is its balance over the factor.
+
+```
+delivery available = balance / debit_factor
+```
+
+A delivery is debited as the delivery times the factor. An account in
+`order_accounts` authorises an order up to the same volume. When the order is
+placed, that account is debited the part of the order it authorises, times the
+factor.
 
 When `accounts` is a [combination](accounts.md#combining-accounts), the same
 three moments follow it. The order cap is what the combination makes available

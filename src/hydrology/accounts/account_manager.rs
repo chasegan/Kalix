@@ -66,9 +66,9 @@ pub struct AccountManager {
 /// allocation (balance + use), fed only by node takes. `committed` is the
 /// orders accepted and not yet due (see Account::committed). `size` and
 /// `initial` are static (registered into `static_properties`, not published
-/// as per-step series like the rest); everything else is a genuine per-step
-/// recorder.
-pub const ACCOUNT_SERIES_FIELDS: [&str; 9] = [
+/// as per-step series like the rest), and so is `debit_factor`; everything
+/// else is a genuine per-step recorder.
+pub const ACCOUNT_SERIES_FIELDS: [&str; 10] = [
     "opening_balance",
     "closing_balance",
     "debits",
@@ -77,12 +77,14 @@ pub const ACCOUNT_SERIES_FIELDS: [&str; 9] = [
     "use",
     "committed",
     "size",
-    "initial"
+    "initial",
+    "debit_factor"
 ];
 
 /// The fields a *group* aggregate publishes: the same set, each summed over
 /// members except `allocation_pct`, which is the group allocation over the
-/// group size (a size-weighted mean of the members' percentages).
+/// group size (a size-weighted mean of the members' percentages). A group has
+/// no `debit_factor`: a sum of factors means nothing.
 pub const GROUP_SERIES_FIELDS: [&str; 9] = [
     "opening_balance",
     "closing_balance",
@@ -375,10 +377,91 @@ impl AccountManager {
         self.accounts[account_id].debits_this_period += amount;
     }
 
-    /// What a regulated user may still order against an account: the balance
-    /// less the orders already en route, floored at zero (a RAS cut can leave
-    /// the committed orders above the balance until they fall due).
-    #[inline]
+    /// The take available from an account: its balance, floored at zero, over
+    /// its debit factor. In the units of the take, not of the balance. A
+    /// division and not a multiplication by a stored reciprocal, so that 120
+    /// at a factor of 1.2 makes 100 available and not 100.00000000000001.
+    #[inline(always)]
+    pub fn get_account_available_take(&self, account_id: usize) -> f64 {
+        let account = &self.accounts[account_id];
+        account.balance.max(0.0) / account.debit_factor
+    }
+
+    /// The order available from an account: its balance less the orders
+    /// already en route, floored at zero (a RAS cut can leave the committed
+    /// orders above the balance until they fall due), over its debit factor.
+    #[inline(always)]
+    pub fn get_account_available_order(&self, account_id: usize) -> f64 {
+        let account = &self.accounts[account_id];
+        (account.balance - account.committed).max(0.0) / account.debit_factor
+    }
+
+    /// Debit an account for as much of a user node's `take` as is available
+    /// from it, at its debit factor, and return that much of the take. An
+    /// account with no more available than the take is debited its whole
+    /// balance, so that an account drained on its own lands on zero.
+    /// Otherwise the debit is the take times the factor, held to the balance.
+    /// With a factor of 1 this is min(take, balance), debited as it is.
+    #[inline(always)]
+    pub fn debit_account_for_take(&mut self, account_id: usize, take: f64) -> f64 {
+        let account = &self.accounts[account_id];
+        let balance = account.balance.max(0.0);
+        let factor = account.debit_factor;
+        let available = balance / factor;
+        let (taken, debit) = if take < available { (take, (take * factor).min(balance)) } else { (available, balance) };
+        if debit > 0.0 {
+            self.debit_account(account_id, debit);
+        }
+        taken
+    }
+
+    /// As `debit_account_for_take`, committing an accepted `order` against the
+    /// account's uncommitted balance, due in `due_in` steps. Returns as much
+    /// of the order as was available.
+    #[inline(always)]
+    pub fn commit_account_for_order(&mut self, account_id: usize, order: f64, due_in: usize) -> f64 {
+        let account = &self.accounts[account_id];
+        let uncommitted = (account.balance - account.committed).max(0.0);
+        let factor = account.debit_factor;
+        let available = uncommitted / factor;
+        let (ordered, commit) = if order < available { (order, (order * factor).min(uncommitted)) } else { (available, uncommitted) };
+        if commit > 0.0 {
+            self.commit_account(account_id, commit, due_in);
+        }
+        ordered
+    }
+
+    /// Commit an accepted `order` to this account at its debit factor,
+    /// whatever is available from it. For the part of an order that
+    /// order_accounts authorised beyond the accounts, and for each single
+    /// account under a combination's outermost `&`.
+    #[inline(always)]
+    pub fn commit_account_for_order_unchecked(&mut self, account_id: usize, order: f64, due_in: usize) {
+        let factor = self.accounts[account_id].debit_factor;
+        self.commit_account(account_id, order * factor, due_in);
+    }
+
+    /// Set an account's debit factor, as the model is read. The reader has
+    /// checked that it is finite and greater than zero.
+    pub fn set_account_debit_factor(&mut self, account_id: usize, debit_factor: f64) {
+        self.accounts[account_id].debit_factor = debit_factor;
+    }
+
+    /// Whether any of these accounts has a debit factor other than 1, which
+    /// is when the accounts table is saved with the column.
+    pub fn any_debit_factor(&self, account_ids: impl Iterator<Item = usize>) -> bool {
+        let mut any = false;
+        for account_id in account_ids {
+            any |= self.accounts[account_id].debit_factor != 1.0;
+        }
+        any
+    }
+
+    /// What is still uncommitted in an account, in the balance's own units:
+    /// the balance less the orders already en route, floored at zero (a RAS
+    /// cut can leave the committed orders above the balance until they fall
+    /// due). Read by tests; the nodes read the order available from it
+    /// (get_account_available_order).
     pub fn get_account_uncommitted_balance(&self, account_id: usize) -> f64 {
         let account = &self.accounts[account_id];
         (account.balance - account.committed).max(0.0)
