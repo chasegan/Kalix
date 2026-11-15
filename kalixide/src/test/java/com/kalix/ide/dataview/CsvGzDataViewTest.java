@@ -43,6 +43,12 @@ class CsvGzDataViewTest {
         return bytes.toByteArray();
     }
 
+    private static byte[] concat(byte[] a, byte[] b) {
+        byte[] both = Arrays.copyOf(a, a.length + b.length);
+        System.arraycopy(b, 0, both, a.length, b.length);
+        return both;
+    }
+
     private Path gzFile(String name, String content) throws IOException {
         return Files.write(tempDir.resolve(name), gzip(content));
     }
@@ -103,6 +109,27 @@ class CsvGzDataViewTest {
         Files.write(gz, both);
         assertEquals("Date,q\n2020-01-01,1.0\n2020-01-02,2.0\n",
             new String(CompressedCsvFormat.decompressBounded(gz.toFile(), 1024), StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void bytesAfterAMemberThatAreNotAMemberEndTheStreamQuietly() throws IOException {
+        // The known difference from the engine, which refuses both files
+        // (CompressedCsvFormat.gunzip). Pinned so a JDK change cannot move it unnoticed.
+        byte[] first = gzip("Date,q\n2020-01-01,1.0\n");
+
+        Path junk = tempDir.resolve("junk.csv.gz");
+        Files.write(junk, concat(first, "stray bytes".getBytes(StandardCharsets.UTF_8)));
+        assertEquals("Date,q\n2020-01-01,1.0\n",
+            new String(CompressedCsvFormat.decompressBounded(junk.toFile(), 1024), StandardCharsets.UTF_8),
+            "stray bytes after the last member are ignored");
+
+        byte[] second = gzip("2020-01-02,2.0\n");
+        second[0] = 0; // damage the second member's magic
+        Path damaged = tempDir.resolve("damaged.csv.gz");
+        Files.write(damaged, concat(first, second));
+        assertEquals("Date,q\n2020-01-01,1.0\n",
+            new String(CompressedCsvFormat.decompressBounded(damaged.toFile(), 1024), StandardCharsets.UTF_8),
+            "a later member with a damaged header is dropped");
     }
 
     @Test

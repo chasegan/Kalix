@@ -151,9 +151,16 @@ public final class CompressedCsvFormat {
 
     /**
      * A gzip reader over {@code raw}; reads concatenated members as one stream,
-     * like gzip and pandas. Unlike the engine, trailing bytes that are not a
-     * gzip member end the stream rather than raising an error. The header is
-     * read here, so {@code raw} is closed if it isn't gzip.
+     * like gzip and pandas. The header is read here, so {@code raw} is closed
+     * if it isn't gzip.
+     *
+     * <p>The engine is stricter in one case. After a complete member,
+     * {@link GZIPInputStream} treats anything that is not a readable member
+     * header as the end of the file. So stray bytes after the last member are
+     * ignored, and a later member whose header is damaged or cut short is
+     * dropped along with everything after it, both without an error. The
+     * engine refuses these files. A member cut short after its header is an
+     * error here too. {@code CsvGzDataViewTest} pins this behaviour.
      */
     static InputStream gunzip(InputStream raw) throws IOException {
         try {
