@@ -319,7 +319,14 @@ public class DataDocument extends KalixDocument {
                 "Read only — the file changed and now " + e.getMessage()
                     + "; showing the PREVIOUS content"));
         } catch (IOException e) {
+            // The file changed and can't be read now (caught mid-write, or cut
+            // short). The old session stays, and as above it must not pass for
+            // current. The next refresh that succeeds restores the banner.
             logger.warn("Data view refresh failed for {}: {}", target, e.getMessage());
+            String reason = e.getMessage() != null ? e.getMessage() : e.toString();
+            SwingUtilities.invokeLater(() -> setBannerText(
+                "Read only — the file changed and can't be read (" + reason
+                    + "); showing the PREVIOUS content"));
         } catch (InterruptedException | InvocationTargetException e) {
             logger.warn("Data view refresh interrupted for {}: {}", target, e.getMessage());
         }
