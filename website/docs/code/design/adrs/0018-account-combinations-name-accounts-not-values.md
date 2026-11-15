@@ -101,8 +101,8 @@ mixed without parentheses`.
   numbers or operators but these; §5 by the `COMBINED` const on both user
   nodes' phases and by speed test 10 against `main`.
 - **Advisory**: that the vocabulary stays at two operators, and that a debit
-  factor or a conditional order of use, if ever wanted, is proposed against
-  §3.
+  factor on the line or a conditional order of use, if ever wanted, is
+  proposed against §3.
 
 ## Links and references
 
@@ -115,9 +115,9 @@ mixed without parentheses`.
 ## Amendments
 
 - *2026-11-15* — §5 reworded, with #520 (account debit factors). It said a
-  model on the plain list "runs the instructions it ran before". That was
-  written in haste and claimed more than was meant. The decision is that the
-  plain list avoids the tree's overheads, and §5 now says so. #520 adds a
-  division and a multiplication per account to every user's phases, the plain
-  list's among them. Its factor is a column on the account and not a value on
-  the line, so §3 stands.
+  model on the plain list "runs the instructions it ran before", which
+  claimed more than was meant. The decision is that the plain list avoids the
+  tree's overheads, and §5 now says so. #520 adds a division and a
+  multiplication per account to every user's phases, the plain list's among
+  them. Its factor is a column on the account and not a value on the line, so
+  §3 stands, and the Advisory note below now says "on the line".
