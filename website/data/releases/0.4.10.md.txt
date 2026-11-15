@@ -30,3 +30,4 @@ pip: "pip install kalix==0.4.10"
     - A `.csv.gz` is a CSV in a gzip stream, the format `gzip` and pandas produce.
     - Reference `.csv.gz` files directly in the model, write them using `kalix simulate -o` or `kalix convert`, and use them throughout KalixIDE.
     - In the IDE's file tree, Gzip compresses a `.csv` and Gunzip unpacks a `.gz`.
+- `kalix simulate` now stops with an error and a non-zero exit code when the output file or the mass balance report cannot be written. Before, it printed the error, then `Done!`, and exited with 0.

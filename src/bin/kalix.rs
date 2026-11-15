@@ -220,9 +220,11 @@ fn main() {
             let output_start = Instant::now();
             match output_file {
                 Some(f) => {
-                    match m.write_outputs(f.as_str()) {
-                        Ok(_) => { }
-                        Err(s) => eprintln!("{}", s)
+                    // A run whose output was not written has failed: say so
+                    // and exit non-zero, so a script cannot take it for done.
+                    if let Err(s) = m.write_outputs(f.as_str()) {
+                        eprintln!("Error: {}", s);
+                        std::process::exit(1);
                     }
                 }
                 None => {} // TODO: do we want to look at defaulting to some output here?
@@ -233,9 +235,9 @@ fn main() {
             match mass_balance {
                 Some(f) => {
                     mb_report = m.generate_mass_balance_report();
-                    match fs::write(f, &mb_report) {
-                        Ok(_) => {}
-                        Err(s) => eprintln!("Error: {}", s)
+                    if let Err(s) = fs::write(&f, &mb_report) {
+                        eprintln!("Error: Could not write file {}: {}", f, s);
+                        std::process::exit(1);
                     }
                 }
                 None => {}
