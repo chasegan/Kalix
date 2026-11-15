@@ -157,8 +157,9 @@ public class TreeContextMenu {
                     "Unzip", TreeContextMenu::isSingleZip,
                     sel -> fileOps.unzipFile(file(sel))
                 ),
+                // Shown wherever Unzip is, an open file's tab included.
                 item(
-                    "Gunzip", sel -> isSingleGzip(sel) && context == BuildContext.FileTree,
+                    "Gunzip", TreeContextMenu::isSingleGzip,
                     sel -> fileOps.gunzipFile(file(sel))
                 )
             ),
@@ -215,7 +216,7 @@ public class TreeContextMenu {
                 // and keeps it from surfacing as a folder's first (= primary-looking) item.
                 item(
                     "Zip",
-                    (sel -> (isNotSingleZip(sel) && context == BuildContext.FileTree)),
+                    (sel -> (canZip(sel) && context == BuildContext.FileTree)),
                     sel -> fileOps.zipFiles(files(sel), tree.getRootFile())
                 ),
                 // A gzipped CSV is still data the engine and IDE read; only plain
@@ -303,7 +304,7 @@ public class TreeContextMenu {
      * True if nothing selected is a plain zip archive. A {@code .csv.zip}
      * counts as data, not archive: Open (and Compare) act on it — matching
      * double-click, which opens it as a data view — while the Zip item's
-     * {@link #isNotZip} still treats it as an archive not worth re-archiving.
+     * {@link #canZip} still treats one alone as not worth archiving again.
      */
     private static boolean isNotPlainZip(List<FileTreeNode> sel) {
         return sel.stream().noneMatch(x -> TreeFileOperations.isZip(x.getFile())
@@ -314,16 +315,16 @@ public class TreeContextMenu {
         return sel.stream().anyMatch(FileTreeNode::isDirectory);
     }
 
-    private static boolean isSingleZip(List<FileTreeNode> sel) {
+    static boolean isSingleZip(List<FileTreeNode> sel) {
         return sel.size() == 1 && TreeFileOperations.isZip(file(sel));
     }
 
-    private static boolean isSingleGzip(List<FileTreeNode> sel) {
+    static boolean isSingleGzip(List<FileTreeNode> sel) {
         return sel.size() == 1 && !sel.getFirst().isDirectory() && GzipFile.isGzip(file(sel));
     }
 
     /** One uncompressed {@code .csv} that is not a Source result ({@code .res.csv}). */
-    private static boolean isSinglePlainCsv(List<FileTreeNode> sel) {
+    static boolean isSinglePlainCsv(List<FileTreeNode> sel) {
         if (sel.size() != 1 || sel.getFirst().isDirectory()) {
             return false;
         }
@@ -336,20 +337,18 @@ public class TreeContextMenu {
         return sel.stream().noneMatch(tree::isRoot);
     }
 
-    private static boolean isNotSingleZip(List<FileTreeNode> sel) {
-        return !sel.isEmpty() && any(sel) && isNotZip(sel) && !isSingleCompressedCsv(sel);
-    }
-
     /**
-     * Return true if none of {@code sel} are zip files
+     * Whether Zip applies: to any selection except a single file that is already compressed
+     * (a zip archive or a compressed CSV), which is not worth archiving again. Several items
+     * zip into one archive whatever they are.
      */
-    private static boolean isNotZip(List<FileTreeNode> sel) {
-        return sel.stream().noneMatch((x) -> TreeFileOperations.isZip(x.getFile()));
+    static boolean canZip(List<FileTreeNode> sel) {
+        return any(sel) && !isSingleCompressedFile(sel);
     }
 
-    /** A lone compressed CSV is not worth archiving; one among other files still is. */
-    private static boolean isSingleCompressedCsv(List<FileTreeNode> sel) {
-        return sel.size() == 1 && CompressedCsvFormat.isCompressedCsv(file(sel).getName());
+    private static boolean isSingleCompressedFile(List<FileTreeNode> sel) {
+        return sel.size() == 1 && !sel.getFirst().isDirectory()
+            && (TreeFileOperations.isZip(file(sel)) || CompressedCsvFormat.isCompressedCsv(file(sel).getName()));
     }
 
     // --- Selection accessors ---
