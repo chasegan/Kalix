@@ -12,8 +12,8 @@
 //    user applies the factor, with no test for whether it is 1.
 // 7. The factor must be finite and greater than 0.
 // 8. `acc.<name>.debit_factor` reads as a static; a group has none.
-// 9. The column is saved where any member's factor is not 1, and the node's accounts line is
-//    saved as written.
+// 9. The column is saved where any member's factor is not 1, at full precision, and a node's
+//    plain accounts list is saved as a list.
 use crate::io::ini_model_io::IniModelIO;
 use crate::misc::configuration::SaveMethod;
 
@@ -163,8 +163,9 @@ fn a_factor_below_one_covers_more_than_the_balance() {
     assert_eq!(series(&mut m, "acc.a.closing_balance"), vec![0.0, 0.0]);
 }
 
-/// A factor that is not exact in binary: the take reads as the round number, and the drained
-/// account is exactly empty, never a rounding error below zero.
+/// Factors that are not exact in binary. A single account that is drained is exactly empty,
+/// and its debits are exactly its balance. The last case also checks the take: 48 at 1.2
+/// covers 40.
 #[test]
 fn a_drained_account_lands_on_zero() {
     for factor in ["1.2", "1.05", "1.1", "0.7", "3"] {
@@ -273,17 +274,54 @@ fn a_regulated_combination_is_capped_committed_and_debited_by_factor() {
     assert_eq!(balance(&m, "cap"), 20.0, "debited 40 for a take of 80");
 }
 
+/// The delivery is limited by the balance of the day, at the factor. A rule takes 20 from
+/// the account each step, so the 40 ordered on day 1 arrives on day 3 to a balance of 40,
+/// which covers a take of 32.
+#[test]
+fn a_delivery_is_limited_by_what_the_balance_of_the_day_covers() {
+    let ini = regulated_model(40.0, "a, 1000, 100, 1.25,", "accounts = a")
+        + "\n[ras.cut]\ntargets = acc.pools\ntrigger = every_step\naction = debit(20)\n";
+    let mut m = run(&ini);
+    // Day 1: 80 covers 64, and the order of 40 commits 50. Day 2: 60 less 50 covers 8.
+    assert_eq!(series(&mut m, "node.user.order")[..3], [40.0, 8.0, 0.0]);
+    assert_eq!(series(&mut m, "node.user.diversion")[..3], [0.0, 0.0, 32.0]);
+    assert_eq!(series(&mut m, "acc.a.debits")[2], 40.0);
+    assert_eq!(series(&mut m, "acc.a.closing_balance")[2], 0.0);
+}
+
 // ------------------------------------------------------------------------------------------
 // Contract 4: order accounts
 // ------------------------------------------------------------------------------------------
+
+/// An order beyond what the accounts cover, authorised by an order account, is committed to
+/// the first account at that account's factor. a covers 10 / 2 = 5 of the 16 and commits its
+/// 10; the other 11 commits 22 more.
+#[test]
+fn an_order_beyond_the_accounts_is_committed_at_the_first_accounts_factor() {
+    let table = "a, 1000, 10, 2,\n           bridge, 1000, 100, 1,";
+    let mut m = run(&regulated_model(16.0, table, "accounts = a\norder_accounts = bridge"));
+    assert_eq!(series(&mut m, "node.user.order")[0], 16.0);
+    assert_eq!(series(&mut m, "acc.a.committed")[1], 32.0);
+}
+
+/// Under `&` every side is committed the whole order, at its own factor.
+#[test]
+fn each_side_of_a_combination_is_committed_the_whole_order_at_its_factor() {
+    let table = "a, 1000, 10, 2,\n           cap, 1000, 500, 1,\n           bridge, 1000, 100, 1,";
+    let mut m = run(&regulated_model(16.0, table, "accounts = a & cap\norder_accounts = bridge"));
+    assert_eq!(series(&mut m, "node.user.order")[0], 16.0);
+    assert_eq!(series(&mut m, "acc.a.committed")[1], 32.0);
+}
 
 #[test]
 fn order_accounts_are_debited_by_factor_at_order_time() {
     // No accounts, so the bridge authorises the whole order: 20 at a factor of 1.25 covers 16
     let table = "a, 1000, 0, 1,\n           bridge, 1000, 20, 1.25,";
-    let mut m = run(&regulated_model(30.0, table, "order_accounts = bridge"));
+    let ini = regulated_model(30.0, table, "order_accounts = bridge") + "acc.bridge.closing_balance\n";
+    let mut m = run(&ini);
     assert_eq!(series(&mut m, "node.user.order"), vec![16.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
-    assert_eq!(balance(&m, "bridge"), 0.0);
+    assert_eq!(series(&mut m, "acc.bridge.closing_balance")[0], 0.0,
+               "debited on the day of the order, two days before the delivery");
     assert_eq!(series(&mut m, "node.user.diversion"), vec![0.0, 0.0, 16.0, 0.0, 0.0, 0.0, 0.0],
                "with no accounts the delivery is not capped by one");
 }
