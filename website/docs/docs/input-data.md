@@ -132,6 +132,8 @@ Supported data formats are listed below.
 | .csv.gz | Gzipped CSV. | see below… |
 | .pxt + .pxb | Pixie fast lightweight binary format. | see below… |
 
+A model input with any other extension is read as CSV. This lets you name files as you like, such as `rain.001` and `rain.002`.
+
 ### CSV files
 
 Rules for CSV files are as follows:
