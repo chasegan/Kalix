@@ -61,6 +61,19 @@ public final class CompressedCsvFormat {
         public String label() {
             return label;
         }
+
+        /**
+         * The engine's name for the format, as {@code save_results} takes it: {@code "csv"},
+         * {@code "csv.zip"} or {@code "csv.gz"} (see {@code docs/kalixcli-stdio-spec.md}).
+         */
+        public String engineFormat() {
+            return extension == null ? "csv" : extension.substring(1);
+        }
+
+        /** The extension a file of this format is saved with: {@code .csv} when plain. */
+        public String saveExtension() {
+            return extension == null ? ".csv" : extension;
+        }
     }
 
     private CompressedCsvFormat() {

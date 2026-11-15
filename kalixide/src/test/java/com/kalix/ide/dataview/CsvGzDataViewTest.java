@@ -201,6 +201,16 @@ class CsvGzDataViewTest {
     }
 
     @Test
+    void eachFormatHasTheNameTheEngineTakesForSaveResults() {
+        // The values src/apis/stdio/commands.rs accepts for save_results.
+        assertEquals("csv", CompressedCsvFormat.compressionOf("out.csv").engineFormat());
+        assertEquals("csv.zip", CompressedCsvFormat.compressionOf("out.csv.zip").engineFormat());
+        assertEquals("csv.gz", CompressedCsvFormat.compressionOf("OUT.CSV.GZ").engineFormat());
+        assertEquals(".csv", CompressedCsvFormat.compressionOf("out").saveExtension());
+        assertEquals(".csv.gz", CompressedCsvFormat.compressionOf("out.csv.gz").saveExtension());
+    }
+
+    @Test
     void extensionTestCoversBothFormats() {
         assertEquals(".csv.gz", CompressedCsvFormat.extensionOf("FLOWS.CSV.GZ"));
         assertEquals(".csv.zip", CompressedCsvFormat.extensionOf("flows.csv.zip"));

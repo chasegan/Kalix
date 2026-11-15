@@ -737,11 +737,10 @@ public class RunContextMenuManager {
 
             // The format IS the extension the user settled on. The type combo only ever
             // sets that extension, so there is no second opinion to reconcile against.
-            // A compressed CSV's format value is its extension without the dot.
             boolean pixie = lowerName.endsWith(".pxt");
-            String compressed = CompressedCsvFormat.extensionOf(lowerName);
-            String ext = pixie ? ".pxt" : (compressed != null ? compressed : ".csv");
-            String format = pixie ? "pixie" : ext.substring(1);
+            CompressedCsvFormat.Compression csv = CompressedCsvFormat.compressionOf(lowerName);
+            String ext = pixie ? ".pxt" : csv.saveExtension();
+            String format = pixie ? "pixie" : csv.engineFormat();
 
             // Append the format's extension unless the user already typed it.
             if (!lowerName.endsWith(ext)) {
