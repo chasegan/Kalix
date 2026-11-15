@@ -525,3 +525,20 @@ fn test_read_ts_names_a_non_gzip_csv_gz() {
         assert!(format!("{err}").contains("not a readable gzip file"), "{name}: {err}");
     }
 }
+
+#[test]
+fn test_compressed_source_results_are_refused_by_name_on_read_and_write() {
+    // Neither file need exist: the name alone is refused, with the message
+    // the converter gives any unrecognised format.
+    for name in ["results.res.csv.gz", "results.res.csv.zip", "RESULTS.RES.CSV.GZ"] {
+        let err = read_ts(name).err().expect("read must refuse");
+        assert!(format!("{err}").contains("unrecognised timeseries format"), "{err}");
+
+        let path = env::temp_dir().join(format!("kalix_{}_{}", process::id(), name));
+        let path = path.to_str().unwrap();
+        let ts = Timeseries::new_daily();
+        let err = String::from(write_ts(path, vec![&ts]).err().expect("write must refuse"));
+        assert!(err.contains("unrecognised timeseries format"), "{err}");
+        assert!(!std::path::Path::new(path).exists(), "nothing is written");
+    }
+}

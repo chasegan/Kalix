@@ -36,16 +36,34 @@ pub enum CsvCompression {
 }
 
 /// The one extension test both the read and write paths key off, so the two
-/// can never disagree about what counts as compressed.
+/// can never disagree about what counts as compressed. A compressed Source
+/// result (`.res.csv.zip`, `.res.csv.gz`) is not a compressed CSV: see
+/// [`is_compressed_source_result`].
 pub fn csv_compression(filename: &str) -> CsvCompression {
     let lower = filename.to_ascii_lowercase();
-    if lower.ends_with(".csv.zip") {
+    if is_compressed_source_result(filename) {
+        CsvCompression::None
+    } else if lower.ends_with(".csv.zip") {
         CsvCompression::Zip
     } else if lower.ends_with(".csv.gz") {
         CsvCompression::Gzip
     } else {
         CsvCompression::None
     }
+}
+
+/// True for a Source result inside a zip or gzip wrapper (`.res.csv.zip`,
+/// `.res.csv.gz`). The engine reads and writes neither, so [`read_ts`] and
+/// [`write_ts_opts`] refuse the name rather than treat the file as CSV.
+pub fn is_compressed_source_result(filename: &str) -> bool {
+    let lower = filename.to_ascii_lowercase();
+    lower.ends_with(".res.csv.zip") || lower.ends_with(".res.csv.gz")
+}
+
+/// The refusal for a name that is no timeseries format the engine knows.
+/// Shared with the converter so every path words it the same way.
+pub fn unrecognised_ts_format(path: &str) -> String {
+    format!("'{path}': unrecognised timeseries format (expected .csv, .csv.zip, .csv.gz, .pxt or .pxb)")
 }
 
 /// The archive's single entry name: the file name minus its `.zip` — pandas'
@@ -65,6 +83,9 @@ pub fn zip_inner_name(filename: &str) -> String {
 }
 
 pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, KalixIoError> {
+    if is_compressed_source_result(filename) {
+        return Err(KalixIoError::Parse(unrecognised_ts_format(filename)));
+    }
     // A .csv.zip / .csv.gz is the same CSV grammar inside a compression
     // wrapper — the parse below never sees the difference.
     let builder = || {
@@ -426,6 +447,9 @@ pub fn write_ts(filename: &str, timeseries_vector: Vec<&Timeseries>) -> Result<(
 /// under a temporary name (the conversion path), where the temp name's
 /// extension lies about both the format and the zip entry name.
 pub fn write_ts_opts(filename: &str, timeseries_vector: Vec<&Timeseries>, named_as: &str) -> Result<(), CsvError> {
+    if is_compressed_source_result(named_as) {
+        return Err(CsvError::WriteError(unrecognised_ts_format(named_as)));
+    }
 
     // Check that all timeseries in the vector have the same length
     let data_length = match timeseries_vector.len() {

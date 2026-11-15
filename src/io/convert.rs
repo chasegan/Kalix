@@ -43,7 +43,7 @@ pub fn detect_ts_format(path: &str) -> Result<TsFileFormat, String> {
     // Longest suffix first — the double-extension rule (.res.csv.zip before
     // .csv.zip before .csv), as everywhere else in the codebase.
     let lower = path.to_lowercase();
-    if [".res.csv", ".res.csv.zip", ".res.csv.gz"].iter().any(|s| lower.ends_with(s)) {
+    if lower.ends_with(".res.csv") {
         Err(format!(
             "'{path}': .res.csv is not supported yet — the engine converts csv, csv.zip, csv.gz and pixie only"
         ))
@@ -52,9 +52,9 @@ pub fn detect_ts_format(path: &str) -> Result<TsFileFormat, String> {
     } else if lower.ends_with(".pxt") || lower.ends_with(".pxb") {
         Ok(TsFileFormat::Pixie)
     } else {
-        Err(format!(
-            "'{path}': unrecognised timeseries format (expected .csv, .csv.zip, .csv.gz, .pxt or .pxb)"
-        ))
+        // A .res.csv.zip or .res.csv.gz lands here too: csv_compression does
+        // not count it as a compressed CSV.
+        Err(csv_io::unrecognised_ts_format(path))
     }
 }
 
@@ -359,9 +359,9 @@ mod tests {
     }
 
     #[test]
-    fn res_csv_zip_is_refused_like_res_csv() {
+    fn res_csv_zip_is_refused_as_an_unrecognised_format() {
         let err = convert_ts_file("results.res.csv.zip", "out.csv").unwrap_err();
-        assert!(err.contains(".res.csv"), "{err}");
+        assert!(err.contains("unrecognised timeseries format"), "{err}");
     }
 
     #[test]
@@ -405,9 +405,9 @@ mod tests {
     }
 
     #[test]
-    fn res_csv_gz_is_refused_like_res_csv() {
+    fn res_csv_gz_is_refused_as_an_unrecognised_format() {
         let err = convert_ts_file("results.res.csv.gz", "out.csv").unwrap_err();
-        assert!(err.contains(".res.csv"), "{err}");
+        assert!(err.contains("unrecognised timeseries format"), "{err}");
     }
 
     #[test]

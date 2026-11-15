@@ -1624,7 +1624,8 @@ impl Model {
             pixie_io::write_series(base_path, &vec_ts)
                 .map_err(|e| format!("Could not write file {}: {:?}", filename, e))
         } else {
-            write_ts(filename, vec_ts).map_err(|_| format!("Could not write file {}", filename))
+            write_ts(filename, vec_ts)
+                .map_err(|e| format!("Could not write file {}: {}", filename, String::from(e)))
         }
     }
 
