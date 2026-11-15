@@ -100,11 +100,11 @@ enum Commands {
     },
     /// Convert a timeseries file between formats (csv, csv.zip, csv.gz and pixie)
     ///
-    /// Formats are chosen by extension:
-    /// - .csv for date-indexed CSV,
-    /// - .csv.zip for the same CSV zip-compressed (one file per archive, as pandas reads and writes),
-    /// - .csv.gz for the gzip-compressed CSV (again, single-file archive),
-    /// - .pxt/.pxb for the Pixie pair (either half names the dataset; both halves are always written).
+    /// Formats are chosen by extension: .csv for date-indexed CSV, .csv.zip
+    /// for the same CSV zip-compressed (one file per archive, as pandas
+    /// reads and writes), .csv.gz for the same CSV gzip-compressed,
+    /// .pxt/.pxb for the Pixie pair (either half names the dataset; both
+    /// halves are always written).
     ///
     /// Example: kalix convert flows.csv flows.pxt
     Convert {
