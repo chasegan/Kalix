@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.HexFormat;
 import java.util.function.BooleanSupplier;
 import java.util.zip.GZIPOutputStream;
 
@@ -132,6 +133,25 @@ class CsvGzDataViewTest {
         assertEquals("Date,q\n2020-01-01,1.0\n",
             new String(CompressedCsvFormat.decompressBounded(damaged.toFile(), 1024), StandardCharsets.UTF_8),
             "a later member with a damaged header is dropped");
+    }
+
+    /**
+     * {@code flows.csv.gz} as the gzip tool writes it ({@code gzip -k flows.csv}, Apple gzip
+     * 479). Unlike Kalix's own writers it carries the file name and a modified time in its
+     * header. The engine's {@code test_read_ts_reads_a_file_made_by_the_gzip_tool} reads the
+     * same bytes.
+     */
+    private static final String GZIP_TOOL_FIXTURE_HEX =
+        "1f8b080800e10b5e0003666c6f77732e6373760073492c49d549cbc92fe7"
+            + "32323032d0353004221d433d5304d748c748cfdc940b0010d16d5d29000000";
+
+    @Test
+    void aFileMadeByTheGzipToolReads() throws IOException {
+        byte[] bytes = HexFormat.of().parseHex(GZIP_TOOL_FIXTURE_HEX);
+        assertEquals(0x08, bytes[3] & 0x08, "the fixture's header names its file");
+        Path gz = Files.write(tempDir.resolve("gzip_tool.csv.gz"), bytes);
+        assertEquals("Date,flow\n2020-01-01,1.5\n2020-01-02,2.75\n",
+            new String(CompressedCsvFormat.decompressBounded(gz.toFile(), 1024), StandardCharsets.UTF_8));
     }
 
     @Test

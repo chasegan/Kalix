@@ -546,3 +546,26 @@ fn test_an_unknown_extension_is_read_and_written_as_csv() {
     fs::remove_file(path).unwrap();
     assert!(written.contains("2020-01-01,1.5"), "{written}");
 }
+
+/// `flows.csv.gz` as the gzip tool writes it (`gzip -k flows.csv`, Apple gzip
+/// 479). Unlike Kalix's own writers it carries the file name and a modified
+/// time in its header. `CsvGzDataViewTest` in the IDE reads the same bytes.
+const GZIP_TOOL_FIXTURE_HEX: &str =
+    "1f8b080800e10b5e0003666c6f77732e6373760073492c49d549cbc92fe7\
+     32323032d0353004221d433d5304d748c748cfdc940b0010d16d5d29000000";
+
+#[test]
+fn test_read_ts_reads_a_file_made_by_the_gzip_tool() {
+    let hex = GZIP_TOOL_FIXTURE_HEX;
+    let bytes: Vec<u8> = (0..hex.len()).step_by(2)
+        .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
+        .collect();
+    assert_eq!(bytes[3] & 0x08, 0x08, "the fixture's header names its file");
+    let path = gz_scratch("gzip_tool.csv.gz");
+    fs::write(&path, bytes).unwrap();
+    let result = read_ts(&path);
+    fs::remove_file(&path).ok();
+    let series = result.expect("a gzip-made file reads");
+    assert_eq!(series[0].name, "flow");
+    assert_eq!(series[0].values, vec![1.5, 2.75]);
+}
