@@ -219,22 +219,18 @@ public class ValidationUtils {
 
     /** Fields published per account, per account group, and per RAS. Mirror
      *  the engine's ACCOUNT_SERIES_FIELDS / GROUP_SERIES_FIELDS
-     *  (src/hydrology/accounts/account_manager.rs) — groups aggregate every
-     *  account field but `debit_factor`, `size` and `use` included (summed,
-     *  except `allocation_pct`: group allocation over group size). `size`,
-     *  `initial` and `debit_factor` are static (fixed at load, not per-step),
-     *  but are still valid field names here. A group has no `debit_factor`:
-     *  a sum of factors means nothing. */
+     *  (src/hydrology/accounts/account_manager.rs). A group aggregates every
+     *  account field except `debit_factor`: each is summed, `size` and `use`
+     *  among them, apart from `allocation_pct`, which is group allocation over
+     *  group size. A group has no `debit_factor` because a sum of factors
+     *  means nothing. `size`, `initial` and `debit_factor` are static (fixed
+     *  at load, not per-step), but are still valid field names here. */
+    private static final java.util.Set<String> ACCOUNT_OUTPUT_FIELDS =
+        java.util.Set.of("opening_balance", "closing_balance", "debits", "allocation", "allocation_pct",
+                         "use", "committed", "size", "initial", "debit_factor");
     private static final java.util.Set<String> ACCOUNT_GROUP_OUTPUT_FIELDS =
         java.util.Set.of("opening_balance", "closing_balance", "debits", "allocation", "allocation_pct",
                          "use", "committed", "size", "initial");
-    private static final java.util.Set<String> ACCOUNT_OUTPUT_FIELDS = withDebitFactor(ACCOUNT_GROUP_OUTPUT_FIELDS);
-
-    private static java.util.Set<String> withDebitFactor(java.util.Set<String> groupFields) {
-        java.util.Set<String> fields = new java.util.HashSet<>(groupFields);
-        fields.add("debit_factor");
-        return java.util.Set.copyOf(fields);
-    }
     private static final java.util.Set<String> RAS_OUTPUT_FIELDS =
         java.util.Set.of("fired", "pct", "amount", "undistributed");
 
