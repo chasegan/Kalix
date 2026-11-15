@@ -128,8 +128,8 @@ Supported data formats are listed below.
 | Extension | Implied format | Details |
 | --- | --- | --- |
 | .csv | Comma separated values. | see below… |
-| .csv.zip | Zip-compressed CSV. | see below… |
-| .csv.gz | Gzip-compressed CSV. | see below… |
+| .csv.zip | Zipped CSV. | see below… |
+| .csv.gz | Gzipped CSV. | see below… |
 | .pxt + .pxb | Pixie fast lightweight binary format. | see below… |
 
 ### CSV files
