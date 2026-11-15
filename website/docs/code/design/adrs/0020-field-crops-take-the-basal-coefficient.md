@@ -66,3 +66,12 @@ was the state of affairs that prompted this record.
 The parser and the IDE linter refuse `kc`; the engine refuses a field without
 `tew` and `rew`. Tests in `test_crop_sections.rs` and `test_field_crops.rs`
 pin both messages.
+
+## Amendments
+
+- *2026-11-15* — The same drivers removed `p_adjust` before release. A crop
+  could write `p_adjust = false` to hold its depletion fraction constant, as
+  Source Irrigator does, instead of adjusting it for the day's
+  evapotranspiration by FAO-56 Table 22's footnote. The field offers FAO-56's
+  rule and documents the conversion from Source; it does not carry a switch
+  that reproduces a legacy model's simplification.
