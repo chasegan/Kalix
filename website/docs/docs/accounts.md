@@ -110,8 +110,8 @@ The factor applies to everything a user node does with the account:
   the order times the factor, so `committed` stays in the units of the
   balance.
 - **Order accounts.** An account in `order_accounts` authorises
-  `balance / debit_factor` of an order, and is debited the order times the
-  factor when the order is placed.
+  `balance / debit_factor` of an order. When the order is placed it is debited
+  the part of the order it authorises, times the factor.
 
 In a list or a [combination](#combining-accounts) each account uses its own
 factor. In `a | b` the take covered is the sum of what each covers. In `a & b`
