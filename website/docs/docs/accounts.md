@@ -41,7 +41,6 @@ are the *verbs*. See [Allocation systems](allocation-systems.md) for the why.
 | `size` | yes | Account size [ML] — the entitlement volume that percentages are taken of. May be an expression. |
 | `initial` | no (defaults to 0) | Opening balance [ML] at the start of the run, within `[0, size]`. |
 | `pair` | no | <a name="pair"></a><a name="co_acc"></a>Paired account — a reference to an account declared elsewhere, not a declaration. The pairing is **symmetric**: declare it on either account's row, and `[ras.*]` action arguments read the other end as [`self.pair.<field>`](ras.md#self) from both sides. An account can be in at most one pair. Nothing else about a paired account is special — it is drawn on via a user's `accounts` list like any account. |
-
 | `debit_factor` | no (defaults to 1) | What a user's take of 1 ML debits from the account. A finite number greater than 0. See [Debit factor](#debit-factor). |
 
 Columns are addressed by the header, not by position, so `name, size, initial`
