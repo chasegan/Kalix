@@ -9,38 +9,19 @@ assets:
 pip: "pip install kalix==0.4.10"
 ---
 
-- Website: every link and button shows the same keyboard focus ring; tutorial and docs screenshots are framed with captions and a zoom badge; the About Kalix page is rebuilt and its quick example runs again; the Ask panel has a close button (Esc closes it too).
-- Storage ordering targets (#492):
-    - `target_volume` sets an ordering target as a volume [ML], as an alternative to `target_level`. The two cannot be given together, and both `target_level` and `target_volume` results are available whichever is used.
-    - `forecast_volume_adjustment` [ML] adds the net water you expect to arrive (+) or leave (-) before today's order does, such as a forecast inflow or a planned diversion, to the forecast a target storage orders against. It is a total over the order travel time, not a daily rate, and is added on top of the orders already en route. It needs a target.
-    - A new `forecast_volume` result records the forecast each target order is based on.
-    - The IDE linter flags both targets given together and an adjustment without a target, and warns that a target has no effect under `order_through = true`.
-- `true` and `false` are read in any case (`TRUE`, `True`) for `order_through`, `demand_carryover` and a table's `bilinear`, in the engine and the IDE linter alike. Before, the engine refused anything but lowercase (#522).
-- Var blocks (#493):
-    - `[var.*]` blocks can take `phase = order`. The block runs at its place in the order phase, which works up the file: it reads the orders of nodes below it, and nodes above it read the block in their order inputs (an order control's `set_order`, a storage's `target_level`).
-    - A node or var above a `[var.*]` block can now refer to it (e.g. at `[-1, 0]`). This used to fail at load as a duplicate var definition.
-    - An error while running a var block now names the block, not the last node run, and one in a `[ras.*]` section names the section.
-- IDE navigation (tried on Windows and macOS, not yet on Linux):
-    - Shift+scroll, or a sideways swipe, pans the schematic map and scrolls plots through time. Middle-drag pans the map from anywhere.
-    - Two-finger trackpad scrolling zooms smoothly instead of in steps. On macOS a mouse wheel now zooms a little for a slow notch and further when spun fast.
-    - `View → Scroll Pans Map`, also in Preferences under Node Diagram, makes scrolling pan the map, with a mouse wheel as well as a trackpad. Zoom is then Ctrl+scroll (Cmd+scroll on macOS) or, on Windows, pinch. Plots are not affected.
+- New! Accounts can have a `debit_factor`, so a user's take of 1 ML debits more (or less) than 1 ML. See [debit factor](https://kalix.org/docs/accounts/#debit-factor).
+- New! A storage can order to a `target_volume` as an alternative to `target_level`, and `forecast_volume_adjustment` lets you allow for water you expect to arrive or leave. See [storage](https://kalix.org/docs/storage/).
+- New! `[var.*]` blocks can run in the order phase with `phase = order`. See [vars](https://kalix.org/docs/vars/).
+- New! Gzipped CSV files (`.csv.gz`) work wherever `.csv.zip` does. See [compressed CSV files](https://kalix.org/docs/input-data/#compressed-csv-files-csvzip-csvgz).
+- Smoother map and plot navigation in the IDE:
+    - Shift+scroll pans, and trackpad zoom is smooth.
     - Ctrl+0 (Cmd+0 on macOS) zooms the map to fit.
-    - Alt+letter opens the menus on Windows and Linux, e.g. Alt+F for `File`.
-- Gzipped CSV, `.csv.gz` (#521):
-    - A `.csv.gz` is the file that `gzip` and pandas produce from a CSV. Kalix reads and writes it wherever it reads and writes `.csv.zip`: as model input data, with `kalix simulate -o` and `kalix convert`, from Python, and throughout the IDE, including Save Results.
-    - In the IDE's file tree, Gzip compresses a `.csv` and Gunzip unpacks a `.gz`. Gunzip asks before it overwrites a file.
-    - A compressed Source result file (`.res.csv.zip` or `.res.csv.gz`) is refused in the IDE with a message. Before, it opened with its header shown as rows.
-- IDE file tree:
-    - Zip shows its archive only once it is complete, and a failed Zip leaves no partial file. A second Zip of the same selection while the first is running is refused.
-    - Zip is offered for any selection of several items.
-    - Duplicate keeps the whole extension, so a copy of `flows.csv.zip` is `flows (1).csv.zip`. The same applies to `.csv.gz` and `.res.csv`.
-    - Error dialogs give the reason, such as `flows.csv: access denied`.
-- A read-only data tab that cannot read its file says why in its banner. If the file changes and cannot be re-read, the banner says the tab is showing the previous content.
-- Account debit factors (#520):
-    - A `debit_factor` column in an `[acc.*]` accounts table sets what a user's take of 1 ML debits from the account. A take of 100 ML from an account with a factor of 1.2 debits 120 ML.
-    - A take is limited to what the balance can be debited for, which is `balance / debit_factor`. A regulated user's order is limited and committed the same way, and `order_accounts` follow the same rule.
-    - `[ras.*]` actions are not factored. They work in the units of the balance.
-    - `acc.<name>.debit_factor` can be read in expressions and recorded in `[outputs]`.
-    - A model without the column gives the results it gave before.
-    - `debit_factor` is now a column name, so an account can no longer be called `debit_factor`.
-- `kalix simulate` now stops with an error and a non-zero exit code when the output file or the mass balance report cannot be written. Before, it printed the error, then `Done!`, and exited with 0.
+    - `View → Scroll Pans Map` makes scrolling pan the map.
+- IDE:
+    - `Gzip` and `Gunzip` in the file tree.
+    - `Zip` is more robust, and `Duplicate` keeps the whole extension (`flows (1).csv.zip`).
+    - Alt+letter opens the menus on Windows and Linux.
+- Fixes:
+    - `true` and `false` are read in any case (#522).
+    - `kalix simulate` exits with an error when it cannot write its output.
+    - An account can no longer be called `debit_factor`.
