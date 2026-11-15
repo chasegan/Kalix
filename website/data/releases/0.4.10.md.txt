@@ -1,6 +1,6 @@
 ---
 version: "0.4.10"
-date: TBD
+date: 2026-11-15
 prerelease: false
 assets:
   Windows: "https://github.com/chasegan/Kalix/releases/download/v0.4.10/KalixIDE-Windows-0.4.10-Portable.zip"
@@ -13,15 +13,18 @@ pip: "pip install kalix==0.4.10"
 - New! A storage can order to a `target_volume` as an alternative to `target_level`, and `forecast_volume_adjustment` lets you allow for water you expect to arrive or leave. See [storage](https://kalix.org/docs/storage/).
 - New! `[var.*]` blocks can run in the order phase with `phase = order`. See [vars](https://kalix.org/docs/vars/).
 - New! Gzipped CSV files (`.csv.gz`) work wherever `.csv.zip` does. See [compressed CSV files](https://kalix.org/docs/input-data/#compressed-csv-files-csvzip-csvgz).
-- Smoother map and plot navigation in the IDE:
-    - Shift+scroll pans, and trackpad zoom is smooth.
-    - Ctrl+0 (Cmd+0 on macOS) zooms the map to fit.
-    - `View → Scroll Pans Map` makes scrolling pan the map.
-- IDE:
+- [`Field` node](https://kalix.org/docs/field/) now follows FAO-56 throughout. See [provenance](https://kalix.org/docs/field/#provenance).
+    - Per FAO-56, crop roots now grow from `initial_root_depth` to `root_depth` over the season.
+    - Per FAO-56 (Table 22), the depletion fraction `p` is adjusted each day for the crop's evapotranspiration. There is no switch to turn this off.
+    - Crop transpiration is now based on their basal coefficient `kcb` rather than `kc`, and a field needs `tew` and `rew` for its surface evaporation layer. Transpiration and soil evaporation are computed separately. 
+    - To convert a Kc table, see [coming from a single coefficient](https://kalix.org/docs/field/#coming-from-a-single-coefficient).
+    - Storm runoff uses the field's `curve_number`, and the day's curve now follows the dryness of the surface layer (ASCE Manual 70). 
+    - `interception` now defaults to 0 (was 0.2).
+    - The IDE's field template is a cotton crop on a Vertosol, with parameters from the published literature for the northern Murray–Darling Basin.
+- Minor KalixIDE things:
     - `Gzip` and `Gunzip` in the file tree.
     - `Zip` is more robust, and `Duplicate` keeps the whole extension (`flows (1).csv.zip`).
     - Alt+letter opens the menus on Windows and Linux.
-- Fixes:
-    - `true` and `false` are read in any case (#522).
-    - `kalix simulate` exits with an error when it cannot write its output.
-    - An account can no longer be called `debit_factor`.
+    - Shift+scroll pans, and trackpad zoom is smooth.
+    - Ctrl+0 (Cmd+0 on macOS) zooms the map to fit.
+    - `View → Scroll Pans Map` makes scrolling pan the map.

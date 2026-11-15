@@ -355,7 +355,7 @@ dependencies = [
 
 [[package]]
 name = "kalix"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "approx",
  "base64",
@@ -378,7 +378,7 @@ dependencies = [
 
 [[package]]
 name = "kalix-python"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "kalix",
  "numpy",
