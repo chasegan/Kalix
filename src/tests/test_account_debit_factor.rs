@@ -401,6 +401,18 @@ fn a_saved_model_reloads_to_the_same_result() {
     assert_eq!(balance(&first, "b").to_bits(), balance(&second, "b").to_bits());
 }
 
+/// A factor with more digits than the other columns are saved with: 1 / 0.95.
+#[test]
+fn a_long_factor_is_saved_exactly() {
+    let ini = unregulated_model(30.0, "a, 1000, 100, 1.0526315789473684,", "accounts = a");
+    let text = saved(&ini, false);
+    assert!(text.contains("a, 1000, 100, 1.0526315789473684,"), "{text}");
+    let mut first = run(&ini);
+    let mut second = run(&text);
+    assert_eq!(series(&mut first, "acc.a.debits"), series(&mut second, "acc.a.debits"));
+    assert_eq!(balance(&first, "a").to_bits(), balance(&second, "a").to_bits());
+}
+
 #[test]
 fn a_second_run_of_the_same_model_gives_the_same_result() {
     let mut m = load(&regulated_model(30.0, "a, 1000, 100, 1.25,", "accounts = a"));

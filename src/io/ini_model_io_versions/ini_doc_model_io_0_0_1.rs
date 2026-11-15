@@ -2565,7 +2565,10 @@ fn format_account_group_table(manager: &crate::hydrology::accounts::account_mana
                 out.push_str(&format!("{}, ", pair_name));
             }
             if has_debit_factor {
-                out.push_str(&format!("{}, ", format_f64(account.debit_factor)));
+                // The shortest text that reads back as the same number, not format_f64, which
+                // keeps ten decimal places. A factor is often a long reciprocal (1 / 0.95), and
+                // it multiplies every take, so a rounded one changes the results.
+                out.push_str(&format!("{}, ", account.debit_factor));
             }
         }
     }
