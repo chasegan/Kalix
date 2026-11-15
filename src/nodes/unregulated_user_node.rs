@@ -321,17 +321,18 @@ impl UnregulatedUserNode {
             }
         }
 
-        // Restrict take based on accounts if applicable: each account covers
-        // its balance over its debit factor (#520), and available volume is
+        // Restrict take based on accounts if applicable: the take available
+        // from an account is its balance over its debit factor (#520), and
+        // available volume is
         // the sum across the ordered account list, or what the combination
         // makes available (`|` sums, `&` takes the least; account_tree.rs)
         if COMBINED {
-            available = available.min(self.account_tree.balance(_account_manager));
+            available = available.min(self.account_tree.available_take(_account_manager));
         } else if !self.account_idxs.is_empty() {
-            let total_balance: f64 = self.account_idxs.iter()
-                .map(|&idx| _account_manager.get_account_take_cover(idx))
+            let total_available: f64 = self.account_idxs.iter()
+                .map(|&idx| _account_manager.get_account_available_take(idx))
                 .sum();
-            available = available.min(total_balance);
+            available = available.min(total_available);
         }
 
         // The orders arriving on the supply outlets join the demand. They are served first, in

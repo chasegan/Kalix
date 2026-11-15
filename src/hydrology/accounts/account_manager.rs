@@ -377,67 +377,68 @@ impl AccountManager {
         self.accounts[account_id].debits_this_period += amount;
     }
 
-    /// The take an account's balance covers: the balance, floored at zero, over
-    /// its debit factor. A division and not a multiplication by a stored
-    /// reciprocal, so that 120 at a factor of 1.2 covers 100 and not
-    /// 100.00000000000001.
+    /// The take available from an account: its balance, floored at zero, over
+    /// its debit factor. In the units of the take, not of the balance. A
+    /// division and not a multiplication by a stored reciprocal, so that 120
+    /// at a factor of 1.2 makes 100 available and not 100.00000000000001.
     #[inline(always)]
-    pub fn get_account_take_cover(&self, account_id: usize) -> f64 {
+    pub fn get_account_available_take(&self, account_id: usize) -> f64 {
         let account = &self.accounts[account_id];
         account.balance.max(0.0) / account.debit_factor
     }
 
-    /// The order an account can still cover: the balance less the orders
+    /// The order available from an account: its balance less the orders
     /// already en route, floored at zero (a RAS cut can leave the committed
     /// orders above the balance until they fall due), over its debit factor.
     #[inline(always)]
-    pub fn get_account_uncommitted_take_cover(&self, account_id: usize) -> f64 {
+    pub fn get_account_available_order(&self, account_id: usize) -> f64 {
         let account = &self.accounts[account_id];
         (account.balance - account.committed).max(0.0) / account.debit_factor
     }
 
-    /// Debit an account for as much of a user node's `take` as its balance
-    /// covers, at its debit factor, and return the take that was covered. An
-    /// account that covers no more than the take is debited its whole balance,
-    /// so that it lands on zero and not a rounding error to either side of it.
-    /// Otherwise the debit is the take times the factor, held to the balance
-    /// for the same reason. With a factor of 1 this is min(take, balance),
-    /// debited as it is.
+    /// Debit an account for as much of a user node's `take` as is available
+    /// from it, at its debit factor, and return that much of the take. An
+    /// account with no more available than the take is debited its whole
+    /// balance, so that an account drained on its own lands on zero.
+    /// Otherwise the debit is the take times the factor, held to the balance.
+    /// With a factor of 1 this is min(take, balance), debited as it is.
     #[inline(always)]
     pub fn debit_account_for_take(&mut self, account_id: usize, take: f64) -> f64 {
         let account = &self.accounts[account_id];
         let balance = account.balance.max(0.0);
         let factor = account.debit_factor;
-        let covered = balance / factor;
-        let (taken, debit) = if take < covered { (take, (take * factor).min(balance)) } else { (covered, balance) };
+        let available = balance / factor;
+        let (taken, debit) = if take < available { (take, (take * factor).min(balance)) } else { (available, balance) };
         if debit > 0.0 {
             self.debit_account(account_id, debit);
         }
         taken
     }
 
-    /// As `debit_account_for_take`, committing an accepted order against the
-    /// account's uncommitted balance, due in `due_in` steps. Returns the order
-    /// that was covered.
+    /// As `debit_account_for_take`, committing an accepted `order` against the
+    /// account's uncommitted balance, due in `due_in` steps. Returns as much
+    /// of the order as was available.
     #[inline(always)]
-    pub fn commit_account_for_take(&mut self, account_id: usize, take: f64, due_in: usize) -> f64 {
+    pub fn commit_account_for_order(&mut self, account_id: usize, order: f64, due_in: usize) -> f64 {
         let account = &self.accounts[account_id];
         let uncommitted = (account.balance - account.committed).max(0.0);
         let factor = account.debit_factor;
-        let covered = uncommitted / factor;
-        let (taken, commit) = if take < covered { (take, (take * factor).min(uncommitted)) } else { (covered, uncommitted) };
+        let available = uncommitted / factor;
+        let (ordered, commit) = if order < available { (order, (order * factor).min(uncommitted)) } else { (available, uncommitted) };
         if commit > 0.0 {
             self.commit_account(account_id, commit, due_in);
         }
-        taken
+        ordered
     }
 
-    /// Commit the part of an accepted order that no account could cover (one
-    /// that order_accounts authorised) to this account, at its debit factor.
+    /// Commit an accepted `order` to this account at its debit factor,
+    /// whatever is available from it. For the part of an order that
+    /// order_accounts authorised beyond the accounts, and for each single
+    /// account under a combination's outermost `&`.
     #[inline(always)]
-    pub fn commit_account_uncovered_take(&mut self, account_id: usize, take: f64, due_in: usize) {
+    pub fn commit_account_for_order_unchecked(&mut self, account_id: usize, order: f64, due_in: usize) {
         let factor = self.accounts[account_id].debit_factor;
-        self.commit_account(account_id, take * factor, due_in);
+        self.commit_account(account_id, order * factor, due_in);
     }
 
     /// Set an account's debit factor, as the model is read. The reader has
@@ -460,7 +461,7 @@ impl AccountManager {
     /// the balance less the orders already en route, floored at zero (a RAS
     /// cut can leave the committed orders above the balance until they fall
     /// due). Read by tests; the nodes read the order this covers
-    /// (get_account_uncommitted_take_cover).
+    /// (get_account_available_order).
     pub fn get_account_uncommitted_balance(&self, account_id: usize) -> f64 {
         let account = &self.accounts[account_id];
         (account.balance - account.committed).max(0.0)

@@ -69,7 +69,7 @@ pub struct Account {
     /// What a user node's take of one unit debits from this account (the
     /// `debit_factor` table column; 1 unless declared). A take of V debits
     /// `debit_factor * V` and an accepted order of V commits as much, so the
-    /// account covers a take of `balance / debit_factor`. It applies to what
+    /// take available from the account is `balance / debit_factor`. It applies to what
     /// user nodes do and to nothing else: [ras.*] actions work in the
     /// balance's own units. Every user applies it, with no test for whether
     /// it is 1: x / 1.0 and x * 1.0 are x bit for bit, as with the regulated

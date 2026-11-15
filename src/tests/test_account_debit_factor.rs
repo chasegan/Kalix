@@ -278,7 +278,7 @@ fn a_regulated_combination_is_capped_committed_and_debited_by_factor() {
 /// the account each step, so the 40 ordered on day 1 arrives on day 3 to a balance of 40,
 /// which covers a take of 32.
 #[test]
-fn a_delivery_is_limited_by_what_the_balance_of_the_day_covers() {
+fn a_delivery_is_limited_by_what_the_available_take_of_the_day_covers() {
     let ini = regulated_model(40.0, "a, 1000, 100, 1.25,", "accounts = a")
         + "\n[ras.cut]\ntargets = acc.pools\ntrigger = every_step\naction = debit(20)\n";
     let mut m = run(&ini);
