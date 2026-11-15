@@ -94,12 +94,11 @@ public final class CompressedCsvFormat {
     /**
      * The wrapper {@code fileName} (or a path) names; {@link Compression#NONE} for anything else.
      * A compressed Source result ({@code .res.csv.zip}, {@code .res.csv.gz}) is not a compressed
-     * CSV: nothing reads one, so it is {@link Compression#NONE} here and is refused by name
+     * CSV: the IDE does not read one, so it is {@link Compression#NONE} here and is refused by name
      * (see {@link #isCompressedSourceResult}).
      */
     public static Compression compressionOf(String fileName) {
-        Compression wrapper = wrapperOf(fileName);
-        return wrapper != Compression.NONE && wrapsSourceResult(fileName, wrapper) ? Compression.NONE : wrapper;
+        return isCompressedSourceResult(fileName) ? Compression.NONE : wrapperOf(fileName);
     }
 
     /** Whether the name is a Source result inside a zip or gzip wrapper, which Kalix does not read. */
@@ -242,11 +241,16 @@ public final class CompressedCsvFormat {
     /**
      * A UTF-8 writer for {@code file}, compressed when the name says so — the
      * extension is the single source of truth for the format, so a compressed
-     * name is never written plaintext. Identical content writes identical
+     * name is never written plaintext; a compressed Source result name is
+     * refused. Identical content writes identical
      * bytes, matching the engine's reproducibility pin (the JDK's gzip header
      * always carries MTIME 0 and no file name).
      */
     public static Writer newUtf8Writer(File file) throws IOException {
+        if (isCompressedSourceResult(file.getName())) {
+            // NONE below would write plain text under a compressed name.
+            throw new IOException(COMPRESSED_SOURCE_RESULT_NOT_SUPPORTED);
+        }
         return switch (compressionOf(file.getName())) {
             case ZIP -> CsvZipFormat.newZipUtf8Writer(file);
             case GZIP -> CsvGzFormat.newGzipUtf8Writer(file);

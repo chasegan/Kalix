@@ -734,6 +734,11 @@ public class RunContextMenuManager {
         if (chosen.isPresent()) {
             File selectedFile = chosen.get();
             String lowerName = selectedFile.getName().toLowerCase();
+            if (CompressedCsvFormat.isCompressedSourceResult(lowerName)) {
+                DialogUtils.showError(parentFrame,
+                    CompressedCsvFormat.COMPRESSED_SOURCE_RESULT_NOT_SUPPORTED, "Save Results");
+                return;
+            }
 
             // The format IS the extension the user settled on. The type combo only ever
             // sets that extension, so there is no second opinion to reconcile against.

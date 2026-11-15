@@ -7,6 +7,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Writer;
@@ -228,6 +229,17 @@ class CsvGzDataViewTest {
         assertEquals("csv.gz", CompressedCsvFormat.compressionOf("OUT.CSV.GZ").engineFormat());
         assertEquals(".csv", CompressedCsvFormat.compressionOf("out").saveExtension());
         assertEquals(".csv.gz", CompressedCsvFormat.compressionOf("out.csv.gz").saveExtension());
+    }
+
+    @Test
+    void theSharedWriterRefusesACompressedSourceResultName() {
+        // Otherwise the name falls to the plain writer and gets text under a .gz or .zip name.
+        for (String name : new String[] {"stats.res.csv.gz", "stats.res.csv.zip"}) {
+            File target = tempDir.resolve(name).toFile();
+            IOException e = assertThrows(IOException.class, () -> CompressedCsvFormat.newUtf8Writer(target));
+            assertTrue(e.getMessage().contains("not supported"), e.getMessage());
+            assertFalse(target.exists(), "nothing is written");
+        }
     }
 
     @Test

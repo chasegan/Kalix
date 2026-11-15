@@ -133,8 +133,8 @@ class CsvZipDataViewTest {
     void extensionTestCoversTheDoubleExtensionFamily() {
         assertTrue(CsvZipFormat.isCsvZip("flows.csv.zip"));
         assertTrue(CsvZipFormat.isCsvZip("FLOWS.CSV.ZIP"));
-        // A .res.csv.zip is not read as a zip CSV: compressed Source results
-        // are refused by name, as the engine refuses them.
+        // A .res.csv.zip is not read as a zip CSV: the IDE refuses compressed
+        // Source results by name (ADR-0021 §5).
         assertFalse(CsvZipFormat.isCsvZip("results.res.csv.zip"));
         assertFalse(CsvZipFormat.isCsvZip("flows.csv"));
         assertFalse(CsvZipFormat.isCsvZip("archive.zip"),

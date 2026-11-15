@@ -699,11 +699,14 @@ public class FlowVizDataManager {
                         @SuppressWarnings("unchecked")
                         List<File> files = (List<File>) transferable.getTransferData(DataFlavor.javaFileListFlavor);
 
-                        // Filter for supported files (CSV, zipped CSV and Pixie)
+                        // Filter for supported files (CSV, compressed CSV and Pixie). A
+                        // compressed Source result passes too, so loadFile can say why it
+                        // is refused rather than have it vanish from the drop.
                         List<File> supportedFiles = files.stream()
                             .filter(file -> {
                                 String name = file.getName().toLowerCase();
                                 return CompressedCsvFormat.isCsvOrCompressedCsv(name)
+                                    || CompressedCsvFormat.isCompressedSourceResult(name)
                                     || name.endsWith(".pxt");
                             })
                             .toList();

@@ -150,11 +150,14 @@ public class DatasetLoaderManager {
                         @SuppressWarnings("unchecked")
                         List<File> files = (List<File>) transferable.getTransferData(DataFlavor.javaFileListFlavor);
 
-                        // Filter for supported files (CSV, zipped CSV and Pixie)
+                        // Filter for supported files (CSV, compressed CSV and Pixie). A
+                        // compressed Source result passes too, so the loader can say why
+                        // it is refused rather than have it vanish from the drop.
                         List<File> supportedFiles = files.stream()
                             .filter(file -> {
                                 String name = file.getName().toLowerCase();
                                 return CompressedCsvFormat.isCsvOrCompressedCsv(name)
+                                    || CompressedCsvFormat.isCompressedSourceResult(name)
                                     || name.endsWith(".pxt") || name.endsWith(".pxb");
                             })
                             .toList();
@@ -225,10 +228,8 @@ public class DatasetLoaderManager {
         // ".res.csv" must be tested before ".csv" — the latter would otherwise swallow it.
         // (Compressed CSV collides with neither; the importer decompresses it by name.)
         if (CompressedCsvFormat.isCompressedSourceResult(fileName)) {
-            logger.warn("{}: {}", fileName, CompressedCsvFormat.COMPRESSED_SOURCE_RESULT_NOT_SUPPORTED);
-            if (statusUpdater != null) {
-                statusUpdater.accept(file.getName() + ": " + CompressedCsvFormat.COMPRESSED_SOURCE_RESULT_NOT_SUPPORTED);
-            }
+            DialogUtils.showError(parentFrame,
+                file.getName() + ": " + CompressedCsvFormat.COMPRESSED_SOURCE_RESULT_NOT_SUPPORTED, "Load Error");
         } else if (SourceResCsvFormat.isResCsv(fileName)) {
             loadResCsvDataset(file);
         } else if (CompressedCsvFormat.isCsvOrCompressedCsv(fileName)) {

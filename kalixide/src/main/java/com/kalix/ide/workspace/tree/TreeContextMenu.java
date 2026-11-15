@@ -220,7 +220,7 @@ public class TreeContextMenu {
                     sel -> fileOps.zipFiles(files(sel), tree.getRootFile())
                 ),
                 // A gzipped CSV is still data the engine and IDE read; only plain
-                // CSV is offered, as a .res.csv.gz is not read by either.
+                // CSV is offered, as the IDE does not read a .res.csv.gz.
                 item(
                     "Gzip", sel -> isSinglePlainCsv(sel) && context == BuildContext.FileTree,
                     sel -> fileOps.gzipFile(file(sel))

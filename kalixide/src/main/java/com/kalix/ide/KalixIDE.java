@@ -651,6 +651,9 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             // A compressed CSV compares by its decompressed text — reading the
             // raw compressed bytes could only produce an encoding error or garbage.
             // Bounded by the same in-memory limit the data viewer honours.
+            if (CompressedCsvFormat.isCompressedSourceResult(file.getName())) {
+                throw new java.io.IOException(CompressedCsvFormat.COMPRESSED_SOURCE_RESULT_NOT_SUPPORTED);
+            }
             if (CompressedCsvFormat.isCompressedCsv(file.getName())) {
                 long limit = com.kalix.ide.preferences.PreferenceKeys
                     .DATAVIEW_COMPRESSED_CSV_MEMORY_LIMIT_MB.get() * 1024L * 1024L;
