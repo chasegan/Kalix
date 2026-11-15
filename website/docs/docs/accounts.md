@@ -94,30 +94,31 @@ A take is limited to what can be debited without the balance going below
 zero. The take available from an account is its balance over the factor.
 
 ```
-available take = balance / debit_factor
+take available = balance / debit_factor
 ```
 
 With a balance of 120 ML and a factor of 1.2, the take available from `smith`
 is 100 ML. That take debits 120 ML and leaves the account empty.
 
-The factor applies to everything a user node does with the account.
+The factor applies to everything a user node does with the account. An
+[unregulated user](unregulated-user.md#accounts) and a
+[regulated user](regulated-user.md#accounts) are both limited and debited this
+way.
 
-An [unregulated user](unregulated-user.md#accounts) and a
-[regulated user](regulated-user.md#accounts) are both limited by the take
-available from their accounts. Each is debited the take times the factor.
-
-A regulated user's order is limited by the order available from the account.
+A [regulated user](regulated-user.md#accounts) also commits each order it
+places to the account until the order falls due. The order available from an
+account allows for what is already committed, and is never below zero.
 
 ```
-available order = (balance − committed) / debit_factor
+order available = max(0, balance − committed) / debit_factor
 ```
 
 The accepted order is committed as the order times the factor. So `committed`
 stays in the units of the balance.
 
-An account in `order_accounts` authorises an order of `balance / debit_factor`.
-When the order is placed, the account is debited the part of the order it
-authorises, times the factor.
+An account in `order_accounts` authorises an order up to the take available
+from it. When the order is placed, the account is debited the part of the
+order it authorises, times the factor.
 
 In a list or a [combination](#combining-accounts) each account uses its own
 factor. In `a | b` the take available is the sum of what is available from

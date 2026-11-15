@@ -140,12 +140,18 @@ is the part the user could order. One consequence: when users share an account,
 the one upstream diverts first and may take water released for an order placed
 downstream.
 
-Where an account has a [debit factor](accounts.md#debit-factor), the order
-available from it is `(balance − committed) / debit_factor`. The delivery
-available from it is `balance / debit_factor`. An accepted order is committed
-as the order times the factor. A delivery is debited as the delivery times the
-factor. An account in `order_accounts` follows the same rule when the order is
-placed.
+Where an account has a [debit factor](accounts.md#debit-factor), an accepted
+order is committed as the order times the factor. The delivery available from
+the account is its balance over the factor.
+
+```
+delivery available = balance / debit_factor
+```
+
+A delivery is debited as the delivery times the factor. An account in
+`order_accounts` authorises an order up to the same volume. When the order is
+placed, that account is debited the part of the order it authorises, times the
+factor.
 
 When `accounts` is a [combination](accounts.md#combining-accounts), the same
 three moments follow it. The order cap is what the combination makes available
