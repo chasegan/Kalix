@@ -242,9 +242,8 @@ fn test_water_below_one_crops_roots_is_there_for_the_next() {
     // spreads: 12 in the top 500 mm, 12 below. The fallow (rooted to 500) then holds 12 down on
     // top and dries 6 a day itself (bare, kc_max x evap) to 18, then 24, and the layer below
     // remembers its 12. Day 7 a shallow crop is planted into that: it starts 24 down and dries
-    // 6 to 30. Its p of 0.54 reads 0.5 at 6 mm/day of unstressed ETc, so day 8 it opens past
-    // p x 50 = 25, so ks = 20 / 25 = 0.8 and it dries (0.8 + 0.2)
-    // x 5 = 5 to 35; 47 mm of rain fills it with 12 to spare, which the layer below takes (12
+    // 6 to 30. Its p of 0.54 reads 0.5 at 6 mm/day of unstressed ETc. Day 8 it opens past
+    // p x 50 = 25, so ks = 20 / 25 = 0.8 and it dries (0.8 + 0.2) x 5 = 5 to 35; 47 mm of rain fills it with 12 to spare, which the layer below takes (12
     // down to 0): no excess. Day 9, 60 mm: the bucket takes its 6, the layer is full, and 54 mm
     // over 4 km2 leaves. Without the layer's memory the 12 would have left on day 8.
     let ini = rig("", "evap = 5\ncrop_1 = deep\ncrop_1_plant = if(var.day.n == 1, 4, 0)\ncrop_2 = shallow\ncrop_2_plant = if(var.day.n == 7, 4, 0)\nrain = if(var.day.n == 8, 47, if(var.day.n == 9, 60, 0))")
@@ -764,7 +763,7 @@ fn test_initial_root_depth_is_checked_and_round_trips() {
 }
 
 #[test]
-fn test_p_is_adjusted_for_the_days_evapotranspiration_unless_the_crop_says_not() {
+fn test_p_is_adjusted_for_the_days_evapotranspiration() {
     // FAO-56 Table 22: the tabled p is for 5 mm/day; 0.04 more per mm less, 0.04 less per mm
     // more, within 0.1 to 0.8. On the rig's wet surface the coefficient is kc_max 1.2 (kcb 1
     // plus 0.2 of ke), so ETc is 1.2 x evap: 2 -> 0.604, 5 -> 0.46, 10 -> 0.22, 20 -> 0.1
