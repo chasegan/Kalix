@@ -26,8 +26,8 @@ pip: "pip install kalix==0.4.10"
     - `View → Scroll Pans Map`, also in Preferences under Node Diagram, makes scrolling pan the map, with a mouse wheel as well as a trackpad. Zoom is then Ctrl+scroll (Cmd+scroll on macOS) or, on Windows, pinch. Plots are not affected.
     - Ctrl+0 (Cmd+0 on macOS) zooms the map to fit.
     - Alt+letter opens the menus on Windows and Linux, e.g. Alt+F for `File`.
-- Gzip-compressed CSV, `.csv.gz` (#521):
-    - A `.csv.gz` is the file that `gzip` and pandas produce from a CSV. Kalix reads and writes it wherever it reads and writes `.csv.zip`: as model input data, with `kalix simulate -o` and `kalix convert`, from Python, and throughout KalixIDE, including Save Results.
+- Gzipped CSV, `.csv.gz` (#521):
+    - A `.csv.gz` is the file that `gzip` and pandas produce from a CSV. Kalix reads and writes it wherever it reads and writes `.csv.zip`: as model input data, with `kalix simulate -o` and `kalix convert`, from Python, and throughout the IDE, including Save Results.
     - In the IDE's file tree, Gzip compresses a `.csv` and Gunzip unpacks a `.gz`. Gunzip asks before it overwrites a file.
     - A compressed Source result file (`.res.csv.zip` or `.res.csv.gz`) is refused in the IDE with a message. Before, it opened with its header shown as rows.
 - IDE file tree:
