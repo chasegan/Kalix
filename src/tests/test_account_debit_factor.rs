@@ -3,8 +3,9 @@
 // The contract (website/docs/docs/accounts.md, "Debit factor"):
 // 1. A user node's take of V debits `debit_factor * V` from the account.
 // 2. A take is limited to what can be debited without the balance going below zero: the
-//    account covers `balance / debit_factor`, and an order `(balance - committed) /
-//    debit_factor`. In a list or a combination each account covers its own.
+//    take available from an account is `balance / debit_factor`, and the order available
+//    `(balance - committed) / debit_factor`. In a list or a combination each account has
+//    its own.
 // 3. An accepted order of V commits `debit_factor * V`.
 // 4. order_accounts follow the same rule at order time.
 // 5. [ras.*] actions are not factored.
@@ -278,7 +279,7 @@ fn a_regulated_combination_is_capped_committed_and_debited_by_factor() {
 /// the account each step, so the 40 ordered on day 1 arrives on day 3 to a balance of 40,
 /// which covers a take of 32.
 #[test]
-fn a_delivery_is_limited_by_what_the_available_take_of_the_day_covers() {
+fn a_delivery_is_limited_by_the_take_available_on_the_day() {
     let ini = regulated_model(40.0, "a, 1000, 100, 1.25,", "accounts = a")
         + "\n[ras.cut]\ntargets = acc.pools\ntrigger = every_step\naction = debit(20)\n";
     let mut m = run(&ini);
@@ -308,9 +309,11 @@ fn an_order_beyond_the_accounts_is_committed_at_the_first_accounts_factor() {
 #[test]
 fn each_side_of_a_combination_is_committed_the_whole_order_at_its_factor() {
     let table = "a, 1000, 10, 2,\n           cap, 1000, 500, 1,\n           bridge, 1000, 100, 1,";
-    let mut m = run(&regulated_model(16.0, table, "accounts = a & cap\norder_accounts = bridge"));
+    let ini = regulated_model(16.0, table, "accounts = a & cap\norder_accounts = bridge") + "acc.cap.committed\n";
+    let mut m = run(&ini);
     assert_eq!(series(&mut m, "node.user.order")[0], 16.0);
     assert_eq!(series(&mut m, "acc.a.committed")[1], 32.0);
+    assert_eq!(series(&mut m, "acc.cap.committed")[1], 16.0);
 }
 
 #[test]
