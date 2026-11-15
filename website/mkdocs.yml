@@ -229,6 +229,7 @@ nav:
               - "0018 Account combinations name accounts, not values": code/design/adrs/0018-account-combinations-name-accounts-not-values.md
               - "0019 distribute shares a volume by weight": code/design/adrs/0019-distribute-shares-a-volume-by-weight.md
               - "0020 Field crops take the basal coefficient only": code/design/adrs/0020-field-crops-take-the-basal-coefficient.md
+              - "0021 A data file's name decides its format": code/design/adrs/0021-data-file-extensions.md
           - Website:
               - code/design/website/index.md
   # Contact (docs/contact.md) runs inside the Material theme but hides both

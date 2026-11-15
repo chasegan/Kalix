@@ -362,6 +362,7 @@ dependencies = [
  "chrono",
  "clap",
  "csv",
+ "flate2",
  "indexmap",
  "libm",
  "rand",

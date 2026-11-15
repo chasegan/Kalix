@@ -77,7 +77,7 @@ fn strip_ext(path: &str) -> &str {
     pixie_io::strip_pixie_extension(path).unwrap_or(path)
 }
 
-/// Convert a timeseries file between formats (csv <-> pixie), mirroring the
+/// Convert a timeseries file between formats (csv, csv.zip, csv.gz, pixie), mirroring the
 /// CLI's `kalix convert` — both call the same engine conversion. Returns
 /// (n_series, n_points, files_written).
 #[pyfunction]

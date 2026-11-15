@@ -3,11 +3,20 @@ package com.kalix.ide.document;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import javax.swing.JComponent;
+import javax.swing.JLabel;
+import java.awt.Component;
+import java.awt.Container;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.zip.GZIPOutputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -15,6 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Pins the {@code .csv.zip} document contract (issue #409): the file opens as
@@ -50,6 +61,112 @@ class CsvZipDocumentTest {
             assertFalse(doc.isModel());
         } finally {
             doc.dispose();
+        }
+    }
+
+    @Test
+    void csvGzOpensAsAReadOnlyDataDocument() throws IOException {
+        // The gzip sibling: same contract, same reasons.
+        Path file = tempDir.resolve("flows.csv.gz");
+        try (GZIPOutputStream out = new GZIPOutputStream(Files.newOutputStream(file))) {
+            out.write("Date,flow\n2020-01-01,1.5\n".getBytes(StandardCharsets.UTF_8));
+        }
+        File gz = file.toFile();
+        assertEquals(DocumentKind.DATA, DocumentKind.forFile(gz));
+        KalixDocument doc = KalixDocument.createFor(gz);
+        try {
+            assertInstanceOf(DataDocument.class, doc);
+            assertFalse(doc.isEditable(), "gzip bytes on disk: always read-only");
+            assertNotNull(doc.getContextView(), "the decoded table is the contextual view");
+        } finally {
+            doc.dispose();
+        }
+    }
+
+    @Test
+    void anUnreadableCsvGzSaysWhyInItsBanner() throws IOException {
+        // A truncated download: the tab is read-only with nothing to show, so
+        // the banner must carry the reason rather than leave a blank tab.
+        File bogus = Files.writeString(tempDir.resolve("cut.csv.gz"), "not gzip").toFile();
+        KalixDocument doc = KalixDocument.createFor(bogus);
+        try {
+            assertFalse(doc.isEditable());
+            JComponent primary = doc.getPrimaryView();
+            assertNotSame(doc.getEditor(), primary, "the editor is wrapped in a banner");
+            List<String> labels = new ArrayList<>();
+            collectLabels(primary, labels);
+            assertTrue(labels.stream().anyMatch(t -> t.startsWith("Can't read this file")), labels.toString());
+        } finally {
+            doc.dispose();
+        }
+    }
+
+    @Test
+    void aFailedRefreshSaysTheTabShowsThePreviousContent() throws IOException {
+        // The file is rewritten and the watcher fires mid-write: the reload
+        // fails, the old rows stay, and the banner must not pass them off as current.
+        Path file = tempDir.resolve("live.csv.gz");
+        byte[] good = gzip("Date,flow\n2020-01-01,1.5\n");
+        Files.write(file, good);
+        KalixDocument doc = KalixDocument.createFor(file.toFile());
+        try {
+            JComponent primary = doc.getPrimaryView();
+            awaitBanner(primary, "Read only (.csv.gz");
+
+            Files.write(file, Arrays.copyOf(good, good.length - 4)); // cut short
+            ((DataDocument) doc).refreshDataViewFromDisk();
+            awaitBanner(primary, "showing the PREVIOUS content");
+
+            Files.write(file, gzip("Date,flow\n2020-01-01,1.5\n2020-01-02,2.5\n"));
+            ((DataDocument) doc).refreshDataViewFromDisk();
+            awaitBanner(primary, "Read only (.csv.gz");
+
+            // A file-system failure's own message is only the path: the banner gives the reason.
+            Files.delete(file);
+            ((DataDocument) doc).refreshDataViewFromDisk();
+            awaitBanner(primary, "can't be read (not found)");
+        } finally {
+            doc.dispose();
+        }
+    }
+
+    private static byte[] gzip(String content) throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (GZIPOutputStream out = new GZIPOutputStream(bytes)) {
+            out.write(content.getBytes(StandardCharsets.UTF_8));
+        }
+        return bytes.toByteArray();
+    }
+
+    /** Waits until a banner label under {@code root} contains {@code text}. */
+    private static void awaitBanner(Component root, String text) {
+        long deadline = System.currentTimeMillis() + 10_000;
+        List<String> labels = new ArrayList<>();
+        while (true) {
+            labels.clear();
+            collectLabels(root, labels);
+            if (labels.stream().anyMatch(label -> label.contains(text))) {
+                return;
+            }
+            if (System.currentTimeMillis() > deadline) {
+                throw new AssertionError("No banner containing \"" + text + "\"; labels: " + labels);
+            }
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                throw new AssertionError(e);
+            }
+        }
+    }
+
+    private static void collectLabels(Component c, List<String> out) {
+        if (c instanceof JLabel label && label.getText() != null) {
+            out.add(label.getText());
+        }
+        if (c instanceof Container container) {
+            for (Component child : container.getComponents()) {
+                collectLabels(child, out);
+            }
         }
     }
 }

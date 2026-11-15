@@ -1616,7 +1616,7 @@ impl Model {
         let vec_ts = self.collect_output_series();
 
         // Dispatch by extension: .pxb or .pxt → paired Pixie format,
-        // anything else → CSV (zip-compressed when named .csv.zip —
+        // anything else → CSV (compressed when named .csv.zip or .csv.gz —
         // write_ts keys off the same extension test as the reader).
         let lower = filename.to_ascii_lowercase();
         if lower.ends_with(".pxb") || lower.ends_with(".pxt") {
@@ -1624,7 +1624,8 @@ impl Model {
             pixie_io::write_series(base_path, &vec_ts)
                 .map_err(|e| format!("Could not write file {}: {:?}", filename, e))
         } else {
-            write_ts(filename, vec_ts).map_err(|_| format!("Could not write file {}", filename))
+            write_ts(filename, vec_ts)
+                .map_err(|e| format!("Could not write file {}: {}", filename, String::from(e)))
         }
     }
 

@@ -50,6 +50,8 @@ base64 = "0.22"
 rustc-hash = "2.0"
 indexmap = "2.0"
 zip = { version = "9.0.3", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+# Support for .csv.gz. Included via zip above, this just declares a direct dependency.
+flate2 = { version = "1.1", default-features = false, features = ["zlib-rs"] }
 
 [dependencies.uuid]
 version = "1.1.2"

@@ -26,3 +26,14 @@ pip: "pip install kalix==0.4.10"
     - `View → Scroll Pans Map`, also in Preferences under Node Diagram, makes scrolling pan the map, with a mouse wheel as well as a trackpad. Zoom is then Ctrl+scroll (Cmd+scroll on macOS) or, on Windows, pinch. Plots are not affected.
     - Ctrl+0 (Cmd+0 on macOS) zooms the map to fit.
     - Alt+letter opens the menus on Windows and Linux, e.g. Alt+F for `File`.
+- Gzipped CSV, `.csv.gz` (#521):
+    - A `.csv.gz` is the file that `gzip` and pandas produce from a CSV. Kalix reads and writes it wherever it reads and writes `.csv.zip`: as model input data, with `kalix simulate -o` and `kalix convert`, from Python, and throughout the IDE, including Save Results.
+    - In the IDE's file tree, Gzip compresses a `.csv` and Gunzip unpacks a `.gz`. Gunzip asks before it overwrites a file.
+    - A compressed Source result file (`.res.csv.zip` or `.res.csv.gz`) is refused in the IDE with a message. Before, it opened with its header shown as rows.
+- IDE file tree:
+    - Zip shows its archive only once it is complete, and a failed Zip leaves no partial file. A second Zip of the same selection while the first is running is refused.
+    - Zip is offered for any selection of several items.
+    - Duplicate keeps the whole extension, so a copy of `flows.csv.zip` is `flows (1).csv.zip`. The same applies to `.csv.gz` and `.res.csv`.
+    - Error dialogs give the reason, such as `flows.csv: access denied`.
+- A read-only data tab that cannot read its file says why in its banner. If the file changes and cannot be re-read, the banner says the tab is showing the previous content.
+- `kalix simulate` now stops with an error and a non-zero exit code when the output file or the mass balance report cannot be written. Before, it printed the error, then `Done!`, and exited with 0.

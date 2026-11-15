@@ -30,7 +30,7 @@ def simulate(
     output_file
         If given, path to write the simulation outputs to. Format is inferred
         from the extension (``.pxb`` for the Pixie pair, ``.csv`` for CSV,
-        ``.csv.zip`` for zip-compressed CSV).
+        ``.csv.zip`` or ``.csv.gz`` for compressed CSV).
     mass_balance
         If given, path to write the mass-balance report to (plain text).
 

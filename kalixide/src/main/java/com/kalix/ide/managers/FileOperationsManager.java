@@ -7,6 +7,7 @@ import com.kalix.ide.document.DataDocument;
 import com.kalix.ide.document.DocumentKind;
 import com.kalix.ide.document.DocumentManager;
 import com.kalix.ide.document.KalixDocument;
+import com.kalix.ide.io.CompressedCsvFormat;
 import com.kalix.ide.preferences.PreferenceKeys;
 import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.utils.StatusReporter;
@@ -140,16 +141,23 @@ public class FileOperationsManager {
             return;
         }
 
+        if (CompressedCsvFormat.isCompressedSourceResult(file.getName())) {
+            DialogUtils.showError(parentComponent,
+                CompressedCsvFormat.COMPRESSED_SOURCE_RESULT_NOT_SUPPORTED, AppConstants.ERROR_FILE_OPEN);
+            statusUpdateCallback.accept(AppConstants.ERROR_FAILED_TO_OPEN + file.getName());
+            return;
+        }
+
         // A large data file never enters an editor buffer — the tab's virtual views
         // read it directly (docs/data-file-viewer.md). Everything else loads as text.
         KalixDocument document;
         boolean pixieBinary = file.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".pxb");
-        boolean zipCsv = com.kalix.ide.io.CsvZipFormat.isCsvZip(file.getName());
+        boolean compressedCsv = CompressedCsvFormat.isCompressedCsv(file.getName());
         if (DocumentKind.forFile(file) == DocumentKind.DATA
-                && (pixieBinary || zipCsv || DataDocument.exceedsEditableGate(file))) {
+                && (pixieBinary || compressedCsv || DataDocument.exceedsEditableGate(file))) {
             // pixieBinary: a manifest-less .pxb must never enter a text buffer.
-            // zipCsv: nor may archive bytes — a .csv.zip is read-only, served
-            // decompressed by the DATA document's virtual views.
+            // compressedCsv: nor may compressed bytes — a compressed CSV is
+            // read-only, served decompressed by the DATA document's virtual views.
             document = documentFactory.apply(file); // the DATA ctor takes the backing file
         } else {
             final String content;

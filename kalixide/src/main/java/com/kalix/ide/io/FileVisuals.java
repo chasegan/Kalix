@@ -113,7 +113,7 @@ public final class FileVisuals {
         if (lower.endsWith(".toml") || lower.endsWith(".json")) {
             return FontAwesomeSolid.FILE_CODE;
         }
-        if (lower.endsWith(".csv.zip")) {
+        if (CompressedCsvFormat.isCompressedCsv(lower)) {
             // A dataset, not an archive: tested before the .zip test below
             // (the double-extension rule) and given the database glyph, like
             // the Pixie pair — binary on disk, data in meaning.

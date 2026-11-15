@@ -249,9 +249,7 @@ public class ObjectiveConfigPanel extends JPanel {
             KalixFileDialog.openFile(this)
                 .title("Select Observed Data File")
                 .startIn(workingDirectorySupplier != null ? workingDirectorySupplier.get() : null)
-                .filters(
-                    FileDialogFilter.of("CSV Files (*.csv)", "csv"),
-                    FileDialogFilter.of("Zipped CSV (*.csv.zip)", "csv.zip"))
+                .filters(FileDialogFilter.csvThen())
                 .show();
         if (chosen.isEmpty()) {
             return;

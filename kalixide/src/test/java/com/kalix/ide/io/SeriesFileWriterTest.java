@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SeriesFileWriterTest {
@@ -41,6 +42,22 @@ class SeriesFileWriterTest {
         File written = SeriesFileWriter.write(oneSeries(), dir.resolve("out.csv.zip").toFile(), null, null, true);
         assertEquals("out.csv.zip", written.getName());
         assertTrue(written.isFile());
+    }
+
+    @Test
+    void aCompressedSourceResultNameIsRefused() {
+        File target = dir.resolve("out.res.csv.gz").toFile();
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+            () -> SeriesFileWriter.write(oneSeries(), target, null, null, true));
+        assertTrue(e.getMessage().contains("not supported"), e.getMessage());
+        assertEquals(0, dir.toFile().list().length, "nothing is written");
+    }
+
+    @Test
+    void gzippedCsvKeepsItsExtension() throws IOException {
+        File written = SeriesFileWriter.write(oneSeries(), dir.resolve("out.csv.gz").toFile(), null, null, true);
+        assertEquals("out.csv.gz", written.getName());
+        assertEquals((byte) 0x1f, Files.readAllBytes(written.toPath())[0], "written as gzip");
     }
 
     @Test

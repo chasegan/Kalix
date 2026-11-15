@@ -4,7 +4,6 @@ import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.nio.file.FileSystemLoopException;
 import java.nio.file.FileVisitOption;
 import java.nio.file.FileVisitResult;
@@ -13,7 +12,6 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
-import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
@@ -42,26 +40,24 @@ public final class ZipArchive {
      * and symbolic links followed; a link whose target is missing fails the archive. Targets
      * must not overlap or repeat, or two entries share a name and the archive fails. The
      * archive being written is skipped if it lies inside a target. An existing file at
-     * {@code zip} is refused, and on failure no archive is left behind.
+     * {@code zip} is refused, and the archive appears only once complete ({@link StagedFile}).
      */
     public static void create(File zip, List<File> targets) throws IOException {
         Path zipPath = zip.toPath().toAbsolutePath().normalize();
         List<Path> paths = targets.stream().map(t -> t.toPath().toAbsolutePath().normalize()).toList();
         Path base = commonParent(paths);
-        // Opened before the try so that an existing file fails here and is not deleted below.
-        OutputStream file = Files.newOutputStream(zipPath, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
-        try (ZipOutputStream out = new ZipOutputStream(new BufferedOutputStream(file))) {
-            for (Path path : paths) {
-                if (Files.isDirectory(path)) {
-                    addFolder(out, base, path, zipPath);
-                } else {
-                    addFile(out, path, entryName(base, path), Files.getLastModifiedTime(path));
+        Path staging = StagedFile.stagingFor(zipPath);
+        StagedFile.write(zipPath, false, file -> {
+            try (ZipOutputStream out = new ZipOutputStream(new BufferedOutputStream(file))) {
+                for (Path path : paths) {
+                    if (Files.isDirectory(path)) {
+                        addFolder(out, base, path, staging);
+                    } else {
+                        addFile(out, path, entryName(base, path), Files.getLastModifiedTime(path));
+                    }
                 }
             }
-        } catch (IOException | RuntimeException e) {
-            Files.deleteIfExists(zipPath);
-            throw e;
-        }
+        });
     }
 
     /** The deepest folder containing every path. */

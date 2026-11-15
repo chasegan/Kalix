@@ -3,6 +3,9 @@ package com.kalix.ide.workspace.tree;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.kalix.ide.io.FileErrors;
+import com.kalix.ide.io.FileNames;
+import com.kalix.ide.io.GzipFile;
 import com.kalix.ide.io.ZipArchive;
 import com.kalix.ide.utils.DialogUtils;
 
@@ -78,7 +81,7 @@ class TreeFileOperations {
                     return null;
                 } catch (Exception ex) {
                     logger.warn("Background file operation failed", ex);
-                    return ex.getMessage() != null ? ex.getMessage() : ex.toString();
+                    return FileErrors.describe(ex);
                 }
             }
 
@@ -236,35 +239,16 @@ class TreeFileOperations {
 
     /**
      * Generates a default duplicate name using the pattern "name (1).ext". If that name already
-     * exists, tries "name (2).ext", "name (3).ext", etc., until finding an available name.
+     * exists, tries "name (2).ext", "name (3).ext", etc., until finding an available name. The
+     * counter goes before the whole extension, so a copy of {@code flows.csv.gz} is still a
+     * {@code .csv.gz}. A folder has no extension.
      */
-    private static String generateDuplicateName(File file) {
+    static String generateDuplicateName(File file) {
         String fileName = file.getName();
         if (!file.exists()) { return fileName; }
-        File parentDir = file.getParentFile();
-
-        // Split filename into base and extension
-        int dotIndex = fileName.lastIndexOf('.');
-        String baseName;
-        String extension;
-
-        if (dotIndex > 0 && !file.isDirectory()) {
-            baseName = fileName.substring(0, dotIndex);
-            extension = fileName.substring(dotIndex); // includes the dot
-        } else {
-            baseName = fileName;
-            extension = "";
-        }
-
-        // Try "name (1).ext", "name (2).ext", etc.
-        int counter = 1;
-        String candidateName;
-        do {
-            candidateName = baseName + " (" + counter + ")" + extension;
-            counter++;
-        } while (new File(parentDir, candidateName).exists());
-
-        return candidateName;
+        String extension = file.isDirectory() ? "" : FileNames.suffixOf(fileName);
+        String baseName = fileName.substring(0, fileName.length() - extension.length());
+        return FileNames.free(file.getParentFile(), baseName, extension).getName();
     }
 
     // --- Delete ---
@@ -702,14 +686,10 @@ class TreeFileOperations {
             }
             baseZFName = commonAncestor.resolve("files").toString();
         }
-        // Ensure no name collision
-        String zipFileName = baseZFName + ".zip";
-        int i = 1;
-        while (new File(zipFileName).exists()) {
-            zipFileName = baseZFName + " (" + i + ").zip";
-            i++;
-        }
-        return zipFileName;
+        File base = new File(baseZFName);
+        // A drive root has no parent and no name: its archive is "D:\.zip", as before.
+        File dir = base.getParentFile() != null ? base.getParentFile() : base;
+        return FileNames.free(dir, base.getName(), ".zip").getPath();
     }
 
     /**
@@ -751,7 +731,7 @@ class TreeFileOperations {
             JOptionPane.showMessageDialog(parent, ex.getMessage(), "Unzip", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        if (!collisions.isEmpty() && !confirmOverwrite(collisions)) {
+        if (!collisions.isEmpty() && !confirmOverwrite(collisions, "Unzip")) {
             return;
         }
         offEdt(() -> ZipArchive.extractAll(file, targetDir), error -> {
@@ -776,7 +756,7 @@ class TreeFileOperations {
         return collisions;
     }
 
-    private boolean confirmOverwrite(List<String> collisions) {
+    private boolean confirmOverwrite(List<String> collisions, String title) {
         String message = (collisions.size() == 1
             ? "\"" + collisions.get(0) + "\" already exists and will be overwritten."
             : collisions.size() + " items already exist and will be overwritten:\n\n"
@@ -784,7 +764,40 @@ class TreeFileOperations {
                 + (collisions.size() > 10 ? "\n..." : ""))
             + "\n\nContinue?";
         int choice = JOptionPane.showConfirmDialog(parent, message,
-            "Unzip", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            title, JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
         return choice == JOptionPane.YES_OPTION;
+    }
+
+    /**
+     * Gzip a CSV beside itself ({@code flows.csv} gives {@code flows.csv.gz}), never overwriting:
+     * a taken name gains a counter. Off the EDT like Zip; the watcher adds the file.
+     */
+    void gzipFile(File file) {
+        File target = GzipFile.compressedTarget(file);
+        offEdt(() -> GzipFile.compress(file, target), error -> {
+            if (error != null) {
+                JOptionPane.showMessageDialog(parent, error, "Gzip", JOptionPane.WARNING_MESSAGE);
+            }
+        });
+    }
+
+    /**
+     * Gunzip a {@code .gz} beside itself. Like Unzip, an existing file of the same name is
+     * overwritten only after confirmation; a folder of that name is never offered for
+     * overwriting, and the failure says why.
+     */
+    void gunzipFile(File file) {
+        File target = GzipFile.decompressedTarget(file);
+        // Replace only what the user was asked about: a file that appears after this check
+        // makes the write fail with "already exists" rather than vanish.
+        boolean replace = target.isFile();
+        if (replace && !confirmOverwrite(List.of(target.getName()), "Gunzip")) {
+            return;
+        }
+        offEdt(() -> GzipFile.decompress(file, target, replace), error -> {
+            if (error != null) {
+                JOptionPane.showMessageDialog(parent, error, "Gunzip", JOptionPane.WARNING_MESSAGE);
+            }
+        });
     }
 }

@@ -155,15 +155,17 @@ public final class PreferenceKeys {
         Pref.fileInt("dataview.plotMaxRows", 5_000_000);
 
     /**
-     * Maximum decompressed size (MB) a {@code .csv.zip} may occupy in memory.
-     * The entry's deflate stream is not seekable, so the format is served by
+     * Maximum decompressed size (MB) a compressed CSV ({@code .csv.zip},
+     * {@code .csv.gz}) may occupy in memory. The stored key predates
+     * {@code .csv.gz} and keeps its name so saved settings survive.
+     * A deflate stream is not seekable, so the format is served by
      * decompressing the whole payload into memory (read-only) — this bounds
      * that, enforced while the stream decompresses (the entry's advertised
      * size is metadata a hostile or corrupt archive can lie about, so it is
      * never trusted). Over the bound the tab refuses honestly with the
      * reason, never a dialog.
      */
-    public static final Pref<Integer> DATAVIEW_ZIP_MEMORY_LIMIT_MB =
+    public static final Pref<Integer> DATAVIEW_COMPRESSED_CSV_MEMORY_LIMIT_MB =
         Pref.fileInt("dataview.zipMemoryLimitMb", 1024);
 
     /** External editor command template. */

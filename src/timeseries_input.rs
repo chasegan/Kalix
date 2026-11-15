@@ -143,8 +143,8 @@ impl TimeseriesInput {
     }
 
     /// Reads the raw series out of an input file, dispatching on extension:
-    /// `.pxt` is a Pixie source, anything else is CSV (a `.csv.zip` is
-    /// decompressed transparently inside `read_ts`).
+    /// `.pxt` is a Pixie source, anything else is CSV (a `.csv.zip` or
+    /// `.csv.gz` is decompressed transparently inside `read_ts`).
     ///
     /// The dispatch lives here rather than at the `[data]` reader because every
     /// input path in the engine — `[data]`, and the optimiser's `observed_file`

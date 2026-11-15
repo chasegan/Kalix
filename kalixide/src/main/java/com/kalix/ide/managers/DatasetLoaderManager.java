@@ -4,7 +4,7 @@ import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.io.NamedSeries;
 import com.kalix.ide.io.TimeSeriesCsvImporter;
 import com.kalix.ide.io.SourceResCsvFormat;
-import com.kalix.ide.io.CsvZipFormat;
+import com.kalix.ide.io.CompressedCsvFormat;
 import com.kalix.ide.io.SourceResCsvImporter;
 import com.kalix.ide.io.PixieSeriesKey;
 import com.kalix.ide.io.PixieStore;
@@ -150,11 +150,14 @@ public class DatasetLoaderManager {
                         @SuppressWarnings("unchecked")
                         List<File> files = (List<File>) transferable.getTransferData(DataFlavor.javaFileListFlavor);
 
-                        // Filter for supported files (CSV, zipped CSV and Pixie)
+                        // Filter for supported files (CSV, compressed CSV and Pixie). A
+                        // compressed Source result passes too, so the loader can say why
+                        // it is refused rather than have it vanish from the drop.
                         List<File> supportedFiles = files.stream()
                             .filter(file -> {
                                 String name = file.getName().toLowerCase();
-                                return name.endsWith(".csv") || name.endsWith(".csv.zip")
+                                return CompressedCsvFormat.isCsvOrCompressedCsv(name)
+                                    || CompressedCsvFormat.isCompressedSourceResult(name)
                                     || name.endsWith(".pxt") || name.endsWith(".pxb");
                             })
                             .toList();
@@ -223,10 +226,13 @@ public class DatasetLoaderManager {
         String fileName = file.getName().toLowerCase();
 
         // ".res.csv" must be tested before ".csv" — the latter would otherwise swallow it.
-        // (".csv.zip" collides with neither; the importer decompresses it by name.)
-        if (SourceResCsvFormat.isResCsv(fileName)) {
+        // (Compressed CSV collides with neither; the importer decompresses it by name.)
+        if (CompressedCsvFormat.isCompressedSourceResult(fileName)) {
+            DialogUtils.showError(parentFrame,
+                file.getName() + ": " + CompressedCsvFormat.COMPRESSED_SOURCE_RESULT_NOT_SUPPORTED, "Load Error");
+        } else if (SourceResCsvFormat.isResCsv(fileName)) {
             loadResCsvDataset(file);
-        } else if (fileName.endsWith(".csv") || CsvZipFormat.isCsvZip(fileName)) {
+        } else if (CompressedCsvFormat.isCsvOrCompressedCsv(fileName)) {
             loadCsvDataset(file);
         } else if (fileName.endsWith(".pxt") || fileName.endsWith(".pxb")) {
             loadPixieDataset(file);

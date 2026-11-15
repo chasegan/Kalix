@@ -1,6 +1,6 @@
 package com.kalix.ide.dataview;
 
-import com.kalix.ide.io.CsvZipFormat;
+import com.kalix.ide.io.CompressedCsvFormat;
 import com.kalix.ide.io.SourceResCsvFormat;
 import com.kalix.ide.io.SourceResCsvHeaderReader;
 import com.kalix.ide.preferences.PreferenceKeys;
@@ -48,10 +48,19 @@ public final class DataViewOpener {
      * whole-file text read there, so everything here must stay bounded and cheap.
      */
     public static DataViewSession openFor(File file) throws IOException {
+        return openFor(file, PreferenceKeys.DATAVIEW_COMPRESSED_CSV_MEMORY_LIMIT_MB.get() * 1024L * 1024L);
+    }
+
+    /**
+     * As {@link #openFor(File)}, with the compressed CSV in-memory limit given
+     * by the caller rather than read from the preference. Tests use this so
+     * they never write the stored preference.
+     */
+    static DataViewSession openFor(File file, long compressedLimitBytes) throws IOException {
         String name = file.getName().toLowerCase(Locale.ROOT);
-        // Longest suffix first — the .res.csv test below cannot see a .csv.zip.
-        if (CsvZipFormat.isCsvZip(name)) {
-            return openZipCsv(file);
+        // Longest suffix first — the .res.csv test below cannot see a compressed CSV.
+        if (CompressedCsvFormat.isCompressedCsv(name)) {
+            return openCompressedCsv(file, compressedLimitBytes);
         }
         if (name.endsWith(".res.csv")) {
             try {
@@ -64,15 +73,15 @@ public final class DataViewOpener {
     }
 
     /**
-     * The {@code .csv.zip} contract (issue #409): decompress the whole payload
-     * to memory — bounded while it runs by the in-memory limit preference,
-     * a cross that throws {@link CsvZipFormat.TooLargeException} with the
-     * honest reason — then serve it through the ordinary session machinery
-     * over an in-memory channel.
+     * The compressed CSV contract: decompress the whole payload
+     * to memory — bounded while it runs by {@code limitBytes} (the in-memory
+     * limit preference), a cross that throws
+     * {@link CompressedCsvFormat.TooLargeException} with the honest reason —
+     * then serve it through the ordinary session machinery over an in-memory
+     * channel.
      */
-    private static DataViewSession openZipCsv(File file) throws IOException {
-        long limitBytes = PreferenceKeys.DATAVIEW_ZIP_MEMORY_LIMIT_MB.get() * 1024L * 1024L;
-        byte[] text = CsvZipFormat.decompressBounded(file, limitBytes);
+    private static DataViewSession openCompressedCsv(File file, long limitBytes) throws IOException {
+        byte[] text = CompressedCsvFormat.decompressBounded(file, limitBytes);
         return DataViewSession.open(ByteSource.ofMemory(file.toPath(), text), 0L, null, List.of());
     }
 

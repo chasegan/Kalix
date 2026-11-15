@@ -1,8 +1,10 @@
 package com.kalix.ide.workspace.tree;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -66,5 +68,19 @@ class TreeFileOperationsTest {
         // "x-data" must not be considered a descendant of "x" (element-wise comparison).
         List<File> in = List.of(file("x"), file("x-data"));
         assertEquals(List.of("x", "x-data"), names(TreeFileOperations.withoutDescendants(in)));
+    }
+
+    @Test
+    void aDuplicateKeepsItsWholeExtension(@TempDir File dir) throws IOException {
+        for (String name : List.of("flows.csv.gz", "flows.csv.zip", "results.res.csv", "notes.txt")) {
+            new File(dir, name).createNewFile();
+        }
+        new File(dir, "folder.v2").mkdir();
+        assertEquals("flows (1).csv.gz", TreeFileOperations.generateDuplicateName(new File(dir, "flows.csv.gz")));
+        assertEquals("flows (1).csv.zip", TreeFileOperations.generateDuplicateName(new File(dir, "flows.csv.zip")));
+        assertEquals("results (1).res.csv", TreeFileOperations.generateDuplicateName(new File(dir, "results.res.csv")));
+        assertEquals("notes (1).txt", TreeFileOperations.generateDuplicateName(new File(dir, "notes.txt")));
+        assertEquals("folder.v2 (1)", TreeFileOperations.generateDuplicateName(new File(dir, "folder.v2")),
+            "a folder has no extension");
     }
 }

@@ -6,6 +6,7 @@ import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.diff.DiffWindow;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
+import com.kalix.ide.io.CompressedCsvFormat;
 import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.windows.MinimalEditorWindow;
@@ -727,21 +728,24 @@ public class RunContextMenuManager {
             .title("Save Results")
             .startIn(baseDirectorySupplier != null ? baseDirectorySupplier.get() : null)
             .suggestedName(baseFilename + ".csv")
-            .filters(
-                FileDialogFilter.of("CSV Files (*.csv)", "csv"),
-                FileDialogFilter.of("Zipped CSV (*.csv.zip)", "csv.zip"),
-                FileDialogFilter.of("Pixie Files (*.pxt)", "pxt"))
+            .filters(FileDialogFilter.csvThen(
+                FileDialogFilter.of("Pixie Files (*.pxt)", "pxt")))
             .show();
         if (chosen.isPresent()) {
             File selectedFile = chosen.get();
             String lowerName = selectedFile.getName().toLowerCase();
+            if (CompressedCsvFormat.isCompressedSourceResult(lowerName)) {
+                DialogUtils.showError(parentFrame,
+                    CompressedCsvFormat.COMPRESSED_SOURCE_RESULT_NOT_SUPPORTED, "Save Results");
+                return;
+            }
 
             // The format IS the extension the user settled on. The type combo only ever
             // sets that extension, so there is no second opinion to reconcile against.
             boolean pixie = lowerName.endsWith(".pxt");
-            boolean csvZip = com.kalix.ide.io.CsvZipFormat.isCsvZip(lowerName);
-            String format = pixie ? "pixie" : (csvZip ? "csv.zip" : "csv");
-            String ext = pixie ? ".pxt" : (csvZip ? ".csv.zip" : ".csv");
+            CompressedCsvFormat.Compression csv = CompressedCsvFormat.compressionOf(lowerName);
+            String ext = pixie ? ".pxt" : csv.saveExtension();
+            String format = pixie ? "pixie" : csv.engineFormat();
 
             // Append the format's extension unless the user already typed it.
             if (!lowerName.endsWith(ext)) {

@@ -12,7 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Writes a data set's series as CSV, zipped CSV or Pixie, chosen by the file's extension
+ * Writes a data set's series as CSV, compressed CSV or Pixie, chosen by the file's extension
  * (the extension is the format, as in every Kalix save dialog). Shared by the plot's
  * "Save Data" and the Run Manager's derived series save.
  */
@@ -28,8 +28,8 @@ public final class SeriesFileWriter {
 
     /**
      * Writes {@code dataSet} to {@code file}: Pixie for {@code .pxt} (writing the
-     * {@code .pxt}/{@code .pxb} pair), otherwise CSV, zipped when the name ends
-     * {@code .csv.zip} and given {@code .csv} when it has neither. Series are named by
+     * {@code .pxt}/{@code .pxb} pair), otherwise CSV, compressed when the name ends
+     * {@code .csv.zip} or {@code .csv.gz} and given {@code .csv} when it has none. Series are named by
      * {@code labels}. Returns the file written ({@code .pxt} for Pixie).
      */
     public static File write(DataSet dataSet, File file, PlotType plotType, LabelResolver labels,
@@ -51,9 +51,12 @@ public final class SeriesFileWriter {
         // ".res.csv" before ".csv", which would otherwise swallow it.
         if (SourceResCsvFormat.isResCsv(name)) {
             throw new IllegalArgumentException(
-                "Source result CSV (.res.csv) can't be written here. Save as .csv, .csv.zip or .pxt.");
+                "Source result CSV (.res.csv) can't be written here. Save as .csv, .csv.zip, .csv.gz or .pxt.");
         }
-        if (!name.toLowerCase().endsWith(".csv") && !CsvZipFormat.isCsvZip(name)) {
+        if (CompressedCsvFormat.isCompressedSourceResult(name)) {
+            throw new IllegalArgumentException(CompressedCsvFormat.COMPRESSED_SOURCE_RESULT_NOT_SUPPORTED);
+        }
+        if (!CompressedCsvFormat.isCsvOrCompressedCsv(name)) {
             file = new File(file.getAbsolutePath() + ".csv");
         }
         TimeSeriesCsvExporter.export(dataSet, file, plotType, labels);

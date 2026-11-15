@@ -138,10 +138,10 @@ in those cases.
 
 #### Convert data files
 
-`kalix.convert()` mirrors `kalix convert` on the commandline — the same engine
-conversion between date-indexed CSV (plain or zip-compressed `.csv.zip`, the
-one-file-per-archive convention pandas uses) and the Pixie pair, with formats
-chosen by file extension:
+`kalix.convert()` mirrors `kalix convert` on the commandline. It is the same
+engine conversion between date-indexed CSV and the Pixie pair, with formats
+chosen by file extension. The CSV can be plain, zip-compressed (`.csv.zip`, one
+file per archive, as pandas writes it) or gzip-compressed (`.csv.gz`).
 
 ```python
 kalix.convert("flows.csv", "flows.pxt")   # writes flows.pxt + flows.pxb

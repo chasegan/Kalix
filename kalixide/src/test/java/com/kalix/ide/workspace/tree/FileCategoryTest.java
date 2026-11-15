@@ -24,8 +24,13 @@ class FileCategoryTest {
         assertEquals(FileCategory.MODEL, FileCategory.ofName("catchment.ini"));
         assertEquals(FileCategory.MODEL, FileCategory.ofName("CATCHMENT.INI"));
         assertEquals(FileCategory.DATA, FileCategory.ofName("rain.csv"));
+        assertEquals(FileCategory.DATA, FileCategory.ofName("rain.csv.zip"));
+        assertEquals(FileCategory.DATA, FileCategory.ofName("rain.csv.gz"));
         assertEquals(FileCategory.SOURCE_RESULT, FileCategory.ofName("results.res.csv"));
         assertEquals(FileCategory.SOURCE_RESULT, FileCategory.ofName("RESULTS.RES.CSV"));
+        // A compressed Source result is neither data nor a Source result: the IDE does not read one.
+        assertEquals(FileCategory.OTHER, FileCategory.ofName("results.res.csv.zip"));
+        assertEquals(FileCategory.OTHER, FileCategory.ofName("results.res.csv.gz"));
         assertEquals(FileCategory.DATA, FileCategory.ofName("series.pxt"));
         assertEquals(FileCategory.DATA, FileCategory.ofName("series.PXB"));
         assertEquals(FileCategory.OTHER, FileCategory.ofName("notes.md"));
