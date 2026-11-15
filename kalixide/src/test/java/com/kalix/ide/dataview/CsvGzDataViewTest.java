@@ -189,6 +189,18 @@ class CsvGzDataViewTest {
     }
 
     @Test
+    void everyCompressedFormatIsRecognisedByItsExtension() {
+        // A format added to the enum is matched without a second list to update.
+        for (CompressedCsvFormat.Compression compression : CompressedCsvFormat.Compression.values()) {
+            if (compression == CompressedCsvFormat.Compression.NONE) {
+                continue;
+            }
+            assertTrue(CompressedCsvFormat.Compression.COMPRESSED.contains(compression), compression.name());
+            assertEquals(compression, CompressedCsvFormat.compressionOf("flows" + compression.extension()));
+        }
+    }
+
+    @Test
     void extensionTestCoversBothFormats() {
         assertEquals(".csv.gz", CompressedCsvFormat.extensionOf("FLOWS.CSV.GZ"));
         assertEquals(".csv.zip", CompressedCsvFormat.extensionOf("flows.csv.zip"));

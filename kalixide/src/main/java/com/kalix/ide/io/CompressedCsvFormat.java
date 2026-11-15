@@ -44,8 +44,12 @@ public final class CompressedCsvFormat {
         ZIP(CsvZipFormat.EXTENSION, "Zipped CSV"),
         GZIP(".csv.gz", "Gzipped CSV");
 
-        /** The compressed formats, in the order dialogs list them. */
-        public static final List<Compression> COMPRESSED = List.of(ZIP, GZIP);
+        /**
+         * The compressed formats, in declaration order, which is the order dialogs list them.
+         * Taken from the constants themselves, so a new format cannot be left out.
+         */
+        public static final List<Compression> COMPRESSED =
+            Arrays.stream(values()).filter(compression -> compression != NONE).toList();
 
         private final String extension;
         private final String label;
