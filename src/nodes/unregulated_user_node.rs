@@ -321,14 +321,15 @@ impl UnregulatedUserNode {
             }
         }
 
-        // Restrict take based on accounts if applicable: available volume is
+        // Restrict take based on accounts if applicable: each account covers
+        // its balance over its debit factor (#520), and available volume is
         // the sum across the ordered account list, or what the combination
         // makes available (`|` sums, `&` takes the least; account_tree.rs)
         if COMBINED {
             available = available.min(self.account_tree.balance(_account_manager));
         } else if !self.account_idxs.is_empty() {
             let total_balance: f64 = self.account_idxs.iter()
-                .map(|&idx| _account_manager.get_account_balance(idx).max(0.0))
+                .map(|&idx| _account_manager.get_account_take_cover(idx))
                 .sum();
             available = available.min(total_balance);
         }
@@ -394,11 +395,7 @@ impl UnregulatedUserNode {
             let mut remaining = self.diversion;
             for &account_idx in &self.account_idxs {
                 if remaining <= 0.0 { break; }
-                let take = remaining.min(_account_manager.get_account_balance(account_idx).max(0.0));
-                if take > 0.0 {
-                    _account_manager.debit_account(account_idx, take);
-                    remaining -= take;
-                }
+                remaining -= _account_manager.debit_account_for_take(account_idx, remaining);
             }
         }
 

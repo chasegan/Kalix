@@ -369,17 +369,20 @@ public class FunctionExpressionValidator {
 
     /** Fields published per account (`acc.<account>.<field>`). Mirrors the
      *  engine's ACCOUNT_SERIES_FIELDS (src/hydrology/accounts/account_manager.rs).
-     *  `size` and `initial` are static (fixed at load, not per-step), but are
-     *  still valid field names here. */
+     *  `size`, `initial` and `debit_factor` are static (fixed at load, not
+     *  per-step), but are still valid field names here. */
     private static final java.util.Set<String> ACCOUNT_FIELDS =
         java.util.Set.of("opening_balance", "closing_balance", "debits", "allocation", "allocation_pct",
-                         "use", "committed", "size", "initial");
+                         "use", "committed", "size", "initial", "debit_factor");
 
-    /** Fields published per account group: every account field is aggregated
-     *  over the members — summed, `size` and `use` included, except
-     *  `allocation_pct`, which is group allocation over group size. Mirrors
-     *  the engine's GROUP_SERIES_FIELDS. */
-    private static final java.util.Set<String> ACCOUNT_GROUP_FIELDS = ACCOUNT_FIELDS;
+    /** Fields published per account group: every account field but
+     *  `debit_factor` is aggregated over the members — summed, `size` and
+     *  `use` included, except `allocation_pct`, which is group allocation
+     *  over group size. A group has no `debit_factor`: a sum of factors means
+     *  nothing. Mirrors the engine's GROUP_SERIES_FIELDS. */
+    private static final java.util.Set<String> ACCOUNT_GROUP_FIELDS =
+        java.util.Set.of("opening_balance", "closing_balance", "debits", "allocation", "allocation_pct",
+                         "use", "committed", "size", "initial");
 
     /** Fields published per resource allocation system (`ras.<name>.<field>`).
      *  Mirrors the engine's RAS_SERIES_FIELDS. */

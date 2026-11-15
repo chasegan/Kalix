@@ -36,4 +36,10 @@ pip: "pip install kalix==0.4.10"
     - Duplicate keeps the whole extension, so a copy of `flows.csv.zip` is `flows (1).csv.zip`. The same applies to `.csv.gz` and `.res.csv`.
     - Error dialogs give the reason, such as `flows.csv: access denied`.
 - A read-only data tab that cannot read its file says why in its banner. If the file changes and cannot be re-read, the banner says the tab is showing the previous content.
+- Account debit factors (#520):
+    - A `debit_factor` column in an `[acc.*]` accounts table sets what a user's take of 1 ML debits from the account. A take of 100 ML from an account with a factor of 1.2 debits 120 ML.
+    - A take is limited to what the balance can be debited for, which is `balance / debit_factor`. A regulated user's order is limited and committed the same way, and `order_accounts` follow the same rule.
+    - `[ras.*]` actions are not factored. They work in the units of the balance.
+    - `acc.<name>.debit_factor` can be read in expressions and recorded in `[outputs]`.
+    - A model without the column runs as before.
 - `kalix simulate` now stops with an error and a non-zero exit code when the output file or the mass balance report cannot be written. Before, it printed the error, then `Done!`, and exited with 0.

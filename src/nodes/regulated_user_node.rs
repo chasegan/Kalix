@@ -165,23 +165,27 @@ impl RegulatedUserNode {
         self.order_account_idxs = account_idxs;
     }
 
+    /// The take the regular accounts cover: each balance, floored at zero, over the
+    /// account's debit factor.
     fn total_account_balance(&self, account_manager: &AccountManager) -> f64 {
         self.account_idxs.iter()
-            .map(|&idx| account_manager.get_account_balance(idx).max(0.0))
+            .map(|&idx| account_manager.get_account_take_cover(idx))
             .sum()
     }
 
-    /// What the regular accounts can still cover: each balance less the orders
-    /// already committed against it, floored at zero account by account.
+    /// The order the regular accounts can still cover: each balance less the orders
+    /// already committed against it, floored at zero account by account, over the
+    /// account's debit factor.
     fn total_account_uncommitted(&self, account_manager: &AccountManager) -> f64 {
         self.account_idxs.iter()
-            .map(|&idx| account_manager.get_account_uncommitted_balance(idx))
+            .map(|&idx| account_manager.get_account_uncommitted_take_cover(idx))
             .sum()
     }
 
+    /// The order the order accounts can authorise.
     fn total_order_account_balance(&self, account_manager: &AccountManager) -> f64 {
         self.order_account_idxs.iter()
-            .map(|&idx| account_manager.get_account_balance(idx).max(0.0))
+            .map(|&idx| account_manager.get_account_take_cover(idx))
             .sum()
     }
 }
@@ -384,6 +388,10 @@ impl RegulatedUserNode {
         // Where the cap bites, the supply outlets are served first, in outlet order, and the
         // user's own order takes what is left - the same order of service as at flow time.
         //
+        // All of this is in the units of the order. An account covers its uncommitted
+        // balance over its debit factor, and is committed, or an order account debited,
+        // the order times its factor. With a factor of 1 the two units are the same (#520).
+        //
         // A combination (`COMBINED`) does the same through the tree: `|` sums what each side
         // can cover and is committed left to right, `&` takes the least and is committed on
         // every side (account_tree.rs).
@@ -416,25 +424,17 @@ impl RegulatedUserNode {
                 let mut to_commit = order_placed;
                 for &account_idx in &self.account_idxs {
                     if to_commit <= 0.0 { break; }
-                    let commit = to_commit.min(_account_manager.get_account_uncommitted_balance(account_idx));
-                    if commit > 0.0 {
-                        _account_manager.commit_account(account_idx, commit, self.order_travel_time);
-                        to_commit -= commit;
-                    }
+                    to_commit -= _account_manager.commit_account_for_take(account_idx, to_commit, self.order_travel_time);
                 }
                 if to_commit > 0.0 {
-                    _account_manager.commit_account(self.account_idxs[0], to_commit, self.order_travel_time);
+                    _account_manager.commit_account_uncovered_take(self.account_idxs[0], to_commit, self.order_travel_time);
                 }
             }
 
             let mut excess = (order_placed - regular_available).max(0.0);
             for &account_idx in &self.order_account_idxs {
                 if excess <= 0.0 { break; }
-                let debit = excess.min(_account_manager.get_account_balance(account_idx).max(0.0));
-                if debit > 0.0 {
-                    _account_manager.debit_account(account_idx, debit);
-                    excess -= debit;
-                }
+                excess -= _account_manager.debit_account_for_take(account_idx, excess);
             }
         }
 
@@ -548,11 +548,7 @@ impl RegulatedUserNode {
             } else {
                 for &account_idx in &self.account_idxs {
                     if remaining <= 0.0 { break; }
-                    let take = remaining.min(_account_manager.get_account_balance(account_idx).max(0.0));
-                    if take > 0.0 {
-                        _account_manager.debit_account(account_idx, take);
-                        remaining -= take;
-                    }
+                    remaining -= _account_manager.debit_account_for_take(account_idx, remaining);
                 }
             }
         }

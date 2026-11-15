@@ -137,6 +137,12 @@ is the part the user could order. One consequence: when users share an account,
 the one upstream diverts first and may take water released for an order placed
 downstream.
 
+Where an account has a [debit factor](accounts.md#debit-factor), the account
+covers an order of `(balance − committed) / debit_factor` and a delivery of
+`balance / debit_factor`. The order is committed, and the delivery debited, at
+the order or the delivery times the factor. An account in `order_accounts`
+follows the same rule when the order is placed.
+
 When `accounts` is a [combination](accounts.md#combining-accounts), the same
 three moments follow it. The order cap is what the combination makes available
 of the uncommitted balances: `|` sums its sides and `&` takes the least. The

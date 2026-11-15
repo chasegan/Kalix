@@ -65,6 +65,16 @@ pub struct Account {
     pub committed: f64,
     pub commit_ring: Vec<f64>,
     pub commit_cursor: usize,
+
+    /// What a user node's take of one unit debits from this account (the
+    /// `debit_factor` table column; 1 unless declared). A take of V debits
+    /// `debit_factor * V` and an accepted order of V commits as much, so the
+    /// account covers a take of `balance / debit_factor`. It applies to what
+    /// user nodes do and to nothing else: [ras.*] actions work in the
+    /// balance's own units. Every user applies it, with no test for whether
+    /// it is 1: x / 1.0 and x * 1.0 are x bit for bit, as with the regulated
+    /// user's order_factor (#520).
+    pub debit_factor: f64,
 }
 
 impl Account {
@@ -86,6 +96,7 @@ impl Account {
             committed: 0.0,
             commit_ring: Vec::new(),
             commit_cursor: 0,
+            debit_factor: 1.0,
         }
     }
 

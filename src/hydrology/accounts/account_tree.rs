@@ -130,16 +130,16 @@ impl AccountTree {
         self.terms.is_empty()
     }
 
-    /// Sum of the balances of the accounts the tree can draw on, each floored at zero and
-    /// combined by the tree: `|` sums, `&` takes the minimum.
+    /// The take the tree's accounts can cover, combined by the tree: `|` sums, `&` takes the
+    /// minimum. An account covers its balance, floored at zero, over its debit factor.
     #[inline(always)]
     pub fn balance(&self, account_manager: &AccountManager) -> f64 {
         let (op, inner, _) = first_subtree(&self.terms);
         fold(op, inner, &|idx| balance_of(account_manager, idx))
     }
 
-    /// As `balance`, over what each account can still cover: its balance less the orders
-    /// already committed against it, floored at zero account by account.
+    /// As `balance`, over the order each account can still cover: its balance less the orders
+    /// already committed against it, floored at zero account by account, over its debit factor.
     #[inline(always)]
     pub fn uncommitted(&self, account_manager: &AccountManager) -> f64 {
         let (op, inner, _) = first_subtree(&self.terms);
@@ -157,11 +157,7 @@ impl AccountTree {
         }
         let (op, inner, _) = first_subtree(&self.terms);
         let leaf = &mut |account_manager: &mut AccountManager, idx: usize, remaining: f64| {
-            let take = remaining.min(balance_of(account_manager, idx));
-            if take > 0.0 {
-                account_manager.debit_account(idx, take);
-            }
-            take
+            account_manager.debit_account_for_take(idx, remaining)
         };
         match op {
             Term::All(_) => each_side_body!(inner, amount, account_manager, &balance_of, leaf, walk),
@@ -180,11 +176,7 @@ impl AccountTree {
         }
         let (op, inner, _) = first_subtree(&self.terms);
         let leaf = &mut |account_manager: &mut AccountManager, idx: usize, remaining: f64| {
-            let commit = remaining.min(uncommitted_of(account_manager, idx));
-            if commit > 0.0 {
-                account_manager.commit_account(idx, commit, due_in);
-            }
-            commit
+            account_manager.commit_account_for_take(idx, remaining, due_in)
         };
         match op {
             Term::All(_) => {
@@ -193,14 +185,14 @@ impl AccountTree {
                     match side {
                         Term::Account(idx) => {
                             rest = after;
-                            account_manager.commit_account(idx as usize, amount, due_in);
+                            account_manager.commit_account_uncovered_take(idx as usize, amount, due_in);
                         }
                         _ => {
                             let (side_inner, after) = after.split_at(subtree_len(side));
                             rest = after;
                             let taken = walk(side, side_inner, amount, account_manager, &uncommitted_of, leaf);
                             if taken < amount {
-                                account_manager.commit_account(first_account(side_inner), amount - taken, due_in);
+                                account_manager.commit_account_uncovered_take(first_account(side_inner), amount - taken, due_in);
                             }
                         }
                     }
@@ -209,7 +201,7 @@ impl AccountTree {
             _ => {
                 let taken = walk(op, inner, amount, account_manager, &uncommitted_of, leaf);
                 if taken < amount {
-                    account_manager.commit_account(first_account(inner), amount - taken, due_in);
+                    account_manager.commit_account_uncovered_take(first_account(inner), amount - taken, due_in);
                 }
             }
         }
@@ -218,12 +210,12 @@ impl AccountTree {
 
 #[inline(always)]
 fn balance_of(account_manager: &AccountManager, idx: usize) -> f64 {
-    account_manager.get_account_balance(idx).max(0.0)
+    account_manager.get_account_take_cover(idx)
 }
 
 #[inline(always)]
 fn uncommitted_of(account_manager: &AccountManager, idx: usize) -> f64 {
-    account_manager.get_account_uncommitted_balance(idx)
+    account_manager.get_account_uncommitted_take_cover(idx)
 }
 
 /// A subtree is its operator followed by the `len` terms beneath it, so the terms beneath an
