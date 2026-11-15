@@ -116,7 +116,7 @@ class CsvGzDataViewTest {
     @Test
     void bytesAfterAMemberThatAreNotAMemberEndTheStreamQuietly() throws IOException {
         // The known difference from the engine, which refuses both files
-        // (CompressedCsvFormat.gunzip). Pinned so a JDK change cannot move it unnoticed.
+        // (CsvGzFormat.gunzip). Pinned so a JDK change cannot move it unnoticed.
         byte[] first = gzip("Date,q\n2020-01-01,1.0\n");
 
         Path junk = tempDir.resolve("junk.csv.gz");

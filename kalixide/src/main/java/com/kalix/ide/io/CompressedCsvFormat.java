@@ -1,15 +1,9 @@
 package com.kalix.ide.io;
 
 import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.BufferedWriter;
-import java.io.EOFException;
 import java.io.File;
-import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -17,15 +11,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
-import java.util.zip.GZIPInputStream;
-import java.util.zip.GZIPOutputStream;
 
 /**
  * Compressed CSV: the same CSV grammar inside a compression wrapper, named by
  * a double extension — {@code .csv.zip} or {@code .csv.gz}. The one place
  * that dispatches on which wrapper a name implies, so callers never list the
- * extensions themselves. Archive-specific
- * rules (exactly one entry, the entry's name) live in {@link CsvZipFormat}.
+ * extensions themselves. Each wrapper's own rules and stream handling live
+ * with it: {@link CsvZipFormat} (exactly one entry, the entry's name) and
+ * {@link CsvGzFormat} (members, the cut-short messages).
  *
  * <p>The IDE's contract for the family: opened <b>read-only</b> and
  * decompressed <b>to memory</b>, bounded while it runs (never by trusting an
@@ -42,7 +35,7 @@ public final class CompressedCsvFormat {
     public enum Compression {
         NONE(null, null),
         ZIP(CsvZipFormat.EXTENSION, "Zipped CSV"),
-        GZIP(".csv.gz", "Gzipped CSV");
+        GZIP(CsvGzFormat.EXTENSION, "Gzipped CSV");
 
         /**
          * The compressed formats, in declaration order, which is the order dialogs list them.
@@ -69,9 +62,6 @@ public final class CompressedCsvFormat {
             return label;
         }
     }
-
-    /** GZIPInputStream's default 512-byte buffer is slow on network drives. */
-    static final int GZIP_BUFFER_BYTES = 1 << 16;
 
     private CompressedCsvFormat() {
     }
@@ -162,7 +152,7 @@ public final class CompressedCsvFormat {
     public static InputStream openDecompressed(File file) throws IOException {
         return switch (compressionOf(file.getName())) {
             case ZIP -> CsvZipFormat.openSingleEntry(file);
-            case GZIP -> gunzip(new BufferedInputStream(Files.newInputStream(file.toPath())));
+            case GZIP -> CsvGzFormat.gunzip(new BufferedInputStream(Files.newInputStream(file.toPath())));
             case NONE -> new BufferedInputStream(Files.newInputStream(file.toPath()));
         };
     }
@@ -176,75 +166,9 @@ public final class CompressedCsvFormat {
     public static InputStream wrapDecompressing(String fileName, InputStream raw) throws IOException {
         return switch (compressionOf(fileName)) {
             case ZIP -> CsvZipFormat.toFirstFileEntry(raw);
-            case GZIP -> gunzip(raw);
+            case GZIP -> CsvGzFormat.gunzip(raw);
             case NONE -> raw;
         };
-    }
-
-    /**
-     * A gzip reader over {@code raw}; reads concatenated members as one stream,
-     * like gzip and pandas. The header is read here, so {@code raw} is closed
-     * if it isn't gzip.
-     *
-     * <p>The engine is stricter in one case. After a complete member,
-     * {@link GZIPInputStream} treats anything that is not a readable member
-     * header as the end of the file. So stray bytes after the last member are
-     * ignored, and a later member whose header is damaged or cut short is
-     * dropped along with everything after it, both without an error. The
-     * engine refuses these files. A member cut short after its header is an
-     * error here too. {@code CsvGzDataViewTest} pins this behaviour.
-     */
-    static InputStream gunzip(InputStream raw) throws IOException {
-        try {
-            return new NamedEof(new GZIPInputStream(raw, GZIP_BUFFER_BYTES));
-        } catch (IOException e) {
-            raw.close();
-            throw e instanceof EOFException eof ? named(eof, "not a readable gzip file (empty or cut short)") : e;
-        }
-    }
-
-    /** GZIPInputStream reports a cut-short header or trailer as an EOFException with no message. */
-    private static EOFException named(EOFException e, String message) {
-        if (e.getMessage() != null) {
-            return e;
-        }
-        EOFException named = new EOFException(message);
-        named.initCause(e);
-        return named;
-    }
-
-    /** Gives GZIPInputStream's message-less EOFException a message a dialog can show. */
-    private static final class NamedEof extends FilterInputStream {
-        NamedEof(InputStream in) {
-            super(in);
-        }
-
-        @Override
-        public int read() throws IOException {
-            try {
-                return in.read();
-            } catch (EOFException e) {
-                throw named(e, "gzip data is cut short");
-            }
-        }
-
-        @Override
-        public int read(byte[] b, int off, int len) throws IOException {
-            try {
-                return in.read(b, off, len);
-            } catch (EOFException e) {
-                throw named(e, "gzip data is cut short");
-            }
-        }
-
-        @Override
-        public long skip(long n) throws IOException {
-            try {
-                return in.skip(n);
-            } catch (EOFException e) {
-                throw named(e, "gzip data is cut short");
-            }
-        }
     }
 
     /**
@@ -312,19 +236,8 @@ public final class CompressedCsvFormat {
     public static Writer newUtf8Writer(File file) throws IOException {
         return switch (compressionOf(file.getName())) {
             case ZIP -> CsvZipFormat.newZipUtf8Writer(file);
-            case GZIP -> newGzipUtf8Writer(file);
+            case GZIP -> CsvGzFormat.newGzipUtf8Writer(file);
             case NONE -> Files.newBufferedWriter(file.toPath(), StandardCharsets.UTF_8);
         };
-    }
-
-    private static Writer newGzipUtf8Writer(File file) throws IOException {
-        OutputStream out = new BufferedOutputStream(Files.newOutputStream(file.toPath()));
-        try {
-            return new BufferedWriter(new OutputStreamWriter(
-                new GZIPOutputStream(out, GZIP_BUFFER_BYTES), StandardCharsets.UTF_8));
-        } catch (IOException e) {
-            out.close();
-            throw e;
-        }
     }
 }

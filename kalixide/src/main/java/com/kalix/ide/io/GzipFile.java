@@ -50,7 +50,7 @@ public final class GzipFile {
     public static void compress(File src, File dst) throws IOException {
         StagedFile.write(dst.toPath(), false, out -> {
             try (InputStream in = Files.newInputStream(src.toPath());
-                 OutputStream gz = new GZIPOutputStream(out, CompressedCsvFormat.GZIP_BUFFER_BYTES)) {
+                 OutputStream gz = new GZIPOutputStream(out, CsvGzFormat.BUFFER_BYTES)) {
                 in.transferTo(gz);
             }
         });
@@ -66,7 +66,7 @@ public final class GzipFile {
      */
     public static void decompress(File src, File dst, boolean replace) throws IOException {
         StagedFile.write(dst.toPath(), replace, out -> {
-            try (InputStream in = CompressedCsvFormat.gunzip(Files.newInputStream(src.toPath()))) {
+            try (InputStream in = CsvGzFormat.gunzip(Files.newInputStream(src.toPath()))) {
                 in.transferTo(out);
             }
         });
