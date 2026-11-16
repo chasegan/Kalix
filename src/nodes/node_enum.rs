@@ -161,6 +161,11 @@ impl Node for NodeEnum {
         dispatch!(self, node => node.remove_dsflow(outlet))
     }
 
+    #[inline(always)]
+    fn remove_dsflow_primary(&mut self) -> f64 {
+        dispatch!(self, node => node.remove_dsflow_primary())
+    }
+
     fn get_mass_balance(&self) -> f64 {
         dispatch!(self, node => node.get_mass_balance())
     }

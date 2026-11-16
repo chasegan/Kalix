@@ -12,6 +12,11 @@ pub trait Node {
     fn run_flow_phase(&mut self, data_cache: &mut DataCache, account_manager: &mut AccountManager);
     fn add_usflow(&mut self, flow: f64, inlet: u8);
     fn remove_dsflow(&mut self, outlet: u8) -> f64;
+    /// `remove_dsflow(0)`, for the flow phase's transfers. Almost every link
+    /// leaves a node's primary outlet, and with the outlet fixed this is one
+    /// field read and one store in every node type, so it inlines into the
+    /// loop where `remove_dsflow` is a call.
+    fn remove_dsflow_primary(&mut self) -> f64;
     fn get_mass_balance(&self) -> f64;
     fn dsorders_mut(&mut self) -> &mut [f64];
 }

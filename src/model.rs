@@ -29,6 +29,32 @@ pub enum ExecItem {
     VarBlock(usize),
 }
 
+/// One node's turn in the flow phase: the node to run, and where its
+/// transfers end in `Model::transfers`. They begin where the previous node's
+/// ended, so the flow phase walks both lists forward once per step.
+#[derive(Debug, Clone, Copy)]
+pub struct FlowStep {
+    pub node: u32,
+    pub transfers_end: u32,
+}
+
+/// One link, as the flow phase needs it: move the water at `from_outlet` of
+/// the node that has just run to `to_node`. Laid out in execution order.
+#[derive(Debug, Clone, Copy)]
+pub struct Transfer {
+    pub to_node: u32,
+    pub from_outlet: u8,
+    pub to_inlet: u8,
+}
+
+/// One entry in the flow phase of a model with flow-phase var blocks: the
+/// nodes of `execution_order` with the var blocks at their file positions.
+#[derive(Debug, Clone, Copy)]
+pub enum FlowExecItem {
+    Node(FlowStep),
+    VarBlock(usize),
+}
+
 /// One entry in the ras slot at the top of the timestep: ras-phase var
 /// blocks and [ras.*] sections, interleaved in file order — what you read
 /// is what runs, within the slot exactly as within the flow pass.
@@ -161,8 +187,9 @@ pub struct Model {
     /// actually interleaves. The plain node loop is used instead when this
     /// contains no var blocks (see `flow_has_var_blocks`).
     ///
-    /// Populated: derived from `exec_items` in `initialize_network()`.
-    pub flow_exec_items: Vec<ExecItem>,
+    /// Populated: derived from `exec_items` and `execution_order` in
+    /// `initialize_network()`.
+    pub flow_exec_items: Vec<FlowExecItem>,
 
     /// Hot path: flow phase, read in run_timestep(). True when
     /// `flow_exec_items` interleaves at least one var block — the once-per-step
@@ -171,12 +198,21 @@ pub struct Model {
     /// Populated: derived in `initialize_network()`.
     pub flow_has_var_blocks: bool,
 
-    /// Hot path: flow phase, read in run_timestep().
+    /// Read at setup, and by the ordering system. The flow phase walks
+    /// `transfers`, which is built from these.
     ///
     /// Populated: during parsing or programmatic construction, via `add_link()`.
     pub links: Vec<Link>,
 
     /// Hot path: flow phase, read in run_timestep().
+    /// Every link as a `Transfer`, in execution order: all of the first
+    /// node's, then all of the second's. `FlowStep::transfers_end` marks
+    /// where each node's stop.
+    ///
+    /// Populated: computed by `check_execution_order()` with `execution_order`.
+    pub transfers: Vec<Transfer>,
+
+    /// Read at setup: the flow phase's transfers are built from it.
     /// Adjacency list for O(1) link lookup.
     /// `outgoing_links[node_idx]` = vec of link indices
     ///
@@ -195,10 +231,11 @@ pub struct Model {
     /// Hot path: flow phase, read in run_timestep().
     /// Pre-computed execution order, rebuilt by check_execution_order() at
     /// initialize_network() time; walked every step when there are no var blocks.
+    /// Each step names its node and where that node's `transfers` end.
     ///
     /// Populated: computed by `check_execution_order()`, called from both
     /// `configure()` and `initialize_network()` (start of every `run()`).
-    pub execution_order: Vec<usize>,
+    pub execution_order: Vec<FlowStep>,
     /// Set by [`configure`](Self::configure) once the inputs are loaded and the
     /// period is fixed. The structural step alone (load, patch) does not set it:
     /// it fills the execution order, which is not the same thing.
@@ -328,6 +365,7 @@ impl Model {
             flow_exec_items: self.flow_exec_items.clone(),
             flow_has_var_blocks: self.flow_has_var_blocks,
             links: self.links.clone(),
+            transfers: self.transfers.clone(),
             outgoing_links: self.outgoing_links.clone(),
             incoming_links: self.incoming_links.clone(),
             execution_order: self.execution_order.clone(),
@@ -358,6 +396,7 @@ impl Model {
             flow_exec_items: self.flow_exec_items.clone(),
             flow_has_var_blocks: self.flow_has_var_blocks,
             links: self.links.clone(),
+            transfers: self.transfers.clone(),
             outgoing_links: self.outgoing_links.clone(),
             incoming_links: self.incoming_links.clone(),
             execution_order: vec![],
@@ -1103,7 +1142,10 @@ impl Model {
         // &mut self helper can't be called while iterating a borrowed field,
         // and the disjoint field borrows only work with the body inline.
         if !self.flow_has_var_blocks {
-            for &node_idx in &self.execution_order {
+            let mut next_transfer = 0;
+            for &step in &self.execution_order {
+                let node_idx = step.node as usize;
+
                 // Set node context for error reporting (just stores the index)
                 set_context_node(node_idx);
 
@@ -1111,32 +1153,45 @@ impl Model {
                 self.nodes[node_idx]
                     .run_flow_phase(&mut self.data_cache, &mut self.account_manager);
 
-                // Immediately propagate outflows to downstream nodes
-                for &link_idx in &self.outgoing_links[node_idx] {
-                    let link = &self.links[link_idx];
-                    let outflow = self.nodes[node_idx].remove_dsflow(link.from_outlet);
+                // Immediately propagate outflows to downstream nodes. The
+                // node's transfers follow the previous node's in `transfers`.
+                while next_transfer < step.transfers_end as usize {
+                    let transfer = self.transfers[next_transfer];
+                    let outflow = if transfer.from_outlet == 0 {
+                        self.nodes[node_idx].remove_dsflow_primary()
+                    } else {
+                        self.nodes[node_idx].remove_dsflow(transfer.from_outlet)
+                    };
 
                     if outflow > 0.0 {
-                        self.nodes[link.to_node].add_usflow(outflow, link.to_inlet);
+                        self.nodes[transfer.to_node as usize].add_usflow(outflow, transfer.to_inlet);
                     }
+                    next_transfer += 1;
                 }
             }
         } else {
+            let mut next_transfer = 0;
             for &exec_item in &self.flow_exec_items {
                 match exec_item {
-                    ExecItem::Node(node_idx) => {
+                    FlowExecItem::Node(step) => {
+                        let node_idx = step.node as usize;
                         set_context_node(node_idx);
                         self.nodes[node_idx]
                             .run_flow_phase(&mut self.data_cache, &mut self.account_manager);
-                        for &link_idx in &self.outgoing_links[node_idx] {
-                            let link = &self.links[link_idx];
-                            let outflow = self.nodes[node_idx].remove_dsflow(link.from_outlet);
+                        while next_transfer < step.transfers_end as usize {
+                            let transfer = self.transfers[next_transfer];
+                            let outflow = if transfer.from_outlet == 0 {
+                                self.nodes[node_idx].remove_dsflow_primary()
+                            } else {
+                                self.nodes[node_idx].remove_dsflow(transfer.from_outlet)
+                            };
                             if outflow > 0.0 {
-                                self.nodes[link.to_node].add_usflow(outflow, link.to_inlet);
+                                self.nodes[transfer.to_node as usize].add_usflow(outflow, transfer.to_inlet);
                             }
+                            next_transfer += 1;
                         }
                     }
-                    ExecItem::VarBlock(vb_idx) => {
+                    FlowExecItem::VarBlock(vb_idx) => {
                         // Evaluate the block's definitions top to bottom,
                         // each written to its series — computed exactly once
                         // per step, so every reader observes one value.
@@ -1164,7 +1219,7 @@ impl Model {
         // falling back to the plain node loop when none remain.
         // Order-phase blocks are kept with their file position (the count of
         // nodes above them) until the ordering visit list exists.
-        self.flow_exec_items.clear();
+        let mut flow_layout: Vec<ExecItem> = Vec::new();
         let mut ras_phase_blocks: Vec<usize> = Vec::new();
         let mut order_phase_blocks: Vec<(usize, usize)> = Vec::new();
         let mut nodes_above = 0;
@@ -1174,15 +1229,15 @@ impl Model {
                 ExecItem::VarBlock(vb_idx) => match self.var_blocks[vb_idx].phase {
                     VarPhase::Ras => ras_phase_blocks.push(vb_idx),
                     VarPhase::Order => order_phase_blocks.push((nodes_above, vb_idx)),
-                    VarPhase::Flow => self.flow_exec_items.push(item),
+                    VarPhase::Flow => flow_layout.push(item),
                 },
                 ExecItem::Node(node_idx) => {
                     nodes_above = node_idx + 1;
-                    self.flow_exec_items.push(item);
+                    flow_layout.push(item);
                 }
             }
         }
-        self.flow_has_var_blocks = self.flow_exec_items.iter()
+        self.flow_has_var_blocks = flow_layout.iter()
             .any(|i| matches!(i, ExecItem::VarBlock(_)));
 
         // The ras slot interleaves assessments and [ras.*] sections in file
@@ -1199,6 +1254,17 @@ impl Model {
         self.initialize_nodes()?;
         self.check_execution_order()?;
         // TODO: why am I doing the execution order here in "initialize_network"? Cant we just do this once during configure?
+
+        // The flow pass of a model with flow-phase var blocks: each node's
+        // step from the execution order (which is in node order), with the
+        // var blocks at their file positions.
+        self.flow_exec_items.clear();
+        for &item in &flow_layout {
+            self.flow_exec_items.push(match item {
+                ExecItem::Node(node_idx) => FlowExecItem::Node(self.execution_order[node_idx]),
+                ExecItem::VarBlock(vb_idx) => FlowExecItem::VarBlock(vb_idx),
+            });
+        }
 
         // Initialise the ordering system
         // TODO: I am doing this in "initialize_network" because it relies on execution order being resolved (which we do above).
@@ -1282,12 +1348,6 @@ impl Model {
     /// otherwise. It deliberately does NOT topologically sort - the model
     /// file must remain a faithful, readable account of what runs.
     fn check_execution_order(&mut self) -> Result<(), String> {
-        // Execution order according to node index
-        self.execution_order.clear();
-        for node_idx in 0..self.nodes.len() {
-            self.execution_order.push(node_idx);
-        }
-
         // Check execution order is consistent with flow phase using link info:
         // The node below each link must have a higher index than the node above the link
         for link in &self.links {
@@ -1300,6 +1360,26 @@ impl Model {
                     from_name, to_name
                 ));
             }
+        }
+
+        // Execution order according to node index. Each node's links are laid
+        // out behind the previous node's, in the order they were added, so the
+        // flow phase reads them in one pass.
+        self.execution_order.clear();
+        self.transfers.clear();
+        for node_idx in 0..self.nodes.len() {
+            for &link_idx in &self.outgoing_links[node_idx] {
+                let link = &self.links[link_idx];
+                self.transfers.push(Transfer {
+                    to_node: link.to_node as u32,
+                    from_outlet: link.from_outlet,
+                    to_inlet: link.to_inlet,
+                });
+            }
+            self.execution_order.push(FlowStep {
+                node: node_idx as u32,
+                transfers_end: self.transfers.len() as u32,
+            });
         }
 
         // Done

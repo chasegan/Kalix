@@ -1694,6 +1694,11 @@ impl Node for StorageNode {
         }
     }
 
+    #[inline(always)]
+    fn remove_dsflow_primary(&mut self) -> f64 {
+        std::mem::take(&mut self.ds_flows[0])
+    }
+
     fn get_mass_balance(&self) -> f64 {
         self.mbal
     }

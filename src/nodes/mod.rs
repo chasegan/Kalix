@@ -42,7 +42,7 @@ pub(crate) fn recorder(data_cache: &mut DataCache, node_name: &str, output: &str
     Some(idx)
 }
 
-/// The four Node methods that are identical for every node with a single
+/// The five Node methods that are identical for every node with a single
 /// primary outlet (fields: usflow, dsflow_primary, mbal, dsorders). Expands
 /// to exactly the code it replaced in each node - this is notation, not
 /// abstraction; read it here once instead of nine times.
@@ -65,6 +65,11 @@ macro_rules! single_outlet_node_impls {
 
         fn get_mass_balance(&self) -> f64 {
             self.mbal
+        }
+
+        #[inline(always)]
+        fn remove_dsflow_primary(&mut self) -> f64 {
+            std::mem::take(&mut self.dsflow_primary)
         }
 
         fn dsorders_mut(&mut self) -> &mut [f64] {
