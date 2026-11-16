@@ -23,7 +23,7 @@ ds_1 = my_other_node
 | [node.?] (compulsory) | Start of node declaration. This says we are creating a node, and also defines the name of the node. Node naming conventions are discussed at . Example: `[node.my_inflow_node]` |
 | type (compulsory) | The node type, which is “inflow” in this case. `type = inflow` |
 | loc (compulsory) | The location of the node in cartesian coordinates.  Example: `loc = 20, 30` |
-| inflow (optional) | Inflow data [ML].  Example: `inflow = ata.allflows_csv.by_name.little_river_inflow` |
+| inflow (optional) | Inflow data [ML]. A negative value is treated as zero: the node adds water and never takes it. Example: `inflow = data.allflows_csv.by_name.little_river_inflow` |
 | expected\_inflow (optional) | Expected inflow for purpose of adjusting orders [ML]. Example: `expected_inflow = 0.5 * this.inflow[-1,0]` |
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Inflow nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 

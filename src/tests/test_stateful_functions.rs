@@ -675,7 +675,7 @@ ds_1 = calc
 [node.calc]
 loc = 0, 10
 type = inflow
-inflow = latch(sim.day, sim.day == 1, -1)
+inflow = latch(sim.day, sim.day == 1, 5)
 ds_1 = sink
 
 [node.sink]
@@ -691,7 +691,7 @@ node.calc.dsflow
     model.run().expect("first run should succeed");
     let idx = model.data_cache.get_existing_series_idx("node.calc.dsflow").unwrap();
     let first: Vec<f64> = model.data_cache.series[idx].values.clone();
-    assert_series(&first, &[9.0, 9.0, 11.0, 11.0], "node.calc.dsflow");
+    assert_series(&first, &[15.0, 15.0, 11.0, 11.0], "node.calc.dsflow");
 
     model.run().expect("second run should succeed");
     let idx2 = model.data_cache.get_existing_series_idx("node.calc.dsflow").unwrap();

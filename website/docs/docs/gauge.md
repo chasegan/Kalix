@@ -24,7 +24,7 @@ ds_1 = my_other_node
 | type (compulsory) | The node type, which is “gauge” in this case. `type = gauge` |
 | loc (compulsory) | The location of the node in cartesian coordinates.  Example: `loc = 20, 30` |
 | reference\_flow (optional) | An expression specifying reference flow values that are used to compare the flows entering the gauge. You can record the values of delta (= upstream flow - reference flow) via the “delta” result. Reference flow values may be missing (nan) and this will result in a missing (nan) value for delta in that timestep. Example `reference_flow = data.file_csv.by_index.1` |
-| force\_flow (optional) | An expression specifying flow values to be forced at the node. This is done after the reference flow comparison. Example `force_flow = data.file_csv.by_index.1` |
+| force\_flow (optional) | An expression specifying flow values to be forced at the node. This is done after the reference flow comparison. A negative value is treated as zero. A value that is not a number leaves the flow unforced on that timestep. Example `force_flow = data.file_csv.by_index.1` |
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Inflow nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 
 ## Results associated with this node

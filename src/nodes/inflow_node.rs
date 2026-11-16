@@ -96,8 +96,12 @@ impl Node for InflowNode {
             data_cache.add_value_at_index(idx, self.usflow);
         }
 
-        // Get lateral inflow
-        self.inflow_value = self.inflow_input.get_value(data_cache);
+        // Get lateral inflow. A negative inflow is no inflow: the node adds
+        // water and never takes it, so it cannot put negative water at its
+        // outlet. An inflow that is not a number is left as it is, and no
+        // link carries it.
+        let inflow = self.inflow_input.get_value(data_cache);
+        self.inflow_value = if inflow < 0.0 { 0.0 } else { inflow };
 
         // Compute outflow based on inflow
         self.dsflow_primary = self.usflow + self.inflow_value;
