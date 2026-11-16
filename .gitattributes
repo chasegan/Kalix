@@ -7,6 +7,12 @@
 # fixtures the tests read, so no other file's checkout behaviour changes.
 regression_tests/**/*.ini text eol=lf
 
+# Force LF for the mass balance reference reports too.
+#
+# The engine writes its report with LF. Checked out as CRLF, a reference differs
+# from it on every line by a carriage return no diff view shows.
+regression_tests/**/mbal.txt text eol=lf
+
 # Force LF for the theme snapshot baselines, for the same reason.
 #
 # ThemePropertiesSnapshotTest dumps each generated theme with a hard-coded '\n'
