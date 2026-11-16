@@ -281,7 +281,18 @@ impl AccountManager {
     /// ordering and flow phases. Resets the per-step debit tally and publishes
     /// `opening_balance` — the post-policy, pre-take snapshot every expression
     /// reader sees, whatever order the nodes run in.
+    #[inline(always)]
     pub fn start_of_step(&mut self, data_cache: &mut DataCache) {
+        // A model with no accounts returns in the caller, and does not pay
+        // for the entry to the work below.
+        if self.accounts.is_empty() {
+            return;
+        }
+        self.start_of_step_with_accounts(data_cache)
+    }
+
+    #[inline(never)]
+    fn start_of_step_with_accounts(&mut self, data_cache: &mut DataCache) {
         for account in &mut self.accounts {
             account.debits_today = 0.0;
         }
