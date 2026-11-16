@@ -56,9 +56,17 @@ fn test_a_negative_forced_flow_at_a_gauge_is_no_flow() {
     let mut model = run(&format!("{RIVER}[node.mid]\ntype = gauge\nloc = 0, 10\nforce_flow = -5\nds_1 = sink\n\n{SINK}"));
     assert!(series(&mut model, "node.mid.dsflow").iter().all(|&v| v == 0.0));
     assert!(series(&mut model, "node.sink.usflow").iter().all(|&v| v == 0.0));
+    assert!(series(&mut model, "node.mid.force_flow").iter().all(|&v| v == -5.0), "the result shows what was asked for");
     let mbal = mass_balance(&model);
     assert_eq!(mbal["mid"], -100.0);
     assert_eq!(mbal.values().sum::<f64>(), 0.0, "the model balances");
+}
+
+#[test]
+fn test_a_forced_flow_that_is_not_a_number_leaves_the_flow_unforced() {
+    let mut model = run(&format!("{RIVER}[node.mid]\ntype = gauge\nloc = 0, 10\nforce_flow = 0 / 0\nds_1 = sink\n\n{SINK}"));
+    assert!(series(&mut model, "node.mid.dsflow").iter().all(|&v| v == 100.0));
+    assert_eq!(mass_balance(&model)["mid"], 0.0);
 }
 
 #[test]

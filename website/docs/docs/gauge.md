@@ -37,11 +37,11 @@ ds_1 = my_other_node
 | delta | Difference between upstream flow and the reference flow (i.e. delta = upstream flow - reference flow). If the reference flow is nan, then delta will also be nan. [ML] |
 | ds\_1 | Downstream flow on link ds\_1 [ML] |
 | ds\_1\_order | Order on link ds\_1 [ML] |
-| force\_flow | Forced downstream flow [ML]. If this exists, it should equal dsflow. |
+| force\_flow | The value of the force\_flow expression [ML]. The downstream flow equals it, unless it is negative or not a number. A negative value is recorded as it was given, and the downstream flow is zero. |
 
 ## How the node works
 
-If the “force\_flow” parameter is used, then the downstream flow will be set equal to these values. Otherwise, all inflows are passed to the downstream node.
+If the “force\_flow” parameter is used, then the downstream flow is set equal to its value. A negative value sets the downstream flow to zero. On a timestep where the value is not a number, the flow is not forced. Otherwise, all inflows are passed to the downstream node.
 
 ## References
 

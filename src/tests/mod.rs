@@ -168,7 +168,7 @@ mod test_ordering_inlets;
 // Mass balance at outlets with no link
 mod test_mass_balance_outfalls;
 
-// Negative water at an outlet
+// Inputs that ask a node for negative water
 mod test_negative_flow;
 
 // Unregulated user: supply outlets (ds_2 to ds_4)
