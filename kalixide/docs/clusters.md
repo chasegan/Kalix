@@ -1,11 +1,10 @@
 # Node Clusters
 
-Status: **design settled; V1a in progress: `#@cluster` is parsed and indexed, and the map's
-menu offers Create, Add, Remove, Rename and Disband, but the map doesn't draw clusters yet**
-(stages below). Issue
-[#476](https://github.com/chasegan/Kalix/issues/476). The present
-tense below describes the design. A few choices are marked for checking at user
-testing (see Context menu).
+Status: **design settled; V1a (model and rules) done: `#@cluster` is parsed and indexed,
+and the map's menu offers Create, Add, Remove, Rename and Disband, but the map doesn't draw
+clusters yet** (stages below). Issue [#476](https://github.com/chasegan/Kalix/issues/476).
+The present tense below describes the design. A few choices are marked for checking at
+user testing (see Context menu).
 
 Clusters group nodes on the schematic map, so a modeller can fold part of a large model
 into one icon and open it again. A cluster has no section of its own: it is a name, in
@@ -71,7 +70,7 @@ name at the box's top left.
 
 ### Showing clusters
 
-5. **Which clusters are collapsed is never saved** (ADR-0015 §3; the ADR is still
+5. **Which clusters are collapsed is never saved** (ADR-0015 §3, which is
    Proposed). Everything starts collapsed on load, and so does a new cluster, even one
    just made from the map, since people may make several in a row. The nodes turning
    into an icon shows it worked. A three-state collapse button with a remembered
@@ -153,7 +152,7 @@ sits in its ADR-0002 §1 block and is absent when it can't apply (§4).
 | ③ Clipboard | Cut, Copy *(existing)* | Unchanged; act on a collapsed cluster's members |
 | ④ Selection | `Select nodes ▸ Cluster` | A selected member of an expanded cluster |
 | ⑤ Create | `Create cluster…` | Visible nodes selected, and no collapsed cluster selected |
-| ⑥ Modify | `Rename` *(existing, node)* | Unchanged, except enabled only when the one selected thing is a visible node |
+| ⑥ Modify | `Rename` *(existing, node)* | Shown as now; enabled only when the one selected thing is a visible node |
 | ⑥ Modify | `Add to "x"`, or `Add to cluster ▸` with several targets | Visible nodes selected, and a target exists |
 | ⑥ Modify | `Remove from cluster` | A selected member of an expanded cluster, across any number of clusters |
 | ⑥ Modify | `Rename "x"…` | The selection is exactly one whole cluster |
@@ -164,8 +163,8 @@ sits in its ADR-0002 §1 block and is absent when it can't apply (§4).
 | ⑧ View / state | `Collapse all clusters`, `Expand all clusters` | Every map menu while the model has a cluster. All collapsed: Expand all only. All expanded: Collapse all only. Mixed: both |
 
 Add's targets are the selected collapsed clusters if there are any, otherwise every
-cluster except one that already holds all the selected nodes. If a node has the same name
-as a cluster that a label names, the label adds a suffix after the name:
+cluster except one that already holds all the selected nodes. When a label names a cluster
+and a node has the same name, the label adds `(cluster)` after the name:
 `Rename "farm_3" (cluster)…`. One helper makes every cluster label (ADR-0003 §2.3).
 
 To check at user testing: the word "Disband"; leaving "cluster" out of labels; Add across
@@ -193,10 +192,11 @@ trailing text.
 **The cluster index** (`ClusterIndex`, on `HydrologicalModel`). The model's node map has no
 order, so the order of first mention has to be kept from the parse. The index holds each
 cluster's members in file order, and is replaced whole at every reparse, so it is a snapshot
-of the text. Only complete nodes count, as only they are on the map. Names are matched
-ignoring case, as node names are, so `teemburra` and `Teemburra` are one cluster, shown
-with the spelling of its first mention. The index owns both choices, each in one place:
-the key names are compared by, and which spelling is shown. The linter warns on each
+of the text. Only complete nodes (with a `type` and a `loc`) count, as only they are on
+the map. Names are matched ignoring case, as node names are, so `teemburra` and
+`Teemburra` are one cluster, shown with the spelling of its first mention. The index owns
+both choices, each in one place: how names are compared (by a key), and which spelling is
+shown. The linter warns on each
 mention spelled differently from the first, naming it, so a stray spelling is found.
 
 **Edits** (`ClusterEdits`, `CommandExecutor`). Each is a pure function from text to text
@@ -206,25 +206,26 @@ through `NodeSectionLocator`, not the model, so Rename and Disband reach a secti
 isn't on the map. An invalid name is refused with an error stating the rule, and never
 corrected. Edits match a cluster by its key. Create with a name that exists with other
 capitalisation joins that cluster and writes its existing spelling, not the typed one, so
-mistyped capitals never rewrite a whole cluster; so does a Rename that merges into another
-cluster. The existing spelling is the index's, so it is found only among clusters on the
-map: a name used only on incomplete nodes isn't, and the typed spelling is written. A Rename within one cluster changes its spelling by rewriting every member, and
+mistyped capitals never rewrite a whole cluster. A Rename that merges into another cluster
+does the same. The existing spelling is the index's, so it is found only among clusters
+on the map; a name used only on incomplete nodes isn't found, and the typed spelling is
+written. A Rename within one cluster changes its spelling by rewriting every member, and
 renaming to the spelling already shown tidies any member spelled otherwise. A cluster edit
-leaves a
-node with at most one `#@cluster` line, so a node with two can't fall back to the earlier
-cluster: it rewrites the last line in place and deletes any others. Rewriting in place
-keeps a comment below the line inside the section, where a delete and re-insert would push
-it out. A node with no line gets one directly above its header, below any comments; those
-comments belong to the section above, with or without the new line (ADR-0010 §3), so a
-later Cut takes the same text plus the annotation. A section starts at its first annotation
-(`NodeSectionLocator`), so the clipboard and Delete already carry `#@cluster`.
+leaves a node with at most one `#@cluster` line, so a node with two can't fall back to the
+earlier cluster: it rewrites the last line in place and deletes any others. Rewriting in
+place keeps a comment below the line inside the section, where a delete and re-insert
+would push it out. A node with no line gets one directly above its header, below any
+comments; those comments belong to the section above, with or without the new line
+(ADR-0010 §3), so a later Cut takes the same text plus the annotation. A section starts at
+its first annotation (`NodeSectionLocator`), so the clipboard and Delete already carry
+`#@cluster`.
 
-**Collapse state** is a session map keyed by `ClusterIndex.key`, not by a spelling, so a
+**Collapse state** is a session map keyed by `ClusterIndex.key()`, not by a spelling, so a
 rename that changes only capitalisation keeps its state; entries are **never removed
 when a cluster vanishes**. Undo is the editor's own text undo followed by a reparse, so a
 cluster that undo brings back finds its old state. Create and Rename write entries
-explicitly: a new name starts collapsed, a rename copies the old name's state, and joining
-an existing cluster leaves its state alone.
+explicitly: a new name starts collapsed, a rename to a new name copies the old name's
+state, and joining an existing cluster leaves its state alone.
 
 **Drawing order** (`MapRenderer`): links; loose nodes; for each cluster in order of its
 first mention in the file, its box and then its members; collapsed icons. Loose nodes draw
@@ -251,16 +252,16 @@ for the reparse, as Insert node's does.
 
 **Locations** (`TextCoordinateUpdater.updateNodeCoordinates`). A drag moves each member by
 the same offset, as one atomic edit, with dotted ghosts of the members while dragging or
-rotating. Today that writes the `loc` property; under ADR-0010 §8 it writes whichever form
-each member has.
+rotating. For now that writes the `loc` property; once the IDE implements ADR-0010 §8, it
+writes whichever form each member has.
 
 ## Stages
 
 - **V1a: model and rules.** Parsing, the edits, the label helper, the menu rules as pure
   functions with table tests, three lint rules (an invalid name; two `#@cluster` lines; one
-  cluster spelled with different capitalisation). A
-  thin slice of the menu, so the edits can be tried by hand: Create, Add, Remove, Rename and
-  Disband, with every cluster counted as expanded.
+  cluster spelled with different capitalisation). A thin slice of the menu, so the edits
+  can be tried by hand: Create, Add, Remove, Rename and Disband, with every cluster counted
+  as expanded.
 - **V1b: drawing.** Boxes, icons, links to icons, collapse state.
 - **V1c: interaction.** The rest of the menu (`Select nodes ▸ Cluster`, Collapse, Expand),
   selection, hit-testing, drag, rotate, Delete.

@@ -68,7 +68,7 @@ Chosen option: **4**, for regions as well.
        name, so identity is never more than a hover away.
     2. `cluster` — a strict bare name. Nodes sharing one may be drawn as one
        icon at their centroid. `.` is reserved for hierarchy later. Cluster
-       names now follow the node-name rule (amendment 2026-11-10).
+       names follow the node-name rule (amendment 2026-11-10).
     3. `region` — the title of a text region, which runs to the next `region`
        or the end of the file. Regions do not nest and are not clusters.
        Folding a section or a multi-line value is structural and needs no
