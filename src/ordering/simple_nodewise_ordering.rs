@@ -355,18 +355,18 @@ impl SimpleNodewiseOrderingSystem {
     /// links stored in a flat contiguous vec for cache locality.
     ///
     /// A model with no ordering returns from here, in the caller. The work is
-    /// in `run_ordering_phase_with_orders`, kept out of line so that a model
+    /// in `order_regulated_nodes`, kept out of line so that a model
     /// with nothing to order does not pay for that function's entry.
     #[inline(always)]
     pub fn run_ordering_phase(&mut self, nodes: &mut Vec<NodeEnum>, data_cache: &mut DataCache, account_manager: &mut AccountManager) {
         if !self.model_has_ordering {
             return;
         }
-        self.run_ordering_phase_with_orders(nodes, data_cache, account_manager)
+        self.order_regulated_nodes(nodes, data_cache, account_manager)
     }
 
     #[inline(never)]
-    fn run_ordering_phase_with_orders(&mut self, nodes: &mut Vec<NodeEnum>, data_cache: &mut DataCache, account_manager: &mut AccountManager) {
+    fn order_regulated_nodes(&mut self, nodes: &mut Vec<NodeEnum>, data_cache: &mut DataCache, account_manager: &mut AccountManager) {
 
         // The accounts' forecast: yesterday's due orders leave it, and it is published,
         // before any user caps its order by it

@@ -394,14 +394,16 @@ impl DataCache {
             self.timestamp_day += 1;
             self.update_calendar_flags(year, month, day);
         } else {
-            self.increment_current_step_by_timestamp();
+            self.increment_current_step_from_timestamp();
         }
     }
 
     /// The long way to the next step: the date worked out from the timestamp.
-    #[cold]
+    /// Out of line to keep the short way small where it is inlined. Not
+    /// marked cold: a model whose step is two days or longer takes this way
+    /// every step.
     #[inline(never)]
-    fn increment_current_step_by_timestamp(&mut self) {
+    fn increment_current_step_from_timestamp(&mut self) {
         self.set_current_step(self.current_step + 1);
     }
 
