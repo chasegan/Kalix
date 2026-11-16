@@ -135,7 +135,7 @@ Everything that limits or meters the take applies to the whole diversion, the su
 
 Orders on the supply outlets take no part in `demand_carryover`, which carries over the user's own unmet demand alone. A node that orders to meet a deficit, as a field does, orders that deficit again the next day; carrying it over as well would deliver it twice.
 
-For the mass balance, only what the user keeps for itself leaves the model at the user; the water sent down a supply outlet is still in the model, on that link. What the user keeps is `diversion − ds_2 − ds_3 − ds_4`, and `usflow = ds_1 + diversion`.
+For the mass balance, only what the user keeps for itself leaves the model at the user; the water sent down a supply outlet is still in the model, on that link. What the user keeps is `diversion − ds_2 − ds_3 − ds_4`, and `usflow = ds_1 + diversion`. If `ds_1` has no link, the water there leaves the model at the user as well.
 
 ## References
 

@@ -136,7 +136,7 @@ TOTAL = 0
 ----------------------------------
 ```
 
-This is a check on every node's flow accounting. A node's value is the water its downstream links carried away, less the water its upstream links brought, in ML per timestep as a mean over the run. The Sacramento node adds its runoff to the network, so its value is positive. The gauge has no downstream link, so the water that reaches it leaves the model there, and its value is negative. The total is always zero, apart from rounding.
+This is a check on every node's flow accounting. A node's value is the water its downstream links carried away, less the water its upstream links brought, in ML per timestep as a mean over the run. The Sacramento node adds its runoff to the network, so its value is positive. The gauge has no downstream link, so the water that reaches it leaves the model there, and its value is negative. The total is zero, apart from rounding, when every node passed on what it accounted for. It is a check on the engine's own bookkeeping.
 
 In larger systems with storages, users, and links, the mass-balance report is one of your best diagnostic tools for detecting modelling errors.
 
@@ -196,7 +196,7 @@ After the loop, you'll have six output files — each one a complete simulation 
 
 - **Explore the simulate flags** — `kalix help simulate` prints every option, including `--verify-mass-balance` (next bullet).
 
-- **Mass-balance regression checks** — `kalix sim stringybark.ini --verify-mass-balance mbal.txt` compares the run's mass balance against a previously-saved report. Useful in CI to catch unintended behaviour changes when refactoring models.
+- **Mass-balance regression checks** — `kalix sim stringybark.ini --verify-mass-balance mbal.txt` compares the run's mass balance against a previously-saved report. Useful in CI to catch unintended behaviour changes when refactoring models. The report sees a node only through its links, which is why this model ends in a gauge.
 
 - **The JSON API spec** — `kalix get-api` dumps a machine-readable description of every command and flag, useful if you want to drive Kalix from another tool.
 
