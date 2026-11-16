@@ -1,19 +1,22 @@
 ==================================
 MASS BALANCE REPORT
 ==================================
-  Node count: 3
+  Node count: 4
   Timesteps: 32064
   Stepsize (s): 86400
   Period: 1925-11-15T00:00:00.000Z, 2013-08-28T00:00:00.000Z
   Note: units are ML/timestep
 
 AWBM NODES
-  myawbm, 0
-  mytwotap, 0
+  myawbm, 329.93179196517764
+  mytwotap, 381.9515843837612
 
 SURM NODES
-  mysurm, 0
+  mysurm, 349.6943296642755
+
+GAUGE NODES
+  outlet, -1061.5777060132148
 
 ----------------------------------
-TOTAL = 0
+TOTAL = -0.0000000000004547473508864641
 ----------------------------------
