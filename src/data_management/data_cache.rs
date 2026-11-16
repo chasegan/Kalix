@@ -227,6 +227,13 @@ impl DataCache {
         (self.timestamp_year, self.timestamp_month, self.timestamp_day, self.timestamp_seconds) =
             u64_to_year_month_day_and_seconds(self.current_timestamp);
 
+        self.update_calendar_flags(prev_year, prev_month, prev_day);
+    }
+
+    /// Sets new_year, new_month and new_day by comparing the date now held
+    /// with the previous step's.
+    #[inline(always)]
+    fn update_calendar_flags(&mut self, prev_year: i32, prev_month: u32, prev_day: u32) {
         // Calendar-boundary flags (structured_expressions_design.md §7). Step 0 is
         // an implicit boundary — the run start always counts. This makes the flags
         // independent of any stale prev values left over from a previous run, since
@@ -360,7 +367,41 @@ impl DataCache {
     Increase the current step by +1.
     This also updates the data_cache timestamp values.
      */
+    /// Moves to the next step. The date is advanced from the one held, without
+    /// working it out again from the timestamp, when the step stays within the
+    /// day or lands on the next day of the same month. Days 1 to 27 are
+    /// followed by the next day in every month, so only those take the short
+    /// way to the next day; a step that ends a month, or spans more than a
+    /// day, goes through `set_current_step`. A daily model then decomposes
+    /// its timestamp about four times a month, not every step.
+    #[inline(always)]
     pub fn increment_current_step(&mut self) {
+        const DAY: u64 = 86_400;
+        let seconds = self.timestamp_seconds as u64 + self.step_size;
+        if seconds < DAY {
+            // Later on the same day
+            let (year, month, day) = (self.timestamp_year, self.timestamp_month, self.timestamp_day);
+            self.current_step += 1;
+            self.current_timestamp += self.step_size;
+            self.timestamp_seconds = seconds as u32;
+            self.update_calendar_flags(year, month, day);
+        } else if seconds < 2 * DAY && self.timestamp_day < 28 {
+            // The next day of the same month
+            let (year, month, day) = (self.timestamp_year, self.timestamp_month, self.timestamp_day);
+            self.current_step += 1;
+            self.current_timestamp += self.step_size;
+            self.timestamp_seconds = (seconds - DAY) as u32;
+            self.timestamp_day += 1;
+            self.update_calendar_flags(year, month, day);
+        } else {
+            self.increment_current_step_by_timestamp();
+        }
+    }
+
+    /// The long way to the next step: the date worked out from the timestamp.
+    #[cold]
+    #[inline(never)]
+    fn increment_current_step_by_timestamp(&mut self) {
         self.set_current_step(self.current_step + 1);
     }
 

@@ -149,6 +149,7 @@ mod test_ras;
 // Calendar built-ins: is_leap_year / month_at / days_in_month_at and the
 // sim.days_in_* / sim.is_leap fields
 mod test_calendar_builtins;
+mod test_calendar_stepping;
 
 #[cfg(test)]
 mod test_opportunistic_demand;
