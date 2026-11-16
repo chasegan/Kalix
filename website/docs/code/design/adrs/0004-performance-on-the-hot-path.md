@@ -614,3 +614,33 @@ citing them when a trade is proposed.
   mechanism is not established; the stride did not change. The test 5
   figure was not chased. One machine (Apple M5), one session. Source:
   `69fd6621` on `feat/storage-target-volume`.
+- *2026-11-16* — fourteenth data point, for §3.5: the link transfer. After
+  each node's flow phase the step looked up `outgoing_links[node]`, then
+  `links[link_idx]`, then called `remove_dsflow`, which dispatches on node
+  type and on outlet. By a count of instructions in the disassembly that was
+  about a fifth of the cheapest model's step, and all of it follows from the
+  topology, which is fixed at setup. The links are now laid out once, in
+  execution order, as a flat list the flow phase walks with one cursor, and
+  the primary outlet is taken through a method that inlines. Against main, by
+  minimum of 30 interleaved runs: −2.6% to −6.6% on tests 2, 3, 4, 5, 7 and
+  10, −0.4% on test 8, and −7.8% and −8.8% on copies of tests 2 and 5 with a
+  flow var block. A control arm, main with the list built at setup and the
+  loops unchanged, measured −0.6% to +0.6% on those tests. The flat list and
+  the inlined take were not measured apart. One machine (Apple M5), one
+  session. Source: `5cde2a7c` on `perf/fold-transfers-into-execution-order`.
+- *2026-11-16* — fifteenth data point: a call that finds nothing to do still
+  pays for its entry. Speed test 1 is one node at about 35 ns a step, and the
+  step called the ordering phase and the account manager's start-of-step,
+  each of which saved its registers and only then returned. Testing for
+  nothing-to-do in the caller, with the work kept out of line, measured
+  −7.0% and −7.1% on test 1 in two sessions. Advancing the date from the date
+  held, where a step stays in the month, measured −4.1% and −4.6%; the same
+  logic written as one function measured −1.0%. Both together: −9.6% twice.
+  By minimum of 100 interleaved runs. No placement arm was built. Counts of
+  instructions executed stood in for one, since placement cannot change
+  them: the two changes remove about 33 and 98 instructions a step. On tests
+  2, 4, 5 and 10 the changes read between −2.4% and +0.6% with no pattern,
+  which is noise, so the 2026-09-21 finding that inlining
+  `run_ordering_phase` is not a lever on those models stands. One machine
+  (Apple M5). Sources: `ebb276f9` and `4b5b8c98` on
+  `perf/small-model-step-overhead`.
