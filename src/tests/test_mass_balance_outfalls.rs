@@ -66,8 +66,9 @@ fn test_a_splitter_with_both_outlets_linked_reads_zero() {
 
 #[test]
 fn test_an_inflow_with_no_link_adds_nothing_to_the_network() {
-    let mbal = mass_balance("[node.river]\ntype = inflow\nloc = 0, 0\ninflow = 100\n");
-    assert_eq!(mbal["river"], 0.0);
+    let model = run("[node.river]\ntype = inflow\nloc = 0, 0\ninflow = 100\n");
+    assert_eq!(report(&model)["river"], 0.0);
+    assert!(model.outfalls.is_empty(), "a node with no links has nothing to sweep each step");
 }
 
 #[test]
@@ -115,4 +116,28 @@ fn test_a_second_run_starts_its_outfalls_from_nothing() {
     model.run().expect("simulation should run again");
     assert_eq!(report(&model), first);
     assert_eq!(first["next"], -100.0);
+}
+
+#[test]
+fn test_a_node_with_no_links_reads_exactly_zero_with_several_outlets_in_use() {
+    // Spill and two forced releases that do not sum exactly in floating point
+    let model = run("[node.dam]\ntype = storage\nloc = 0, 0\ninitial_volume = 4000\n\
+        dimensions = Level [m], Volume [ML], Area [km2], Spill [ML], 0, 0, 0, 0, 5000, 5000, 1, 0, 5001, 5001, 1, 1,\n\
+        ds_2_force_release = 0.1\nds_3_force_release = 0.7\n");
+    assert_eq!(report(&model)["dam"], 0.0);
+    assert!(model.outfalls.is_empty());
+}
+
+#[test]
+fn test_a_node_with_no_links_still_shows_a_figure_that_is_not_a_number() {
+    let mbal = mass_balance("[node.river]\ntype = inflow\nloc = 0, 0\ninflow = 0 / 0\n");
+    assert!(mbal["river"].is_nan());
+}
+
+#[test]
+fn test_the_report_reads_the_layout_the_run_used() {
+    // Two nodes with no links. A link added after the run does not change what the run did.
+    let mut model = run("[node.river]\ntype = inflow\nloc = 0, 0\ninflow = 100\n\n[node.next]\ntype = gauge\nloc = 0, 10\n");
+    model.add_link(0, 1, 0, 0);
+    assert_eq!(report(&model)["river"], 0.0);
 }

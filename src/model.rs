@@ -226,11 +226,19 @@ pub struct Model {
 
     /// Hot path: flow phase, swept once per step in run_timestep().
     /// The outlets that can hold water and have no link. Every such outlet
-    /// of every node is in `transfers` or here. Usually a handful, often none.
+    /// is in `transfers` or here, unless its node is in `linkless_nodes`.
+    /// Usually a handful, often none.
     ///
     /// Populated: computed by `check_execution_order()` with `transfers`,
     /// which also zeroes the volumes at the start of every run.
     pub outfalls: Vec<Outfall>,
+
+    /// Read by the mass balance report. The nodes with no link in or out.
+    /// Everything such a node puts at its outlets leaves the model there, so
+    /// what it left is its own figure and its outlets are not swept.
+    ///
+    /// Populated: computed by `check_execution_order()` with `outfalls`.
+    pub linkless_nodes: Vec<u32>,
 
     /// Read at setup: the flow phase's transfers are built from it.
     /// Adjacency list for O(1) link lookup.
@@ -387,6 +395,7 @@ impl Model {
             links: self.links.clone(),
             transfers: self.transfers.clone(),
             outfalls: self.outfalls.clone(),
+            linkless_nodes: self.linkless_nodes.clone(),
             outgoing_links: self.outgoing_links.clone(),
             incoming_links: self.incoming_links.clone(),
             execution_order: self.execution_order.clone(),
@@ -425,6 +434,7 @@ impl Model {
             // and a report needs both.
             transfers: vec![],
             outfalls: self.outfalls.clone(),
+            linkless_nodes: self.linkless_nodes.clone(),
             outgoing_links: self.outgoing_links.clone(),
             incoming_links: self.incoming_links.clone(),
             execution_order: vec![],
@@ -1404,6 +1414,7 @@ impl Model {
         self.execution_order.clear();
         self.transfers.clear();
         self.outfalls.clear();
+        self.linkless_nodes.clear();
 
         // Check execution order is consistent with flow phase using link info:
         // The node below each link must have a higher index than the node above the link
@@ -1423,7 +1434,7 @@ impl Model {
         // out behind the previous node's, in the order they were added, so the
         // flow phase reads them in one pass. An outlet that can hold water and
         // has no link is an outfall, so every such outlet is in one list or
-        // the other. This runs at the start of every run, which is also what
+        // the other, unless its node has no links at all. This runs at the start of every run, which is also what
         // zeroes the outfalls' volumes.
         for node_idx in 0..self.nodes.len() {
             let mut linked = [false; MAX_OUTLETS as usize];
@@ -1438,9 +1449,17 @@ impl Model {
                     *is_linked = true;
                 }
             }
-            for outlet in 0..MAX_OUTLETS {
-                if !linked[outlet as usize] && self.nodes[node_idx].can_strand_water(outlet) {
-                    self.outfalls.push(Outfall { volume: 0.0, node: node_idx as u32, outlet });
+            // A node with no link in or out needs no outfalls. Everything it
+            // puts at its outlets leaves the model there, so what it left is
+            // its own figure, and the report uses that. A lone catchment, the
+            // commonest calibration model, then has nothing to sweep each step.
+            if self.outgoing_links[node_idx].is_empty() && self.incoming_links[node_idx].is_empty() {
+                self.linkless_nodes.push(node_idx as u32);
+            } else {
+                for outlet in 0..MAX_OUTLETS {
+                    if !linked[outlet as usize] && self.nodes[node_idx].can_strand_water(outlet) {
+                        self.outfalls.push(Outfall { volume: 0.0, node: node_idx as u32, outlet });
+                    }
                 }
             }
             self.execution_order.push(FlowStep {
@@ -1493,6 +1512,12 @@ impl Model {
         let mut left_at_outfalls = vec![0.0; self.nodes.len()];
         for outfall in &self.outfalls {
             left_at_outfalls[outfall.node as usize] += outfall.volume;
+        }
+        // A node with no links left everything it emitted, and its outlets
+        // were not swept: what it left is its own figure. It then reads zero,
+        // or NaN if its figure is not finite.
+        for &node_idx in &self.linkless_nodes {
+            left_at_outfalls[node_idx as usize] = self.nodes[node_idx as usize].get_internal_mbal();
         }
 
         let mut by_type: HashMap<String, Vec<(String, f64)>> = HashMap::new();
