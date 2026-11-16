@@ -16,7 +16,7 @@ pub const DS_2_OUTLET: u8 = 1;
 pub struct SplitterNode {
     pub name: String,
     pub location: Location,
-    pub mbal: f64,
+    pub internal_mbal: f64,
     pub splitter_table: Table,  // As the modeller wrote it, and optional. By default, the columns mean Inflow Rate ML, Effluent Rate ML (maybe ways to override this later)
     flow_table: Table,          // The table the node runs on: splitter_table, or zero effluent at every inflow if none was given. Built in initialise().
     pub order_translation_table: TableDiscontinuous, // Required ds_1 flow -> smallest inflow that delivers it past the table. Built in initialise().
@@ -59,7 +59,7 @@ impl SplitterNode {
 impl Node for SplitterNode {
     fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(), String> {
         // Initialize only internal state
-        self.mbal = 0.0;
+        self.internal_mbal = 0.0;
         self.usflow = 0.0;
         self.ds_1_flow = 0.0;
         self.ds_2_flow = 0.0;
@@ -245,7 +245,7 @@ impl Node for SplitterNode {
         }
 
         // Update mass balance
-        // self.mbal = 0.0; // This is always zero for Splitter nodes. The water on ds_2 is not lost in this node.
+        // self.internal_mbal = 0.0; // This is always zero for Splitter nodes. The water on ds_2 is not lost in this node.
 
         // Record results
         if let Some(idx) = self.recorder_idx_dsflow {
@@ -287,8 +287,8 @@ impl Node for SplitterNode {
         std::mem::take(&mut self.ds_1_flow)
     }
 
-    fn get_mass_balance(&self) -> f64 {
-        self.mbal
+    fn get_internal_mbal(&self) -> f64 {
+        self.internal_mbal
     }
 
     fn dsorders_mut(&mut self) -> &mut [f64] {

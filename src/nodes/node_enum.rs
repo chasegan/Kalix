@@ -203,8 +203,8 @@ impl Node for NodeEnum {
         dispatch!(self, node => node.remove_dsflow_primary())
     }
 
-    fn get_mass_balance(&self) -> f64 {
-        dispatch!(self, node => node.get_mass_balance())
+    fn get_internal_mbal(&self) -> f64 {
+        dispatch!(self, node => node.get_internal_mbal())
     }
 
     fn dsorders_mut(&mut self) -> &mut [f64] {

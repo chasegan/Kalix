@@ -33,7 +33,7 @@ pub enum OrderSplit {
 pub struct ConfluenceNode {
     pub name: String,
     pub location: Location,
-    pub mbal: f64,
+    pub internal_mbal: f64,
 
     // Harmony fraction
     pub harmony_fraction: DynamicInput,
@@ -108,7 +108,7 @@ impl ConfluenceNode {
 impl Node for ConfluenceNode {
     fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(), String> {
         // Initialize only internal state
-        self.mbal = 0.0;
+        self.internal_mbal = 0.0;
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
 
@@ -174,7 +174,7 @@ impl Node for ConfluenceNode {
         self.dsflow_primary = self.usflow;
 
         // Update mass balance
-        // self.mbal = 0.0; // This is always zero for Confluence nodes
+        // self.internal_mbal = 0.0; // This is always zero for Confluence nodes
 
         // Record results
         if let Some(idx) = self.recorder_idx_dsflow {
@@ -208,8 +208,8 @@ impl Node for ConfluenceNode {
         std::mem::take(&mut self.dsflow_primary)
     }
 
-    fn get_mass_balance(&self) -> f64 {
-        self.mbal
+    fn get_internal_mbal(&self) -> f64 {
+        self.internal_mbal
     }
 
     fn dsorders_mut(&mut self) -> &mut [f64] {

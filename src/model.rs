@@ -1475,7 +1475,7 @@ impl Model {
             let node = &self.nodes[node_idx];
             let type_name = node.get_type_as_string();
             // Subtract, then divide once
-            let mbal_per_timestep = (node.get_mass_balance() - left_at_outfalls[node_idx])
+            let mbal_per_timestep = (node.get_internal_mbal() - left_at_outfalls[node_idx])
                 / (self.configuration.sim_nsteps as f64);
             by_type
                 .entry(type_name)

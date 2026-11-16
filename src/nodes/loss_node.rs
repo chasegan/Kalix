@@ -12,7 +12,7 @@ const MAX_DS_LINKS: usize = 1;
 pub struct LossNode {
     pub name: String,
     pub location: Location,
-    pub mbal: f64,
+    pub internal_mbal: f64,
     pub loss_table: Table,  // Columns: Inflow ML, Loss ML
     pub order_translation_table: TableDiscontinuous,
     pub loss_rate: DynamicInput,
@@ -30,7 +30,7 @@ pub struct LossNode {
     // Up to this inflow the table loses nothing, so both phases skip their lookup
     // beneath it. Set in initialise().
     // Keep this declared away from `usflow`, and measure if these fields move. The
-    // flow phase reads both. Declared between mbal and usflow it landed beside
+    // flow phase reads both. Declared between mbal (now internal_mbal) and usflow it landed beside
     // usflow, the compiler fetched the two with one paired load (ldp), and a model
     // that never skips ran 24% slower than with no skip at all; a fields-only build
     // was flat, so it was not the size. Declared here they load separately (two ldr)
@@ -63,7 +63,7 @@ impl Node for LossNode {
 
     fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(), String> {
         // Initialize only internal state
-        self.mbal = 0.0;
+        self.internal_mbal = 0.0;
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
         self.loss = 0.0;
@@ -211,7 +211,7 @@ impl Node for LossNode {
         }
 
         // Update mass balance
-        self.mbal -= self.loss;
+        self.internal_mbal -= self.loss;
 
         // Record results
         if let Some(idx) = self.recorder_idx_dsflow {

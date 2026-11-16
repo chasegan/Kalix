@@ -206,7 +206,7 @@ enum StorageOrdering {
 pub struct StorageNode {
     pub name: String,
     pub location: Location,
-    pub mbal: f64,
+    pub internal_mbal: f64,
     pub dimensions: Table,       // Level m, Volume ML, Area km2, Spill ML
     pub volume: f64,
     pub vol_initial: f64,
@@ -1191,7 +1191,7 @@ impl Node for StorageNode {
 
     fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(),String> {
         // Initialize only internal state
-        self.mbal = 0.0;
+        self.internal_mbal = 0.0;
         self.usflow = 0.0;
         self.dsflow = 0.0;
         self.ds_flows = [0.0; MAX_DS_LINKS];
@@ -1601,7 +1601,7 @@ impl Node for StorageNode {
         }
 
         // Update mass balance
-        self.mbal += self.dsflow - self.usflow;
+        self.internal_mbal += self.dsflow - self.usflow;
 
         // Record results
         if let Some(idx) = self.recorder_idx_volume {
@@ -1702,8 +1702,8 @@ impl Node for StorageNode {
         std::mem::take(&mut self.ds_flows[0])
     }
 
-    fn get_mass_balance(&self) -> f64 {
-        self.mbal
+    fn get_internal_mbal(&self) -> f64 {
+        self.internal_mbal
     }
 
     fn dsorders_mut(&mut self) -> &mut [f64] {

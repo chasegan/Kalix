@@ -11,7 +11,7 @@ const MAX_DS_LINKS: usize = 1;
 pub struct OrderControlNode {
     pub name: String,
     pub location: Location,
-    pub mbal: f64,
+    pub internal_mbal: f64,
 
     // Properties
     pub min_order_input: DynamicInput,
@@ -65,7 +65,7 @@ impl Node for OrderControlNode {
 
     fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(), String> {
         // Initialize only internal state
-        self.mbal = 0.0;
+        self.internal_mbal = 0.0;
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
         self.delay_order_buffer = FifoBuffer::new(self.delay_order_steps);

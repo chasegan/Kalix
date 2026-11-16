@@ -10,7 +10,7 @@ const MAX_DS_LINKS: usize = 1;
 pub struct GaugeNode {
     pub name: String,
     pub location: Location,
-    pub mbal: f64,
+    pub internal_mbal: f64,
     pub force_flow_input: DynamicInput,
     pub reference_flow_input: DynamicInput,
 
@@ -47,7 +47,7 @@ impl Node for GaugeNode {
 
     fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(), String> {
         // Initialize only internal state
-        self.mbal = 0.0;
+        self.internal_mbal = 0.0;
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
 
@@ -94,7 +94,7 @@ impl Node for GaugeNode {
             self.dsflow_primary = self.usflow;
         } else {
             self.dsflow_primary = force_flow_value;
-            self.mbal += self.dsflow_primary - self.usflow;
+            self.internal_mbal += self.dsflow_primary - self.usflow;
         }
 
         // Record results

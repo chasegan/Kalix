@@ -9,7 +9,7 @@ const MAX_DS_LINKS: usize = 1;
 pub struct BlackholeNode {
     pub name: String,
     pub location: Location,
-    pub mbal: f64,
+    pub internal_mbal: f64,
 
     // Internal state only
     usflow: f64,
@@ -38,7 +38,7 @@ impl BlackholeNode {
 impl Node for BlackholeNode {
     fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(), String> {
         // Initialize only internal state
-        self.mbal = 0.0;
+        self.internal_mbal = 0.0;
         self.usflow = 0.0;
 
         // Initialize result recorders
@@ -69,7 +69,7 @@ impl Node for BlackholeNode {
         }
 
         // Update mass balance
-        self.mbal -= self.usflow; // All the water goes behind the event horizon
+        self.internal_mbal -= self.usflow; // All the water goes behind the event horizon
 
         // Record results
         if let Some(idx) = self.recorder_idx_dsflow {
@@ -97,8 +97,8 @@ impl Node for BlackholeNode {
         0f64
     }
 
-    fn get_mass_balance(&self) -> f64 {
-        self.mbal
+    fn get_internal_mbal(&self) -> f64 {
+        self.internal_mbal
     }
 
     fn dsorders_mut(&mut self) -> &mut [f64] {
