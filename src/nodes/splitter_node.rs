@@ -240,9 +240,6 @@ impl Node for SplitterNode {
         };
         self.ds_2_flow = table_flow.max(self.ds_2_order_due).min(self.usflow);
         self.ds_1_flow = self.usflow - self.ds_2_flow;
-        if self.ds_1_flow < 0f64 {
-            panic!("Negative ds_1 flow at '{}' when usflow={}, ds_1={}", self.name, self.usflow, self.ds_1_flow);
-        }
 
         // Update mass balance
         // self.internal_mbal = 0.0; // This is always zero for Splitter nodes. The water on ds_2 is not lost in this node.

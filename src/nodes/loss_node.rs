@@ -205,10 +205,6 @@ impl Node for LossNode {
 
         // Remaining flow after loss goes to ds_1
         self.dsflow_primary = self.usflow - self.loss;
-        // TODO remove below check. This can only happen if the usflow is negative. Not this node's fault.
-        if self.dsflow_primary < 0.0 {
-            panic!("Negative downstream flow at '{}' when usflow={}, loss={}", self.name, self.usflow, self.loss);
-        }
 
         // Update mass balance
         self.internal_mbal -= self.loss;
