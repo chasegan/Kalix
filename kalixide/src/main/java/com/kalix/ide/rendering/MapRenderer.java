@@ -361,10 +361,19 @@ public class MapRenderer {
 
         AffineTransform originalTransform = g2d.getTransform();
 
-        // Render each node
-        for (ModelNode node : model.getAllNodes()) {
-            renderSingleNode(g2d, node, model, nodeTheme, zoomLevel, panX, panY, originalTransform,
-                             labelMode, hoveredNodeName);
+        // Layer by layer, every shape and then every label, so no shape in a layer
+        // covers a label in it (MapLayers says why not all labels last).
+        for (MapLayers.Layer layer : MapLayers.of(model)) {
+            for (ModelNode node : layer.nodes()) {
+                renderNodeShape(g2d, node, model, nodeTheme, zoomLevel, panX, panY, originalTransform);
+            }
+            for (ModelNode node : layer.nodes()) {
+                // What the mode draws for this node, given whether the mouse is over it
+                // (NodeLabelMode owns that rule).
+                boolean hovered = node.getName().equals(hoveredNodeName);
+                renderNodeText(g2d, labelMode.labelLines(node, hovered),
+                               node.getX() * zoomLevel + panX, node.getY() * zoomLevel + panY, nodeTheme);
+            }
         }
 
         // Restore the original transform
@@ -372,7 +381,8 @@ public class MapRenderer {
     }
 
     /**
-     * Renders a single node with proper coordinate transformation and styling.
+     * Renders a node's shape, with its border and the text inside it; its label is drawn
+     * separately, after every shape in its layer.
      *
      * @param g2d Graphics context
      * @param node Node to render
@@ -382,13 +392,10 @@ public class MapRenderer {
      * @param panX Horizontal pan offset
      * @param panY Vertical pan offset
      * @param originalTransform Original screen-space transform
-     * @param labelMode Which text is drawn under each node
-     * @param hoveredNodeName Node whose label the mouse changes, or null
      */
-    private void renderSingleNode(Graphics2D g2d, ModelNode node, HydrologicalModel model,
+    private void renderNodeShape(Graphics2D g2d, ModelNode node, HydrologicalModel model,
                                  NodeTheme nodeTheme, double zoomLevel, double panX, double panY,
-                                 AffineTransform originalTransform,
-                                 NodeLabelMode labelMode, String hoveredNodeName) {
+                                 AffineTransform originalTransform) {
 
         // Get node styling from theme
         Color nodeColor = nodeTheme.getColorForNodeType(node.getType());
@@ -415,11 +422,6 @@ public class MapRenderer {
 
         // Reset stroke for next node
         g2d.setStroke(DEFAULT_STROKE);
-
-        // The label under the shape: what the mode draws for this node, given
-        // whether the mouse is over it (NodeLabelMode owns that rule).
-        boolean hovered = node.getName().equals(hoveredNodeName);
-        renderNodeText(g2d, labelMode.labelLines(node, hovered), screenX, screenY, nodeTheme);
     }
 
     /**

@@ -231,7 +231,10 @@ state, and joining an existing cluster leaves its state alone.
 first mention in the file, its box and then its members; collapsed icons. Loose nodes draw
 before all boxes, so one lying inside a box takes its tint; a member draws after its own
 box, so its label stays clean of that box, which helps tell the two apart. A member of an
-earlier cluster inside a later box is tinted too.
+earlier cluster inside a later box is tinted too. Within each layer every shape is drawn
+before any label, so no shape covers a label in its own layer; a loose node's label can
+still lie under a member's shape, the cost of keeping loose nodes under the boxes.
+`MapLayers` decides this order.
 
 **Box bounds** are computed in screen space on every repaint. Nodes and labels are drawn at
 a fixed screen size and only positions scale, so a box's size relative to the map changes
