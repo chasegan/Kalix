@@ -185,6 +185,15 @@ fn test_expected_inflow_exceeding_order_clamps_to_zero() {
     assert_eq!(series(&mut model, "node.damb.ds_1")[1], 0.0, "order fully covered by expected inflow");
 }
 
+/// A negative expected inflow is none: it does not raise the order sent
+/// upstream. The result still records it as given.
+#[test]
+fn test_a_negative_expected_inflow_orders_no_extra_water() {
+    let mut model = run(&rig("regulated = damb\nexpected_inflow = -4"));
+    assert_eq!(series(&mut model, "node.damb.ds_1")[1], 6.0, "the order, and no more");
+    assert_eq!(series(&mut model, "node.conf.expected_inflow")[1], -4.0);
+}
+
 /// With two named pathways, the netting happens once against the total
 /// order and the harmony fraction splits what's left — not the raw order.
 #[test]
