@@ -1474,6 +1474,12 @@ impl Model {
 
     /// Initialize all the nodes
     fn initialize_nodes(&mut self) -> Result<(), String> {
+        // The nodes' own mass balance figures are zeroed below, one node at a
+        // time. What the last run left at outfalls goes first, so that a node
+        // that fails to initialise leaves no totals against zeroed figures.
+        // check_execution_order() rebuilds both lists.
+        self.outfalls.clear();
+        self.linkless_nodes.clear();
         for i in 0..self.nodes.len() {
             self.nodes[i].initialise(&mut self.data_cache, &mut self.account_manager)?
         }
