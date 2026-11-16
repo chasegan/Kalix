@@ -131,7 +131,7 @@ in a dry spell. A model that calibrates to diversions keeps doing so through
 | available\_water (compulsory) | The water the soil holds between full (field capacity) and empty (wilting point), per metre of soil [mm/m] (FAO-56 Table 19: sand 60 to 100, loam 130 to 180, clay 120 to 200). A crop's bucket holds this times its root depth. Example: `available_water = 150` |
 | fallow (compulsory) | The crop that covers what is not planted: the name of a `[crop.*]` section. Example: `fallow = bare_soil` |
 | rain (optional) | Rainfall on the field [mm]. Omitted, no rain falls. Example: `rain = data.climate_csv.by_name.rain` |
-| evap (optional) | Reference evapotranspiration [mm], the reference the crops' `kcb` values were derived for (ET₀ for FAO-56 coefficients). Omitted, nothing evaporates. Example: `evap = data.climate_csv.by_name.et0` |
+| evap (optional) | Reference evapotranspiration [mm]: FAO-56 short-crop ET₀, the reference the `kcb` tables were derived against. In Australia, SILO's "FAO56 short crop evapotranspiration" product (`et_short_crop`) is this quantity at any station or grid point. Morton's potential, pan and synthetic evaporation are not ET₀: inland they run a third to a half higher, and a crop run on one of them is overwatered by as much. Omitted, nothing evaporates. Example: `evap = data.climate_csv.by_name.et0` |
 | efficiency (optional) | The share of the water supplied that reaches the soil at all. The rest is `escape` (spray evaporation, wind drift, delivery loss, tailwater the field does not keep) and leaves the model here. Never percolation, which the soil's layers model. Readable as `this.efficiency`. Default 1. Example: `efficiency = 0.8` |
 | interception (optional) | Rain reaches the soil only beyond this fraction of the day's `evap`; the rest wets the canopy and evaporates (`intercepted`). Default 0: the evaporation layer evaporates small rains itself, as FAO-56 has it. Source Irrigator deducts 0.2 × ET₀ (its equation 7); write `interception = 0.2` to do the same. Example: `interception = 0.2` |
 | return\_fraction (optional) | The share of the field's runoff (`excess`) that the farm's drains catch. It leaves on `ds_2` as `return_flow`; the rest goes down `ds_1` with the bypass. Default 0. See [Returning runoff to the farm storage](#returning-runoff-to-the-farm-storage). Example: `return_fraction = 0.8` |
@@ -193,7 +193,7 @@ in a dry spell. A model that calibrates to diversions keeps doing so through
 Think of the soil under a crop as a bucket. Each day, rain and irrigation put water in, the crop
 takes water out, and the field keeps track of how far below full the bucket is. Everything else
 is deciding when to top it up. Depths are in mm over the cropped area; P is rain and E₀ is
-reference evapotranspiration.
+FAO-56 reference evapotranspiration, ET₀.
 
 1. **Rain that counts.** Small rains wet the surface and evaporate from it within a day or
    two; the soil surface's evaporation (step 4) is how FAO-56 accounts for them, and the field

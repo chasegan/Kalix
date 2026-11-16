@@ -98,7 +98,7 @@
         "area = 1 #km2",
         "available_water = 165 #mm per m of soil: cotton on a Vertosol to 1.2 m (Hochman et al. 2001)",
         "rain = 0 #expression, mm",
-        "evap = 0 #expression, mm",
+        "evap = 0 #expression, mm of FAO-56 ET0 (SILO's FAO56 short crop evapotranspiration), not Morton or pan",
         "efficiency = 0.7 #net of tailwater returns",
         "interception = 0 #the surface layer evaporates small rains itself",
         "tew = 28 #mm the surface layer can evaporate: a clay (FAO-56 Table 19)",
