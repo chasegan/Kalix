@@ -149,6 +149,8 @@ mod test_ras;
 // Calendar built-ins: is_leap_year / month_at / days_in_month_at and the
 // sim.days_in_* / sim.is_leap fields
 mod test_calendar_builtins;
+
+// The date stepped forward one step at a time, against the timestamp
 mod test_calendar_stepping;
 
 #[cfg(test)]

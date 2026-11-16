@@ -81,14 +81,14 @@ pub struct DataCache {
     // Calendar-boundary flags for the sim.* namespace (structured_expressions_design.md §7).
     // Each is true when this step's calendar field differs from the previous step's,
     // and at step 0 (run start counts as a boundary). Recomputed once per step in
-    // update_current_timestamp so expressions never recompute a calendar fact
+    // update_calendar_flags so expressions never recompute a calendar fact
     // (ADR-0004 §3.5).
     new_day: bool,
     new_month: bool,
     new_year: bool,
 
     /// Set at expression lowering when any sim.new_* flag is referenced, so
-    /// update_current_timestamp only computes the flags for models that read
+    /// update_calendar_flags only computes the flags for models that read
     /// them. Public so flag-machinery unit tests can opt in explicitly.
     pub needs_calendar_flags: bool,
 
@@ -363,17 +363,22 @@ impl DataCache {
     }
 
 
-    /*
-    Increase the current step by +1.
-    This also updates the data_cache timestamp values.
-     */
     /// Moves to the next step. The date is advanced from the one held, without
     /// working it out again from the timestamp, when the step stays within the
     /// day or lands on the next day of the same month. Days 1 to 27 are
     /// followed by the next day in every month, so only those take the short
-    /// way to the next day; a step that ends a month, or spans more than a
-    /// day, goes through `set_current_step`. A daily model then decomposes
-    /// its timestamp about four times a month, not every step.
+    /// way to the next day. A step from day 28 or later, or one that lands
+    /// beyond the next day, works the date out from the timestamp. A daily
+    /// model then does that three or four times a month, not every step.
+    ///
+    /// The short way trusts the date held. `set_current_step` and
+    /// `set_start_and_stepsize` are what keep it right; a caller that writes
+    /// `current_step` or `step_size` directly must call one of them before
+    /// stepping.
+    ///
+    /// The short way is inlined and the long way kept out of line: the same
+    /// logic in one function measured -1.0% on speed test 1 and this shape
+    /// -4.1% (ADR-0004 §4).
     #[inline(always)]
     pub fn increment_current_step(&mut self) {
         const DAY: u64 = 86_400;
