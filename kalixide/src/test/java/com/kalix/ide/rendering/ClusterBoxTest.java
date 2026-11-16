@@ -233,7 +233,7 @@ class ClusterBoxTest {
         try {
             NodeTheme.TextStyle style = new NodeTheme().getCurrentTextStyle();
             FontMetrics fm = g2d.getFontMetrics(style.getFont());
-            MapLayers.Layer layer = MapLayers.of(model).get(0);
+            MapLayers.Layer layer = MapLayers.of(model, AllExpanded.of(model)).get(0);
             return MapRenderer.clusterBox(layer, fm, MapRenderer.textMetrics(fm, style), mode, 1.0, 0, 0);
         } finally {
             g2d.dispose();

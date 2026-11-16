@@ -38,7 +38,7 @@ class MapRendererClusterBoxTest {
         BufferedImage image = new BufferedImage(SIZE, SIZE, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g2d = image.createGraphics();
         new MapRenderer().renderMap(g2d, SIZE, SIZE, 1.0, 0, 0, false, model, new NodeTheme(),
-                null, null, 0, 0, false, NodeLabelMode.HIDDEN, null);
+                null, null, 0, 0, false, NodeLabelMode.HIDDEN, null, AllExpanded.of(model));
         g2d.dispose();
         return image.getRGB(x, y);
     }
@@ -76,11 +76,11 @@ class MapRendererClusterBoxTest {
         Graphics2D g2d = image.createGraphics();
         NodeTheme theme = new NodeTheme();
         new MapRenderer().renderMap(g2d, 300, 200, 1.0, 0, 0, false, model, theme,
-                null, null, 0, 0, false, mode, null);
+                null, null, 0, 0, false, mode, null, AllExpanded.of(model));
         // The geometry as the renderer computes it, from the same font.
         FontMetrics fm = g2d.getFontMetrics(theme.getCurrentTextStyle().getFont());
         ClusterBox.TextMetrics metrics = MapRenderer.textMetrics(fm, theme.getCurrentTextStyle());
-        Rectangle2D box = MapRenderer.clusterBox(MapLayers.of(model).get(0), fm, metrics, mode, 1.0, 0, 0);
+        Rectangle2D box = MapRenderer.clusterBox(MapLayers.of(model, AllExpanded.of(model)).get(0), fm, metrics, mode, 1.0, 0, 0);
         Rectangle strip = ClusterBox.nameStrip(box.getX(), box.getY(), fm.stringWidth("f"), metrics);
         g2d.dispose();
         return new Drawn(image, box, strip);

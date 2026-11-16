@@ -1,5 +1,6 @@
 package com.kalix.ide.rendering;
 
+import com.kalix.ide.model.ClusterCollapse;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelNode;
 import org.junit.jupiter.api.Test;
@@ -25,7 +26,7 @@ class MapLayersTest {
     private static List<MapLayers.Layer> layersOf(String... sections) {
         HydrologicalModel model = new HydrologicalModel();
         model.parseFromIniText(String.join("", sections));
-        return MapLayers.of(model);
+        return MapLayers.of(model, AllExpanded.of(model));
     }
 
     private static List<String> names(MapLayers.Layer layer) {
@@ -38,7 +39,7 @@ class MapLayersTest {
 
     @Test
     void aModelWithNoNodesHasNoLayers() {
-        assertTrue(MapLayers.of(new HydrologicalModel()).isEmpty());
+        assertTrue(MapLayers.of(new HydrologicalModel(), new ClusterCollapse()).isEmpty());
     }
 
     @Test
@@ -83,7 +84,7 @@ class MapLayersTest {
                 section("bad_name", "not a name"),
                 "[node.no_loc]\ntype = storage\n\n",
                 section("other", "dam")));
-        List<MapLayers.Layer> layers = MapLayers.of(model);
+        List<MapLayers.Layer> layers = MapLayers.of(model, AllExpanded.of(model));
 
         List<String> drawn = layers.stream().flatMap(layer -> layer.nodes().stream())
                 .map(ModelNode::getName).sorted().toList();
@@ -102,5 +103,45 @@ class MapLayersTest {
         List<MapLayers.Layer> layers = layersOf(section("a", "farm"));
         assertEquals(1, layers.size());
         assertEquals("farm", layers.get(0).cluster());
+    }
+
+    /** A model of loose {@code l} and three clusters, with {@code dam} expanded. */
+    private static HydrologicalModel threeClusters() {
+        HydrologicalModel model = new HydrologicalModel();
+        model.parseFromIniText(
+                "[node.l]\ntype = storage\nloc = 0, 0\n\n"
+                + "#@cluster = weir\n[node.w]\ntype = storage\nloc = 5, 5\n\n"
+                + "#@cluster = farm\n[node.f1]\ntype = storage\nloc = 10, 20\n\n"
+                + "#@cluster = dam\n[node.d]\ntype = storage\nloc = 50, 50\n\n"
+                + "#@cluster = Farm\n[node.f2]\ntype = storage\nloc = 30, 20\n\n"
+                + "#@cluster = farm\n[node.f3]\ntype = storage\nloc = 20, 50\n\n");
+        return model;
+    }
+
+    private static ClusterCollapse damExpanded() {
+        ClusterCollapse collapse = new ClusterCollapse();
+        collapse.setCollapsed(List.of("dam"), false);
+        return collapse;
+    }
+
+    @Test
+    void aCollapsedClusterHasNoLayerAndItsMembersAreNotDrawn() {
+        List<MapLayers.Layer> layers = MapLayers.of(threeClusters(), damExpanded());
+        assertEquals(Arrays.asList(null, "dam"), layers.stream().map(MapLayers.Layer::cluster).toList());
+        assertEquals(List.of("l"), names(layers.get(0)));
+    }
+
+    @Test
+    void aCollapsedClusterIsAnIconAtItsMembersCentroidWithTheirCount() {
+        List<MapLayers.Icon> icons = MapLayers.icons(threeClusters(), damExpanded());
+        // In order of first mention; the centroid of (10, 20), (30, 20), (20, 50) is
+        // (20, 30), where the span's centre would be (20, 35).
+        assertEquals(List.of(new MapLayers.Icon("weir", 5, 5, 1), new MapLayers.Icon("farm", 20, 30, 3)), icons);
+    }
+
+    @Test
+    void anExpandedClusterHasNoIcon() {
+        HydrologicalModel model = threeClusters();
+        assertTrue(MapLayers.icons(model, AllExpanded.of(model)).isEmpty());
     }
 }

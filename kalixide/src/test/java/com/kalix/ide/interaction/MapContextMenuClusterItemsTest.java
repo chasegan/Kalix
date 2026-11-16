@@ -1,5 +1,6 @@
 package com.kalix.ide.interaction;
 
+import com.kalix.ide.model.ClusterCollapse;
 import com.kalix.ide.model.HydrologicalModel;
 import org.junit.jupiter.api.Test;
 
@@ -18,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * where they sit, how they are labelled, and that only the selected nodes decide them.
  * Which items a selection is offered is {@link ClusterMenuRulesTest}'s job; this checks
  * the menu asks those rules and labels the answer through {@link ClusterLabels}. Every
- * cluster counts as expanded until the map can draw a collapsed one.
+ * cluster here is expanded; {@link MapContextMenuCollapseItemsTest} covers collapsing.
  *
  * <p>The model: cluster north (n1, n2), cluster south (s1), and loose nodes x and
  * south, so the cluster south is labelled {@code (cluster)}. x links to n1.
@@ -51,6 +52,12 @@ class MapContextMenuClusterItemsTest {
             loc = 4, 0
             """;
 
+    private static ClusterCollapse expanded(HydrologicalModel model) {
+        ClusterCollapse collapse = new ClusterCollapse();
+        collapse.setCollapsed(model.getClusters().names(), false);
+        return collapse;
+    }
+
     private static HydrologicalModel model(String text, String... selected) {
         HydrologicalModel model = new HydrologicalModel();
         model.parseFromIniText(text);
@@ -60,7 +67,7 @@ class MapContextMenuClusterItemsTest {
 
     /** The labels from {@code Insert node} to {@code Delete}, a submenu as {@code title[children]}. */
     private static String block(HydrologicalModel model) {
-        JPopupMenu menu = new MapContextMenuManager(null, null, model).buildMenu();
+        JPopupMenu menu = new MapContextMenuManager(null, null, model, expanded(model)).buildMenu();
         List<String> labels = new ArrayList<>();
         boolean in = false;
         for (Component component : menu.getComponents()) {

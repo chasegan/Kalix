@@ -13,8 +13,11 @@ import java.awt.geom.AffineTransform;
 import java.awt.geom.Rectangle2D;
 import java.awt.geom.RoundRectangle2D;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.OptionalInt;
+import com.kalix.ide.model.ClusterCollapse;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelNode;
 import com.kalix.ide.themes.NodeTheme;
@@ -111,13 +114,14 @@ public class MapRenderer {
      * @param labelMode Which text is drawn under each node
      * @param hoveredNodeName Node whose label the mouse changes, per {@code labelMode};
      *                        null when nothing is revealed
+     * @param collapse Which clusters are collapsed
      */
     public void renderMap(Graphics2D g2d, int width, int height,
                          double zoomLevel, double panX, double panY,
                          boolean showGridlines, HydrologicalModel model,
                          NodeTheme nodeTheme, Point selectionStart, Point selectionCurrent,
                          double mouseWorldX, double mouseWorldY, boolean mouseInPanel,
-                         NodeLabelMode labelMode, String hoveredNodeName) {
+                         NodeLabelMode labelMode, String hoveredNodeName, ClusterCollapse collapse) {
 
         // Enable antialiasing for smoother graphics
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -139,8 +143,10 @@ public class MapRenderer {
 
         // Render screen-space elements (links first, then nodes, then selection, debug)
         if (model != null) {
-            renderLinks(g2d, model, zoomLevel, panX, panY);
-            renderNodes(g2d, model, nodeTheme, zoomLevel, panX, panY, labelMode, hoveredNodeName);
+            List<MapLayers.Icon> icons = MapLayers.icons(model, collapse);
+            renderLinks(g2d, model, collapse, icons, zoomLevel, panX, panY);
+            renderNodes(g2d, model, collapse, icons, nodeTheme, zoomLevel, panX, panY,
+                        labelMode, hoveredNodeName);
         }
 
         if (selectionStart != null && selectionCurrent != null) {
@@ -231,21 +237,28 @@ public class MapRenderer {
     }
 
     /**
-     * Renders all model links in screen-space coordinates.
-     * Links are drawn as solid lines from upstream to downstream node centers.
+     * Renders all model links in screen-space coordinates, from centre to centre, as
+     * {@link MapLinks} redirects them to the icons of collapsed clusters.
      *
      * @param g2d Graphics context (in screen space)
      * @param model Hydrological model containing links
+     * @param collapse Which clusters are collapsed
+     * @param icons The icons of the collapsed clusters
      * @param zoomLevel Current zoom level for coordinate transformation
      * @param panX Horizontal pan offset
      * @param panY Vertical pan offset
      */
-    private void renderLinks(Graphics2D g2d, HydrologicalModel model,
-                            double zoomLevel, double panX, double panY) {
+    private void renderLinks(Graphics2D g2d, HydrologicalModel model, ClusterCollapse collapse,
+                            List<MapLayers.Icon> icons, double zoomLevel, double panX, double panY) {
 
+        Map<String, MapLayers.Icon> iconByCluster = new HashMap<>();
+        for (MapLayers.Icon icon : icons) {
+            iconByCluster.put(icon.cluster(), icon);
+        }
         // Render each link (color and stroke set individually based on selection state)
-        for (com.kalix.ide.model.ModelLink link : model.getAllLinks()) {
-            renderSingleLink(g2d, link, model, zoomLevel, panX, panY);
+        for (MapLinks.Drawn link : MapLinks.of(model.getAllLinks(), model.getClusters(), collapse,
+                model::isLinkSelected)) {
+            renderSingleLink(g2d, link, model, iconByCluster, zoomLevel, panX, panY);
         }
 
         // Reset stroke and color for subsequent rendering
@@ -254,45 +267,46 @@ public class MapRenderer {
     }
 
     /**
-     * Renders a single link between two nodes.
+     * Renders a single link between two drawn ends: nodes, or icons.
      *
      * @param g2d Graphics context
      * @param link Link to render
      * @param model Model for node lookups
+     * @param iconByCluster The icons, by cluster
      * @param zoomLevel Current zoom level
      * @param panX Horizontal pan offset
      * @param panY Vertical pan offset
      */
-    private void renderSingleLink(Graphics2D g2d, com.kalix.ide.model.ModelLink link,
-                                 HydrologicalModel model, double zoomLevel,
-                                 double panX, double panY) {
+    private void renderSingleLink(Graphics2D g2d, MapLinks.Drawn link,
+                                 HydrologicalModel model, Map<String, MapLayers.Icon> iconByCluster,
+                                 double zoomLevel, double panX, double panY) {
 
-        // Get upstream and downstream nodes
-        com.kalix.ide.model.ModelNode upstreamNode = model.getNode(link.getUpstreamTerminus());
-        com.kalix.ide.model.ModelNode downstreamNode = model.getNode(link.getDownstreamTerminus());
+        // Where each end is drawn, in map coordinates
+        double[] upstream = position(link.upstream(), model, iconByCluster);
+        double[] downstream = position(link.downstream(), model, iconByCluster);
 
-        // Skip link if either node is missing
-        if (upstreamNode == null || downstreamNode == null) {
+        // Skip link if either end is missing
+        if (upstream == null || downstream == null) {
             return;
         }
 
         // Check if link is selected and set appropriate color and stroke
-        boolean isSelected = model.isLinkSelected(link);
+        boolean isSelected = link.selected();
         if (isSelected) {
             g2d.setColor(UIConstants.Selection.NODE_SELECTED_BORDER);
             // Use solid or dashed stroke based on link type, but with selected width
-            g2d.setStroke(link.isPrimary() ? SELECTED_LINK_STROKE : SELECTED_LINK_DASHED_STROKE);
+            g2d.setStroke(link.primary() ? SELECTED_LINK_STROKE : SELECTED_LINK_DASHED_STROKE);
         } else {
             g2d.setColor(LINK_COLOR);
             // Use solid stroke for primary links, dashed stroke for alternative links
-            g2d.setStroke(link.isPrimary() ? LINK_STROKE : LINK_DASHED_STROKE);
+            g2d.setStroke(link.primary() ? LINK_STROKE : LINK_DASHED_STROKE);
         }
 
-        // Transform node world coordinates to screen coordinates
-        double upstreamScreenX = upstreamNode.getX() * zoomLevel + panX;
-        double upstreamScreenY = upstreamNode.getY() * zoomLevel + panY;
-        double downstreamScreenX = downstreamNode.getX() * zoomLevel + panX;
-        double downstreamScreenY = downstreamNode.getY() * zoomLevel + panY;
+        // Transform the ends' world coordinates to screen coordinates
+        double upstreamScreenX = upstream[0] * zoomLevel + panX;
+        double upstreamScreenY = upstream[1] * zoomLevel + panY;
+        double downstreamScreenX = downstream[0] * zoomLevel + panX;
+        double downstreamScreenY = downstream[1] * zoomLevel + panY;
 
         // Draw the link line
         g2d.drawLine((int) upstreamScreenX, (int) upstreamScreenY,
@@ -301,6 +315,17 @@ public class MapRenderer {
         // Draw chevron arrow at midpoint
         renderChevronArrow(g2d, upstreamScreenX, upstreamScreenY,
                           downstreamScreenX, downstreamScreenY);
+    }
+
+    /** Where a drawn end sits, in map coordinates, or {@code null} if it isn't on the map. */
+    private static double[] position(MapLinks.End end, HydrologicalModel model,
+                                     Map<String, MapLayers.Icon> iconByCluster) {
+        if (end.isIcon()) {
+            MapLayers.Icon icon = iconByCluster.get(end.cluster());
+            return icon == null ? null : new double[] {icon.x(), icon.y()};
+        }
+        ModelNode node = model.getNode(end.node());
+        return node == null ? null : new double[] {node.getX(), node.getY()};
     }
 
     /**
@@ -359,7 +384,8 @@ public class MapRenderer {
      * @param labelMode Which text is drawn under each node
      * @param hoveredNodeName Node whose label the mouse changes, or null
      */
-    private void renderNodes(Graphics2D g2d, HydrologicalModel model, NodeTheme nodeTheme,
+    private void renderNodes(Graphics2D g2d, HydrologicalModel model, ClusterCollapse collapse,
+                            List<MapLayers.Icon> icons, NodeTheme nodeTheme,
                             double zoomLevel, double panX, double panY,
                             NodeLabelMode labelMode, String hoveredNodeName) {
 
@@ -370,7 +396,8 @@ public class MapRenderer {
 
         // Layer by layer: a cluster's box, then every shape, then every label, so no shape
         // in a layer covers a label in it (MapLayers says why not all labels last).
-        for (MapLayers.Layer layer : MapLayers.of(model)) {
+        ModelNode hovered = null;
+        for (MapLayers.Layer layer : MapLayers.of(model, collapse)) {
             Rectangle2D box = null;
             if (layer.cluster() != null) {
                 box = clusterBox(layer, fm, metrics, labelMode, zoomLevel, panX, panY);
@@ -380,10 +407,14 @@ public class MapRenderer {
                 renderNodeShape(g2d, node, model, nodeTheme, zoomLevel, panX, panY, originalTransform);
             }
             for (ModelNode node : layer.nodes()) {
-                // What the mode draws for this node, given whether the mouse is over it
+                // The label the mouse is over waits for the end, over everything.
+                if (node.getName().equals(hoveredNodeName)) {
+                    hovered = node;
+                    continue;
+                }
+                // What the mode draws for this node without the mouse over it
                 // (NodeLabelMode owns that rule).
-                boolean hovered = node.getName().equals(hoveredNodeName);
-                renderNodeText(g2d, labelMode.labelLines(node, hovered),
+                renderNodeText(g2d, labelMode.labelLines(node, false),
                                node.getX() * zoomLevel + panX, node.getY() * zoomLevel + panY, nodeTheme);
             }
             // The box name is a label, so it goes in the label pass; the hidden mode has
@@ -391,6 +422,27 @@ public class MapRenderer {
             if (box != null && labelMode.drawsLabels()) {
                 renderBoxName(g2d, layer.cluster(), box, fm, metrics, textStyle);
             }
+        }
+
+        // The icons of collapsed clusters, over every layer: every icon's cards, then every
+        // icon's name. The hidden mode shows none: it shows names on hover, and an icon
+        // can't be hovered until icons are hit-tested (V1c).
+        for (MapLayers.Icon icon : icons) {
+            renderIcon(g2d, icon.count(), icon.x() * zoomLevel + panX, icon.y() * zoomLevel + panY, fm);
+        }
+        if (labelMode.drawsLabels()) {
+            for (MapLayers.Icon icon : icons) {
+                renderNodeText(g2d, List.of(icon.cluster()), icon.x() * zoomLevel + panX,
+                               icon.y() * zoomLevel + panY + ClusterIcon.LABEL_DROP, nodeTheme);
+            }
+        }
+
+        // The label the mouse is over, last of all, so nothing covers it while it is read.
+        // A label shown only on hover is there for a moment, so being drawn over a box it
+        // lies under doesn't matter (MapLayers says why other labels stay in their layer).
+        if (hovered != null) {
+            renderNodeText(g2d, labelMode.labelLines(hovered, true),
+                           hovered.getX() * zoomLevel + panX, hovered.getY() * zoomLevel + panY, nodeTheme);
         }
 
         // Restore the original transform
@@ -423,6 +475,33 @@ public class MapRenderer {
         OptionalInt nameWidth = labelMode.drawsLabels()
                 ? OptionalInt.of(fm.stringWidth(layer.cluster())) : OptionalInt.empty();
         return ClusterBox.bounds(members, metrics, nameWidth);
+    }
+
+    /** Draws a collapsed cluster's stacked cards, centred on the screen point, with its count. */
+    private void renderIcon(Graphics2D g2d, int count, double x, double y, FontMetrics labelFm) {
+        double arc = 2 * ClusterIcon.CORNER_RADIUS;
+        g2d.setStroke(DEFAULT_STROKE);
+        Rectangle2D face = ClusterIcon.face(x, y);
+        renderCard(g2d, ClusterIcon.back(x, y), ClusterIcon.BACK, arc);
+        renderCard(g2d, face, ClusterIcon.FACE, arc);
+
+        Font originalFont = g2d.getFont();
+        g2d.setFont(labelFm.getFont().deriveFont(Font.BOLD));
+        FontMetrics fm = g2d.getFontMetrics();
+        String text = Integer.toString(count);
+        g2d.setColor(ClusterIcon.COUNT);
+        g2d.drawString(text, (float) (face.getCenterX() - fm.stringWidth(text) / 2.0),
+                (float) (face.getCenterY() + (fm.getAscent() - fm.getDescent()) / 2.0));
+        g2d.setFont(originalFont);
+    }
+
+    private void renderCard(Graphics2D g2d, Rectangle2D card, Color fill, double arc) {
+        RoundRectangle2D shape = new RoundRectangle2D.Double(card.getX(), card.getY(),
+                card.getWidth(), card.getHeight(), arc, arc);
+        g2d.setColor(fill);
+        g2d.fill(shape);
+        g2d.setColor(ClusterIcon.BORDER);
+        g2d.draw(shape);
     }
 
     /** Fills and outlines a cluster's box, in the one box colour on every theme. */

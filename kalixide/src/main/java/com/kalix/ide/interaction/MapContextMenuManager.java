@@ -1,7 +1,9 @@
 package com.kalix.ide.interaction;
 
 import com.kalix.ide.constants.AppShortcut;
+import com.kalix.ide.model.ClusterCollapse;
 import com.kalix.ide.model.ClusterIndex;
+import com.kalix.ide.model.ModelLink;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelNode;
 import com.kalix.ide.MapPanel;
@@ -48,11 +50,16 @@ public class MapContextMenuManager {
     // Track where the context menu was invoked for potential future use (e.g., paste location)
     private Point lastContextMenuLocation;
 
+    // Which clusters are collapsed: the map panel's, given here so the menu can be built
+    // without a panel
+    private final ClusterCollapse clusterCollapse;
+
     public MapContextMenuManager(MapPanel mapPanel, MapInteractionManager interactionManager,
-                                  HydrologicalModel model) {
+                                  HydrologicalModel model, ClusterCollapse clusterCollapse) {
         this.mapPanel = mapPanel;
         this.interactionManager = interactionManager;
         this.model = model;
+        this.clusterCollapse = clusterCollapse;
     }
 
     /**
@@ -124,10 +131,10 @@ public class MapContextMenuManager {
         int shortcutMask = AppShortcut.menuMask();
 
         // The cluster items ask the rules, which are given the selected nodes only, so a
-        // selected link never changes them. Every cluster counts as expanded until the map
-        // can draw a collapsed one.
+        // selected link never changes them.
         List<String> selectedNodes = List.copyOf(model.getSelectedNodes());
-        ClusterMenuRules clusterRules = ClusterMenuRules.of(selectedNodes, model.getClusters(), Set.of());
+        ClusterMenuRules clusterRules = ClusterMenuRules.of(selectedNodes, model.getClusters(),
+            Set.copyOf(clusterCollapse.collapsedNames(model.getClusters())));
         ClusterLabels clusterLabels = new ClusterLabels(
             model.getAllNodes().stream().map(ModelNode::getName).toList());
 
@@ -234,7 +241,7 @@ public class MapContextMenuManager {
                 if (name == null) {
                     return false;
                 }
-                mapPanel.getClusterCollapse().created(before, name);
+                clusterCollapse.created(before, name);
                 return true;
             }));
         }
@@ -281,7 +288,7 @@ public class MapContextMenuManager {
                 if (name == null) {
                     return false;
                 }
-                mapPanel.getClusterCollapse().renamed(before, renameCluster, name);
+                clusterCollapse.renamed(before, renameCluster, name);
                 return true;
             }));
         }
@@ -336,6 +343,55 @@ public class MapContextMenuManager {
         zoomToFitItem.setAccelerator(AppShortcut.ZOOM_TO_FIT.keyStroke());
         zoomToFitItem.addActionListener(e -> mapPanel.zoomToFit());
         menu.add(zoomToFitItem);
+
+        // Collapse and expand change how the map shows clusters, never the model
+        // (ADR-0002 §1, block 8). Expand cluster(s) needs a selected icon, which is V1c.
+        List<String> collapseTargets = clusterRules.collapseTargets();
+        if (!collapseTargets.isEmpty()) {
+            menu.add(viewItem(ClusterLabels.collapse(collapseTargets.size()), () -> collapse(collapseTargets)));
+        }
+        if (clusterRules.offersCollapseAll()) {
+            menu.add(viewItem("Collapse all clusters", () -> collapse(model.getClusters().names())));
+        }
+        if (clusterRules.offersExpandAll()) {
+            menu.add(viewItem("Expand all clusters",
+                () -> clusterCollapse.setCollapsed(model.getClusters().names(), false)));
+        }
+    }
+
+    /**
+     * Collapses the clusters and deselects everything they hide: nodes and links. Until a
+     * selected icon can be drawn as selected (V1c), a selection out of sight would be acted
+     * on by Delete or Cut unseen, so even a wholly selected cluster isn't kept selected
+     * (clusters.md rule 10 says it is; Tim, 2026-11-16, for V1b only).
+     */
+    private void collapse(List<String> clusters) {
+        clusterCollapse.setCollapsed(clusters, true);
+        ClusterIndex index = model.getClusters();
+        for (String node : model.getSelectedNodes()) {
+            if (clusterCollapse.isHidden(node, index)) {
+                model.deselectNode(node);
+            }
+        }
+        for (ModelLink link : model.getAllLinks()) {
+            if (model.isLinkSelected(link)
+                    && (clusterCollapse.isHidden(link.getUpstreamTerminus(), index)
+                        || clusterCollapse.isHidden(link.getDownstreamTerminus(), index))) {
+                model.deselectLink(link);
+            }
+        }
+    }
+
+    /** A collapse or expand: not a model event, so the map is repainted here. */
+    private JMenuItem viewItem(String label, Runnable change) {
+        JMenuItem item = new JMenuItem(label);
+        item.addActionListener(e -> {
+            change.run();
+            if (mapPanel != null) {    // null only where a test builds the menu alone
+                mapPanel.repaint();
+            }
+        });
+        return item;
     }
 
     /** A cluster edit, made through the text editor; the map repaints if the text changed. */
