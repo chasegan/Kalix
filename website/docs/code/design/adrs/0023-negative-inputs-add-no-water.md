@@ -11,9 +11,9 @@ title: "ADR-0023: An input that asks a node for negative water adds none, and is
 
 ## Context and problem statement
 
-A link carries only positive water. Three inputs could still ask a node for
-negative water: an inflow node's `inflow` and `expected_inflow`, and a
-gauge's `force_flow`. A negative `inflow` was added to the flow passing
+A link carries only positive water. Four inputs could still ask a node for
+negative water: an inflow node's `inflow` and `expected_inflow`, a
+confluence's `expected_inflow`, and a gauge's `force_flow`. A negative `inflow` was added to the flow passing
 through, so it took water from the river, and at the head of a river it put
 negative water at the outlet, which the link dropped without a word. A
 negative `force_flow` did the same.
@@ -21,7 +21,7 @@ negative `force_flow` did the same.
 Such values are common and mostly not meant. An inflow written as the
 difference of two series is negative by rounding whenever the two are equal.
 In `34_storage_sid_leslie` the forcing flux fed to an inflow node is
-negative on 15,869 of 49,854 steps, by no more than 7.7e-9 ML.
+negative on 15,869 of 49,854 steps, by less than 8e-9 ML.
 
 The questions were what a node does with a negative value, and whether the
 engine should also check for negative water at run time.
@@ -54,8 +54,9 @@ what the expression gave.
    it cannot. There is no check at run time.
 2. **A negative `inflow` adds no water.** An inflow node adds water and never
    takes it. Water is taken from a river by a loss node or a user.
-3. **A negative `expected_inflow` is no expected inflow.** The node does not
-   order water upstream for water it will not take.
+3. **A negative `expected_inflow` is no expected inflow**, on an inflow node
+   and on a confluence. The node does not order water upstream for water it
+   will not take.
 4. **A negative `force_flow` sets the gauge's downstream flow to zero.**
 5. **The result of the same name records the value as it was given.** A
    negative `inflow`, `expected_inflow` or `force_flow` shows in the results,
@@ -66,9 +67,9 @@ what the expression gave.
    on a rounding negative, and every such expression would need `max(x, 0)`
    around it. This is not the repair that
    [ADR-0005](0005-node-definition-order.md) and
-   [ADR-0012](0012-inputs-in-step-with-the-simulation.md) refuse: the value
-   in the file is the value recorded, and what the node does with it is one
-   documented rule.
+   [ADR-0012](0012-inputs-in-step-with-the-simulation.md) refuse. The value
+   in the file is the value in the results, beside a downstream flow that
+   shows what the node did with it, so nothing is hidden.
 8. **Rejected: a check at every outlet at run time** (option 5). It was built
    and measured. It cost 1.1% to 2.2% on speed tests 4 and 10 in three
    sessions, and across the 40 regression and 11 speed models it found one
@@ -79,8 +80,9 @@ what the expression gave.
 
 - ✅ A modeller can see a negative input in the results, and need not guard
   against one.
-- ✅ No cost in the flow phase: −0.3% to +0.6% against main on speed tests 1,
-  2, 4, 5 and 10, which is noise.
+- ✅ No cost in the step: −0.5% to +0.5% against main on speed tests 1, 2, 4,
+  5 and 10, which is noise. Minimum of 30 interleaved runs, one machine
+  (Apple M5).
 - ❌ A negative inflow no longer takes water from the river. With 100
   arriving and an inflow of −30, the node passed on 70 and now passes on 100.
   A model that used an inflow that way changes.
@@ -91,7 +93,11 @@ what the expression gave.
 
 ## Enforcement
 
-- **Held by test** — §2 to §6: `src/tests/test_negative_flow.rs`.
+- **Held by test** — §2 to §6: `src/tests/test_negative_flow.rs`, and for
+  the confluence
+  `test_a_negative_expected_inflow_orders_no_extra_water` in
+  `src/tests/test_confluence_order_routing.rs`. No test covers an
+  `expected_inflow` that is not a number.
 - **Advisory** — §1, held by review. If a node did put negative water at a
   linked outlet, the link would drop it and the mass balance report's `TOTAL`
   would not be zero ([ADR-0022](0022-mass-balance-is-what-the-links-carry.md)
