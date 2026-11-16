@@ -7,9 +7,14 @@ import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.Point;
+import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.geom.AffineTransform;
+import java.awt.geom.Rectangle2D;
+import java.awt.geom.RoundRectangle2D;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.OptionalInt;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelNode;
 import com.kalix.ide.themes.NodeTheme;
@@ -37,7 +42,6 @@ public class MapRenderer {
 
     // Rendering constants (centralized in UIConstants)
     private static final int NODE_SIZE = UIConstants.Map.NODE_SIZE;
-    private static final int TEXT_BACKGROUND_PADDING = UIConstants.Text.BACKGROUND_PADDING;
 
     // Selection rectangle styling (centralized in UIConstants)
     private static final Color SELECTION_FILL_COLOR = UIConstants.Selection.RECTANGLE_FILL;
@@ -360,10 +364,18 @@ public class MapRenderer {
                             NodeLabelMode labelMode, String hoveredNodeName) {
 
         AffineTransform originalTransform = g2d.getTransform();
+        NodeTheme.TextStyle textStyle = nodeTheme.getCurrentTextStyle();
+        FontMetrics fm = g2d.getFontMetrics(textStyle.getFont());
+        ClusterBox.TextMetrics metrics = textMetrics(fm, textStyle);
 
-        // Layer by layer, every shape and then every label, so no shape in a layer
-        // covers a label in it (MapLayers says why not all labels last).
+        // Layer by layer: a cluster's box, then every shape, then every label, so no shape
+        // in a layer covers a label in it (MapLayers says why not all labels last).
         for (MapLayers.Layer layer : MapLayers.of(model)) {
+            Rectangle2D box = null;
+            if (layer.cluster() != null) {
+                box = clusterBox(layer, fm, metrics, labelMode, zoomLevel, panX, panY);
+                renderClusterBox(g2d, box);
+            }
             for (ModelNode node : layer.nodes()) {
                 renderNodeShape(g2d, node, model, nodeTheme, zoomLevel, panX, panY, originalTransform);
             }
@@ -374,10 +386,68 @@ public class MapRenderer {
                 renderNodeText(g2d, labelMode.labelLines(node, hovered),
                                node.getX() * zoomLevel + panX, node.getY() * zoomLevel + panY, nodeTheme);
             }
+            // The box name is a label, so it goes in the label pass; the hidden mode has
+            // none (clusters.md, settled decision 8).
+            if (box != null && labelMode.drawsLabels()) {
+                renderBoxName(g2d, layer.cluster(), box, fm, metrics, textStyle);
+            }
         }
 
         // Restore the original transform
         g2d.setTransform(originalTransform);
+    }
+
+    /** The label measurements {@link ClusterBox} lays strips out from, for this theme's font. */
+    static ClusterBox.TextMetrics textMetrics(FontMetrics fm, NodeTheme.TextStyle textStyle) {
+        return new ClusterBox.TextMetrics(fm.getAscent(), fm.getHeight(),
+                NODE_SIZE / 2.0 + textStyle.getYOffset());
+    }
+
+    /**
+     * The box of a cluster's layer, in screen pixels, from what its members show without
+     * the mouse over them: hover-only labels don't widen it (clusters.md, "Box bounds").
+     */
+    static Rectangle2D clusterBox(MapLayers.Layer layer, FontMetrics fm,
+                                  ClusterBox.TextMetrics metrics, NodeLabelMode labelMode,
+                                  double zoomLevel, double panX, double panY) {
+        List<ClusterBox.Member> members = new ArrayList<>(layer.nodes().size());
+        for (ModelNode node : layer.nodes()) {
+            List<String> lines = labelMode.labelLines(node, false);
+            List<Integer> widths = new ArrayList<>(lines.size());
+            for (String line : lines) {
+                widths.add(fm.stringWidth(line));
+            }
+            members.add(new ClusterBox.Member(node.getX() * zoomLevel + panX,
+                    node.getY() * zoomLevel + panY, widths));
+        }
+        OptionalInt nameWidth = labelMode.drawsLabels()
+                ? OptionalInt.of(fm.stringWidth(layer.cluster())) : OptionalInt.empty();
+        return ClusterBox.bounds(members, metrics, nameWidth);
+    }
+
+    /** Fills and outlines a cluster's box, in the one box colour on every theme. */
+    private void renderClusterBox(Graphics2D g2d, Rectangle2D box) {
+        double arc = 2 * ClusterBox.CORNER_RADIUS;
+        RoundRectangle2D shape = new RoundRectangle2D.Double(box.getX(), box.getY(),
+                box.getWidth(), box.getHeight(), arc, arc);
+        g2d.setColor(ClusterBox.FILL);
+        g2d.fill(shape);
+        g2d.setColor(ClusterBox.border(isLightTheme()));
+        g2d.setStroke(DEFAULT_STROKE);
+        g2d.draw(shape);
+    }
+
+    /** Draws a cluster's name at its box's top left, looking like a node label. */
+    private void renderBoxName(Graphics2D g2d, String name, Rectangle2D box, FontMetrics fm,
+                               ClusterBox.TextMetrics metrics, NodeTheme.TextStyle textStyle) {
+        Rectangle strip = ClusterBox.nameStrip(box.getX(), box.getY(), fm.stringWidth(name), metrics);
+        Font originalFont = g2d.getFont();
+        g2d.setFont(textStyle.getFont());
+        g2d.setColor(textStyle.getBackgroundColorWithAlpha());
+        g2d.fill(strip);
+        g2d.setColor(textStyle.getTextColor());
+        g2d.drawString(name, strip.x + ClusterBox.TEXT_PADDING, ClusterBox.nameBaseline(strip, metrics));
+        g2d.setFont(originalFont);
     }
 
     /**
@@ -449,27 +519,21 @@ public class MapRenderer {
         g2d.setFont(textStyle.getFont());
 
         FontMetrics fm = g2d.getFontMetrics();
-        int textHeight = fm.getHeight();
-        double textY = nodeScreenY + (NODE_SIZE / 2.0) + textStyle.getYOffset();
+        ClusterBox.TextMetrics metrics = textMetrics(fm, textStyle);
 
-        for (String line : lines) {
+        // ClusterBox lays the strips out, so a cluster's box covers exactly what is drawn.
+        for (int i = 0; i < lines.size(); i++) {
+            String line = lines.get(i);
             int textWidth = fm.stringWidth(line);
             double textX = nodeScreenX - (textWidth / 2.0);
 
             // Render text background
             g2d.setColor(textStyle.getBackgroundColorWithAlpha());
-            g2d.fillRect(
-                (int)(textX - TEXT_BACKGROUND_PADDING),
-                (int)(textY - fm.getAscent() - TEXT_BACKGROUND_PADDING),
-                textWidth + (TEXT_BACKGROUND_PADDING * 2),
-                textHeight + TEXT_BACKGROUND_PADDING
-            );
+            g2d.fill(ClusterBox.labelStrip(nodeScreenX, nodeScreenY, i, textWidth, metrics));
 
             // Render text foreground
             g2d.setColor(textStyle.getTextColor());
-            g2d.drawString(line, (int)textX, (int)textY);
-
-            textY += textHeight + TEXT_BACKGROUND_PADDING;
+            g2d.drawString(line, (int) textX, (int) ClusterBox.baseline(nodeScreenY, i, metrics));
         }
 
         // Restore original font
