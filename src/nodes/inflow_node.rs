@@ -85,8 +85,11 @@ impl Node for InflowNode {
             data_cache.add_value_at_index(idx, expected_inflow_value_on_delivery_timestep);
         }
 
-        // Calculate upstream order
-        self.usorders = (self.dsorders[0] - expected_inflow_value_on_delivery_timestep).max(0f64);
+        // Calculate upstream order. A negative expected inflow is none, as a
+        // negative inflow is: the node will not take water from the river,
+        // so it does not order any for that (ADR-0023).
+        let expected = if expected_inflow_value_on_delivery_timestep < 0.0 { 0.0 } else { expected_inflow_value_on_delivery_timestep };
+        self.usorders = (self.dsorders[0] - expected).max(0f64);
     }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) {

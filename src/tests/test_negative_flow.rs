@@ -71,3 +71,26 @@ fn test_an_inflow_that_is_not_a_number_is_carried_by_no_link() {
     assert!(series(&mut model, "node.river.inflow").iter().all(|v| v.is_nan()));
     assert!(mass_balance(&model)["river"].is_nan());
 }
+
+#[test]
+fn test_a_negative_expected_inflow_orders_no_extra_water() {
+    // A user below the node orders 50. The node will take nothing from the river, so the
+    // dam is asked for 50, and not for 80.
+    let ini = "[kalix]\nstart = 2020-01-01\nend = 2020-01-08\n\n\
+        [node.dam]\ntype = storage\nloc = 0, 0\ninitial_volume = 12000\n\
+        dimensions = 0, 0, 0, 0, 10, 12000, 10, 0, 11, 12100, 10, 1000,\nds_1 = trib\n\n\
+        [node.trib]\ntype = inflow\nloc = 0, 10\ninflow = -30\nexpected_inflow = -30\nds_1 = user\n\n\
+        [node.user]\ntype = regulated_user\nloc = 0, 20\norder = 50\nds_1 = eos\n\n\
+        [node.eos]\ntype = gauge\nloc = 0, 30\n\n\
+        [outputs]\nnode.dam.ds_1\nnode.trib.expected_inflow\nnode.user.diversion\nnode.user.ds_1\n";
+    let mut model = IniModelIO::read_model_string(ini).expect("model should load");
+    model.configure().expect("model should configure");
+    model.run().expect("simulation should run");
+    assert!(series(&mut model, "node.trib.expected_inflow").iter().all(|&v| v == -30.0), "the result shows what was asked for");
+    let released = series(&mut model, "node.dam.ds_1");
+    let diverted = series(&mut model, "node.user.diversion");
+    let past = series(&mut model, "node.user.ds_1");
+    assert_eq!(*released.last().unwrap(), 50.0, "the dam releases the order and no more");
+    assert_eq!(*diverted.last().unwrap(), 50.0);
+    assert_eq!(*past.last().unwrap(), 0.0, "nothing runs past the user");
+}
