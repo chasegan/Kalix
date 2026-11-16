@@ -22,6 +22,7 @@ import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -242,6 +243,7 @@ public class MapContextMenuManager {
                     return false;
                 }
                 clusterCollapse.created(before, name);
+                deselectIfHidden(selectedNodes, name);
                 return true;
             }));
         }
@@ -269,11 +271,11 @@ public class MapContextMenuManager {
         List<String> addTargets = clusterRules.addTargets();
         if (addTargets.size() == 1) {
             String target = addTargets.get(0);
-            menu.add(clusterItem(clusterLabels.addTo(target), () -> textEditor.addToCluster(selectedNodes, target)));
+            menu.add(clusterItem(clusterLabels.addTo(target), () -> addTo(selectedNodes, target)));
         } else if (!addTargets.isEmpty()) {
             JMenu addMenu = new JMenu("Add to cluster");
             for (String target : addTargets) {
-                addMenu.add(clusterItem(clusterLabels.name(target), () -> textEditor.addToCluster(selectedNodes, target)));
+                addMenu.add(clusterItem(clusterLabels.name(target), () -> addTo(selectedNodes, target)));
             }
             menu.add(addMenu);
         }
@@ -289,6 +291,7 @@ public class MapContextMenuManager {
                     return false;
                 }
                 clusterCollapse.renamed(before, renameCluster, name);
+                deselectIfHidden(before.members(renameCluster), name);
                 return true;
             }));
         }
@@ -363,7 +366,7 @@ public class MapContextMenuManager {
      * Collapses the clusters and deselects everything they hide: nodes and links. Until a
      * selected icon can be drawn as selected (V1c), a selection out of sight would be acted
      * on by Delete or Cut unseen, so even a wholly selected cluster isn't kept selected
-     * (clusters.md rule 10 says it is; Tim, 2026-11-16, for V1b only).
+     * (clusters.md rule 10, "In V1b").
      */
     private void collapse(List<String> clusters) {
         clusterCollapse.setCollapsed(clusters, true);
@@ -377,6 +380,37 @@ public class MapContextMenuManager {
             if (model.isLinkSelected(link)
                     && (clusterCollapse.isHidden(link.getUpstreamTerminus(), index)
                         || clusterCollapse.isHidden(link.getDownstreamTerminus(), index))) {
+                model.deselectLink(link);
+            }
+        }
+    }
+
+    /** Puts the nodes in the cluster ({@code Add to}), deselecting them if it's collapsed. */
+    private boolean addTo(Collection<String> nodes, String cluster) {
+        if (!textEditor.addToCluster(nodes, cluster)) {
+            return false;
+        }
+        deselectIfHidden(nodes, cluster);
+        return true;
+    }
+
+    /**
+     * After an edit that puts {@code nodes} in {@code cluster} (Create, Add, a Rename that
+     * merges): if the cluster is collapsed, they are now hidden, so they and the links that
+     * end at them are deselected (clusters.md rule 10, "In V1b"; rule 15). Decided here,
+     * from the names, because the model is reparsed only later, on the event thread.
+     */
+    void deselectIfHidden(Collection<String> nodes, String cluster) {
+        if (!clusterCollapse.isCollapsed(cluster)) {
+            return;
+        }
+        for (String node : nodes) {
+            model.deselectNode(node);
+        }
+        for (ModelLink link : model.getAllLinks()) {
+            if (model.isLinkSelected(link)
+                    && (nodes.contains(link.getUpstreamTerminus())
+                        || nodes.contains(link.getDownstreamTerminus()))) {
                 model.deselectLink(link);
             }
         }

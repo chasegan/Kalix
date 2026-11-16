@@ -105,6 +105,13 @@ name at the box's top left.
     never widened to the other members. Collapsing a partly selected cluster deselects its
     members: they were selected some other way, and the modeller may not have intended it.
 
+    **In V1b, until an icon can be drawn as selected (V1c):** an edit or a collapse that
+    hides selected nodes deselects them, and every link that ends at them, even when they
+    are the whole cluster. That is Collapse, Collapse all, and Create, Add or a merging
+    Rename into a collapsed cluster. A selection out of sight would otherwise be acted on by
+    Delete or Cut unseen. Find…, Show on map and `Select nodes ▸` can still select hidden
+    members.
+
 11. **The box name and proxy stand for the cluster** and behave like the icon: a click
     selects (all the members, when expanded) and takes the editor to the section of the
     cluster's first member in the file; Shift-click adds; a drag moves.

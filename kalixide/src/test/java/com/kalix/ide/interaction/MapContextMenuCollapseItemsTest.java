@@ -18,8 +18,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The collapse items at the foot of the map's real menu, after {@code Zoom to fit}: which
  * show for the collapse state and the selection, and what they do. In V1b, collapsing
- * deselects everything it hides, even a wholly selected cluster (Tim, 2026-11-16), since a
- * selected icon can't yet be shown as selected.
+ * deselects everything it hides, even a wholly selected cluster, since a selected icon
+ * can't yet be shown as selected (clusters.md rule 10, "In V1b"); so do Create, Add and a
+ * merging Rename that put nodes into a collapsed cluster.
  *
  * <p>The model: cluster north (n1, n2), cluster south (s1), and loose x, linked to n1.</p>
  */
@@ -124,6 +125,68 @@ class MapContextMenuCollapseItemsTest {
         assertFalse(collapse.isCollapsed("south"));
         assertEquals(Set.of("x"), model.getSelectedNodes(), "a wholly selected cluster too, in V1b");
         assertEquals(0, model.getSelectedLinkCount(), "x → n1 now runs to the icon");
+    }
+
+    /** The menu's step after Create, Add or a merging Rename, which the text edit can't test. */
+    private static void afterEdit(HydrologicalModel model, ClusterCollapse collapse,
+                                  List<String> nodes, String cluster) {
+        new MapContextMenuManager(null, null, model, collapse).deselectIfHidden(nodes, cluster);
+    }
+
+    @Test
+    void nodesPutIntoACollapsedClusterAreDeselectedWithTheirLinks() {
+        HydrologicalModel model = model("x", "s1");
+        model.selectLink(model.getAllLinks().get(0), true);
+
+        afterEdit(model, collapsed("north"), List.of("x"), "north");
+
+        assertEquals(Set.of("s1"), model.getSelectedNodes(), "only the nodes put in");
+        assertEquals(0, model.getSelectedLinkCount(), "x → n1 now runs inside the icon");
+    }
+
+    @Test
+    void nodesPutIntoAnExpandedClusterStaySelected() {
+        HydrologicalModel model = model("x", "s1");
+        model.selectLink(model.getAllLinks().get(0), true);
+
+        afterEdit(model, collapsed(), List.of("x"), "north");
+
+        assertEquals(Set.of("x", "s1"), model.getSelectedNodes());
+        assertEquals(1, model.getSelectedLinkCount());
+    }
+
+    @Test
+    void aNewClusterStartsCollapsedSoCreateDeselects() {
+        HydrologicalModel model = model("x", "s1");
+        ClusterCollapse collapse = collapsed();
+        collapse.created(model.getClusters(), "east");
+
+        afterEdit(model, collapse, List.of("x"), "east");
+
+        assertEquals(Set.of("s1"), model.getSelectedNodes());
+    }
+
+    @Test
+    void aLinkIsDeselectedByEitherEndAndKeptByNeither() {
+        HydrologicalModel model = model();
+        model.selectLink(model.getAllLinks().get(0), true);
+        ClusterCollapse collapse = collapsed();
+        collapse.created(model.getClusters(), "east");
+
+        afterEdit(model, collapse, List.of("s1"), "east");
+        assertEquals(1, model.getSelectedLinkCount(), "x → n1 doesn't end at s1");
+
+        afterEdit(model, collapse, List.of("n1"), "east");
+        assertEquals(0, model.getSelectedLinkCount(), "x → n1 ends at n1, downstream");
+    }
+
+    @Test
+    void theClusterIsFoundByAnyCapitalisation() {
+        HydrologicalModel model = model("x");
+
+        afterEdit(model, collapsed("north"), List.of("x"), "NORTH");
+
+        assertTrue(model.getSelectedNodes().isEmpty());
     }
 
     @Test
