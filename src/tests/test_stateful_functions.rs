@@ -658,7 +658,9 @@ fn test_model_run_twice_identical() {
 /// Run spans 2020-01-30 .. 2020-02-02, latching sim.day when sim.day == 1:
 ///   step0 Jan30: not 1 -> init -1;  step1 Jan31: hold -1
 ///   step2 Feb01: fires -> sample 1; step3 Feb02: hold 1
-/// node.calc.dsflow = usflow(10) + latch = [9, 9, 11, 11].
+/// node.calc.inflow records the latch as it was given = [-1, -1, 1, 1]. (The
+/// node adds no water for a negative inflow, so dsflow is not the place to
+/// read it.)
 #[test]
 fn test_model_latch_init_and_rerun() {
     let ini = "\
@@ -683,18 +685,18 @@ loc = 0, 20
 type = blackhole
 
 [outputs]
-node.calc.dsflow
+node.calc.inflow
 ";
     let mut model = IniModelIO::read_model_string(ini).expect("latch model should parse");
     model.configure().expect("configuration should succeed");
 
     model.run().expect("first run should succeed");
-    let idx = model.data_cache.get_existing_series_idx("node.calc.dsflow").unwrap();
+    let idx = model.data_cache.get_existing_series_idx("node.calc.inflow").unwrap();
     let first: Vec<f64> = model.data_cache.series[idx].values.clone();
-    assert_series(&first, &[9.0, 9.0, 11.0, 11.0], "node.calc.dsflow");
+    assert_series(&first, &[-1.0, -1.0, 1.0, 1.0], "node.calc.inflow");
 
     model.run().expect("second run should succeed");
-    let idx2 = model.data_cache.get_existing_series_idx("node.calc.dsflow").unwrap();
+    let idx2 = model.data_cache.get_existing_series_idx("node.calc.inflow").unwrap();
     let second: Vec<f64> = model.data_cache.series[idx2].values.clone();
     assert_eq!(first, second,
         "the second run must re-apply the -1 init, not carry the held sample over");

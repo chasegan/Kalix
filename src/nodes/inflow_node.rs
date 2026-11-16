@@ -85,8 +85,11 @@ impl Node for InflowNode {
             data_cache.add_value_at_index(idx, expected_inflow_value_on_delivery_timestep);
         }
 
-        // Calculate upstream order
-        self.usorders = (self.dsorders[0] - expected_inflow_value_on_delivery_timestep).max(0f64);
+        // Calculate upstream order. A negative expected inflow is none, as a
+        // negative inflow is: the node will not take water from the river,
+        // so it does not order any for that (ADR-0023).
+        let expected = if expected_inflow_value_on_delivery_timestep < 0.0 { 0.0 } else { expected_inflow_value_on_delivery_timestep };
+        self.usorders = (self.dsorders[0] - expected).max(0f64);
     }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) {
@@ -96,14 +99,19 @@ impl Node for InflowNode {
             data_cache.add_value_at_index(idx, self.usflow);
         }
 
-        // Get lateral inflow
+        // Get lateral inflow. inflow_value is what the expression gave, and
+        // is what the `inflow` result records, so a modeller can see when it
+        // went negative. The node adds water and never takes it: a negative
+        // inflow adds none (ADR-0023). An inflow that is not a number is left
+        // as it is, and no link carries it.
         self.inflow_value = self.inflow_input.get_value(data_cache);
+        let added = if self.inflow_value < 0.0 { 0.0 } else { self.inflow_value };
 
         // Compute outflow based on inflow
-        self.dsflow_primary = self.usflow + self.inflow_value;
+        self.dsflow_primary = self.usflow + added;
 
         // Update mass balance
-        self.internal_mbal += self.inflow_value;
+        self.internal_mbal += added;
         
         // Record results
         if let Some(idx) = self.recorder_idx_inflow {

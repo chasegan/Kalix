@@ -155,9 +155,12 @@ impl Node for ConfluenceNode {
         // harmony_fraction is recorded by record_harmony_fraction, once the ordering
         // system has evaluated it for this step.
 
+        // A negative expected inflow is none, as on an inflow node: no water
+        // is ordered upstream for it (ADR-0023).
+        let expected = if expected_inflow_value_on_delivery_timestep < 0.0 { 0.0 } else { expected_inflow_value_on_delivery_timestep };
         self.total_outgoing_order = (
             self.dsorders.iter().sum::<f64>()
-            - expected_inflow_value_on_delivery_timestep
+            - expected
         ).max(0f64);
 
         // Refer to simple_nodewise_ordering.rs for order propagation logic.

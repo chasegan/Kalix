@@ -93,7 +93,8 @@ impl Node for GaugeNode {
         if force_flow_value.is_nan() {
             self.dsflow_primary = self.usflow;
         } else {
-            self.dsflow_primary = force_flow_value;
+            // A negative forced flow is no flow: the gauge passes on nothing
+            self.dsflow_primary = force_flow_value.max(0.0);
             self.internal_mbal += self.dsflow_primary - self.usflow;
         }
 

@@ -24,7 +24,7 @@ ds_1 = my_other_node
 | type (compulsory) | The node type, which is “gauge” in this case. `type = gauge` |
 | loc (compulsory) | The location of the node in cartesian coordinates.  Example: `loc = 20, 30` |
 | reference\_flow (optional) | An expression specifying reference flow values that are used to compare the flows entering the gauge. You can record the values of delta (= upstream flow - reference flow) via the “delta” result. Reference flow values may be missing (nan) and this will result in a missing (nan) value for delta in that timestep. Example `reference_flow = data.file_csv.by_index.1` |
-| force\_flow (optional) | An expression specifying flow values to be forced at the node. This is done after the reference flow comparison. Example `force_flow = data.file_csv.by_index.1` |
+| force\_flow (optional) | An expression specifying flow values to be forced at the node. This is done after the reference flow comparison. A negative value is treated as zero. A value that is not a number leaves the flow unforced on that timestep. Example `force_flow = data.file_csv.by_index.1` |
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Inflow nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 
 ## Results associated with this node
@@ -37,11 +37,11 @@ ds_1 = my_other_node
 | delta | Difference between upstream flow and the reference flow (i.e. delta = upstream flow - reference flow). If the reference flow is nan, then delta will also be nan. [ML] |
 | ds\_1 | Downstream flow on link ds\_1 [ML] |
 | ds\_1\_order | Order on link ds\_1 [ML] |
-| force\_flow | Forced downstream flow [ML]. If this exists, it should equal dsflow. |
+| force\_flow | The value of the force\_flow expression [ML]. The downstream flow equals it, unless it is negative or not a number. A negative value is recorded as it was given, and the downstream flow is zero. |
 
 ## How the node works
 
-If the “force\_flow” parameter is used, then the downstream flow will be set equal to these values. Otherwise, all inflows are passed to the downstream node.
+If the “force\_flow” parameter is used, then the downstream flow is set equal to its value. A negative value sets the downstream flow to zero. On a timestep where the value is not a number, the flow is not forced. Otherwise, all inflows are passed to the downstream node.
 
 ## References
 
