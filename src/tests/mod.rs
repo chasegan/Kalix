@@ -150,6 +150,9 @@ mod test_ras;
 // sim.days_in_* / sim.is_leap fields
 mod test_calendar_builtins;
 
+// The date stepped forward one step at a time, against the timestamp
+mod test_calendar_stepping;
+
 #[cfg(test)]
 mod test_opportunistic_demand;
 

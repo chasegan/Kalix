@@ -4,7 +4,7 @@
 ///
 /// Each flag is 1.0 when this step's calendar field differs from the previous
 /// step's, and at step 0 (the run start counts as a boundary). The flags are
-/// computed once per step in DataCache::update_current_timestamp and read back
+/// computed once per step in DataCache::update_calendar_flags and read back
 /// through is_new_day/is_new_month/is_new_year, so these tests exercise both the
 /// DataCache computation directly and the expression-language surface.
 ///

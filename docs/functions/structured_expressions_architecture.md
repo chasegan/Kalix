@@ -300,8 +300,8 @@ Var series are registered at load as non-critical (like `node.*` series).
 
 ## 8. `sim.new_*` flags
 
-Computed in `DataCache::update_current_timestamp` (which already decomposes
-the date once per step): compare new y/m/d against the previous step's,
+Computed in `DataCache::update_calendar_flags`, once per step, from the date
+the cache holds: compare new y/m/d against the previous step's,
 store three `bool`s, all true at step 0. Expression side is a `SimFlag`
 lowered variant reading the bool — same cost class as `SimContext`. Do not
 compute flags per-expression; they are per-step facts.

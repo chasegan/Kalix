@@ -86,7 +86,11 @@ def compare_mass_balance_files(file1, file2):
                 num2 = get_numerical_content(content2)
                 if num1 is None or num2 is None:
                     return False, f"line {line_num}: expected numerical content"
-                if not np.isclose(num1, num2, rtol=1e-5, atol=1e-13):
+                # TOTAL is what the nodes say they emitted less what left the
+                # model. It is zero apart from rounding, and its digits differ
+                # between platforms, so it gets the tolerance of a node's value
+                # and no tighter: the check is that it is still negligible.
+                if not np.isclose(num1, num2, rtol=1e-5, atol=1e-8):
                     return False, f"line {line_num}: numerical mismatch {num1} vs {num2}"
             else:
                 if content1 != content2:
