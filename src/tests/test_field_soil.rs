@@ -217,10 +217,13 @@ fn test_escape_leaves_the_model_and_the_take_allows_for_it() {
     let mbal: std::collections::HashMap<String, f64> = model.get_mass_balance_data().into_iter()
         .map(|(name, _, v)| (name, v)).collect();
     // Over 10 steps: 80 ML into the soil and 20 ML of escape leave the model at the field,
-    // and the rest of what the dam released passes the outlet gauge
+    // and the rest of what the dam released reaches the outlet gauge. The gauge has no
+    // downstream link, so that water leaves the model there.
     assert_close(mbal["paddock"] * 10.0, -100.0, "the field's mass balance");
     let passed_outlet: f64 = series(&mut model, "node.outlet.usflow").iter().sum();
-    assert_close(mbal.values().sum::<f64>() * 10.0, passed_outlet, "the model balances");
+    assert_close(mbal["outlet"] * 10.0, -passed_outlet, "the outlet's mass balance");
+    // Every node emitted what it said it did: what the nodes created is what left
+    assert_close(mbal.values().sum::<f64>(), 0.0, "the model balances");
 }
 
 #[test]

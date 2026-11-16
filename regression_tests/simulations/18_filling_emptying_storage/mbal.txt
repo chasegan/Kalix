@@ -9,8 +9,8 @@ MASS BALANCE REPORT
 
 INFLOW NODES
   inflow1, 70
-  inflow1_level, 2.1
-  inflow2_level, 2.5
+  inflow1_level, 0
+  inflow2_level, 0
 
 ORDER_CONTROL NODES
   enviro, 0
@@ -24,5 +24,5 @@ BLACKHOLE NODES
   bh2, -50
 
 ----------------------------------
-TOTAL = 4.6
+TOTAL = 0
 ----------------------------------

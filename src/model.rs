@@ -11,6 +11,7 @@ use crate::misc::simulation_context::{
     set_context_phase, set_context_ras_section, set_context_var_block, ContextItem, SimPhase,
 };
 use crate::model_inputs::DynamicInput;
+use crate::nodes::node_enum::MAX_OUTLETS;
 use crate::nodes::{Link, Node, NodeEnum};
 use crate::ordering::simple_nodewise_ordering::SimpleNodewiseOrderingSystem;
 use crate::tid::utils::{time_of_day_string, u64_to_date_string_for_step_size, u64_to_iso_datetime_string};
@@ -45,6 +46,16 @@ pub struct Transfer {
     pub to_node: u32,
     pub from_outlet: u8,
     pub to_inlet: u8,
+}
+
+/// An outlet that can hold water and has no link. Water a node puts there
+/// leaves the model, and `volume` is how much has done so this run [ML]. The
+/// mass balance report takes it off the node's own figure.
+#[derive(Debug, Clone, Copy)]
+pub struct Outfall {
+    pub volume: f64,
+    pub node: u32,
+    pub outlet: u8,
 }
 
 /// One entry in the flow phase of a model with flow-phase var blocks: the
@@ -212,6 +223,14 @@ pub struct Model {
     /// Populated: computed by `check_execution_order()` with `execution_order`.
     pub transfers: Vec<Transfer>,
 
+    /// Hot path: flow phase, swept once per step in run_timestep().
+    /// The outlets that can hold water and have no link. Every such outlet
+    /// of every node is in `transfers` or here. Usually a handful, often none.
+    ///
+    /// Populated: computed by `check_execution_order()` with `transfers`,
+    /// which also zeroes the volumes at the start of every run.
+    pub outfalls: Vec<Outfall>,
+
     /// Read at setup: the flow phase's transfers are built from it.
     /// Adjacency list for O(1) link lookup.
     /// `outgoing_links[node_idx]` = vec of link indices
@@ -366,6 +385,7 @@ impl Model {
             flow_has_var_blocks: self.flow_has_var_blocks,
             links: self.links.clone(),
             transfers: self.transfers.clone(),
+            outfalls: self.outfalls.clone(),
             outgoing_links: self.outgoing_links.clone(),
             incoming_links: self.incoming_links.clone(),
             execution_order: self.execution_order.clone(),
@@ -397,6 +417,7 @@ impl Model {
             flow_has_var_blocks: self.flow_has_var_blocks,
             links: self.links.clone(),
             transfers: self.transfers.clone(),
+            outfalls: self.outfalls.clone(),
             outgoing_links: self.outgoing_links.clone(),
             incoming_links: self.incoming_links.clone(),
             execution_order: vec![],
@@ -1208,6 +1229,13 @@ impl Model {
             }
         }
 
+        // Water at an outlet with no link leaves the model. Take it and keep
+        // the total, for the mass balance report. Whatever is there is
+        // counted, with no test: the node counted it the same way.
+        for outfall in &mut self.outfalls {
+            outfall.volume += self.nodes[outfall.node as usize].remove_dsflow(outfall.outlet);
+        }
+
         // Accounting recorders
         self.account_manager.record_results(&mut self.data_cache);
     }
@@ -1364,10 +1392,15 @@ impl Model {
 
         // Execution order according to node index. Each node's links are laid
         // out behind the previous node's, in the order they were added, so the
-        // flow phase reads them in one pass.
+        // flow phase reads them in one pass. An outlet that can hold water and
+        // has no link is an outfall, so every such outlet is in one list or
+        // the other. This runs at the start of every run, which is also what
+        // zeroes the outfalls' volumes.
         self.execution_order.clear();
         self.transfers.clear();
+        self.outfalls.clear();
         for node_idx in 0..self.nodes.len() {
+            let mut linked = [false; MAX_OUTLETS as usize];
             for &link_idx in &self.outgoing_links[node_idx] {
                 let link = &self.links[link_idx];
                 self.transfers.push(Transfer {
@@ -1375,6 +1408,14 @@ impl Model {
                     from_outlet: link.from_outlet,
                     to_inlet: link.to_inlet,
                 });
+                if let Some(is_linked) = linked.get_mut(link.from_outlet as usize) {
+                    *is_linked = true;
+                }
+            }
+            for outlet in 0..MAX_OUTLETS {
+                if !linked[outlet as usize] && self.nodes[node_idx].can_strand_water(outlet) {
+                    self.outfalls.push(Outfall { volume: 0.0, node: node_idx as u32, outlet });
+                }
             }
             self.execution_order.push(FlowStep {
                 node: node_idx as u32,
@@ -1405,7 +1446,11 @@ impl Model {
     }
 
     /// Each node's mass balance per timestep (ML/timestep), as
-    /// `(node_name, type_name, value)`, ordered by node type (preferred
+    /// `(node_name, type_name, value)`. A node's mass balance is the water its
+    /// outgoing links carried away less the water its incoming links brought.
+    /// It is worked out as what the node says it emitted less what it
+    /// received, less the water left at its outlets that have no link.
+    /// Ordered by node type (preferred
     /// types first, then any others alphabetically) and by node name within
     /// a type. `generate_mass_balance_report` and the Python `_get_mass_balance`
     /// binding are both projections of this same ordered list, so the text
@@ -1418,12 +1463,20 @@ impl Model {
             .collect();
         remaining_nodes.sort();
 
+        // Water left at each node's outlets that have no link
+        let mut left_at_outfalls = vec![0.0; self.nodes.len()];
+        for outfall in &self.outfalls {
+            left_at_outfalls[outfall.node as usize] += outfall.volume;
+        }
+
         let mut by_type: HashMap<String, Vec<(String, f64)>> = HashMap::new();
         for node_name in &remaining_nodes {
-            let node = self.get_node(node_name).unwrap();
+            let node_idx = self.node_lookup[&node_name.to_lowercase()];
+            let node = &self.nodes[node_idx];
             let type_name = node.get_type_as_string();
-            let mbal_per_timestep =
-                node.get_mass_balance() / (self.configuration.sim_nsteps as f64);
+            // Subtract, then divide once
+            let mbal_per_timestep = (node.get_mass_balance() - left_at_outfalls[node_idx])
+                / (self.configuration.sim_nsteps as f64);
             by_type
                 .entry(type_name)
                 .or_default()

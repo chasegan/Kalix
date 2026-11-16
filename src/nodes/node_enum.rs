@@ -54,7 +54,44 @@ macro_rules! dispatch {
     };
 }
 
+/// The most outlets any node type has (ds_1 to ds_4).
+pub const MAX_OUTLETS: u8 = 4;
+
 impl NodeEnum {
+    /// Whether this node can put water at an outlet that has no link. The
+    /// model asks at setup, for each outlet without a link: water left there
+    /// leaves the model, and is counted against the node's mass balance. The
+    /// answer can differ between a node's outlets, so the question takes the
+    /// outlet (0 is ds_1). Every variant answers, with no wildcard arm
+    /// (ADR-0008 §2 and §3).
+    pub fn can_strand_water(&self, outlet: u8) -> bool {
+        match self {
+            // Nothing leaves a blackhole
+            NodeEnum::BlackholeNode(_) => false,
+            NodeEnum::SplitterNode(_) => outlet < 2,
+            // ds_2 carries the return flow, and only when there is a share to return
+            NodeEnum::FieldNode(n) => outlet == 0 || (outlet == 1 && n.return_fraction > 0.0),
+            // ds_1 spills. ds_2 to ds_4 release to an order, which needs a
+            // link, or to a forced release, which does not.
+            NodeEnum::StorageNode(n) => outlet == 0 || n.has_forced_release(outlet),
+            // A user's supply outlets (ds_2 to ds_4) exist only where they are linked
+            NodeEnum::UnregulatedUserNode(_) |
+            NodeEnum::RegulatedUserNode(_) |
+            NodeEnum::ConfluenceNode(_) |
+            NodeEnum::GaugeNode(_) |
+            NodeEnum::LossNode(_) |
+            NodeEnum::Gr4jNode(_) |
+            NodeEnum::InflowNode(_) |
+            NodeEnum::RoutingNode(_) |
+            NodeEnum::RoutingNodeReachLosses(_) |
+            NodeEnum::SacramentoNode(_) |
+            NodeEnum::OrderControlNode(_) |
+            NodeEnum::AwbmNode(_) |
+            NodeEnum::SurmNode(_) |
+            NodeEnum::Gr4jsgNode(_) => outlet == 0,
+        }
+    }
+
     /// The node's optimisable parameters, or `None` for a node type that has none.
     /// Every variant answers here, with no wildcard arm, so a new node type or
     /// sub-variant does not compile until it has said (ADR-0008 §2). The three

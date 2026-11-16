@@ -8,8 +8,8 @@ MASS BALANCE REPORT
   Note: units are ML/timestep
 
 SACRAMENTO NODES
-  my_sac, 390.6681573343756
+  my_sac, 0
 
 ----------------------------------
-TOTAL = 390.6681573343756
+TOTAL = 0
 ----------------------------------

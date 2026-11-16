@@ -163,6 +163,7 @@ mod test_ordering_visit_order;
 mod test_ordering_inlets;
 
 // Unregulated user: supply outlets (ds_2 to ds_4)
+mod test_mass_balance_outfalls;
 mod test_unregulated_user_supply_outlets;
 
 // Regulated user: supply outlets (ds_2 to ds_4)

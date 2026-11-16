@@ -8,8 +8,8 @@ MASS BALANCE REPORT
   Note: units are ML/timestep
 
 GR4J NODES
-  mygr4jnode, 265.4680515252614
+  mygr4jnode, 0
 
 ----------------------------------
-TOTAL = 265.4680515252614
+TOTAL = 0
 ----------------------------------

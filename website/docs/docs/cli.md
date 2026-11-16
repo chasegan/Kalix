@@ -69,7 +69,7 @@ Run a simulation. Alias: `sim`.
 :   Report performance-profiling figures to the console.
 
 `-m`, `--mass-balance <MASS_BALANCE>`
-:   File to save the mass-balance report to.
+:   File to save the mass-balance report to. The report gives one value per node, in ML per timestep. A node's value is the water its downstream links carried away, less the water its upstream links brought, as a mean over the run. A positive value means the node added water to the network, and a negative value means it removed water. Water at an outlet with no link is not counted, so it shows as a loss at that node.
 
 `-v`, `--verify-mass-balance <VERIFY_MASS_BALANCE>`
 :   Existing mass-balance report to verify against — checks that nothing has changed.

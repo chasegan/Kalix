@@ -6,7 +6,7 @@ title: "Blackhole"
 
 ## At a glance…
 
-The blackhole node represents a total sink, whereby any incoming flows are lost and the downstream flow is always zero. This can be used to terminate the network’s end-of-system points, which will help the reported mass-balance → 0. (Using this node is totally optional).
+The blackhole node represents a total sink, whereby any incoming flows are lost and the downstream flow is always zero. It can be used to end the network at its end-of-system points. The node is optional. Water that reaches an outlet with no link leaves the model there, and the mass-balance report shows it as a loss at that node.
 
 ```ini
 [node.my_blackhole]

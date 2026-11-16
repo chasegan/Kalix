@@ -340,6 +340,15 @@ impl StorageNode {
     // with any outlet curve solve via solve_rating below; storages without
     // take solve_no_rating, bit-identical with the historical solver.
 
+    /// Whether a forced release is set on this outlet (0 is ds_1). A forced
+    /// release needs no order, so it can put water at an outlet with no link.
+    pub fn has_forced_release(&self, outlet: u8) -> bool {
+        match self.ds_force_release_input.get(outlet as usize) {
+            Some(DynamicInput::None { .. }) | None => false,
+            Some(_) => true,
+        }
+    }
+
     /// Determine whether the release at the outlet should be the forced release optionally
     /// supplied by the user or the order determined by the model.
     fn check_forced_release(
@@ -1568,12 +1577,6 @@ impl Node for StorageNode {
                 self.ds_flows = ds_flows;
                 self.dsflow = self.ds_flows.iter().sum();
                 self.sid_adjustment_volume = solver_adjustment_volume;
-
-                // Update mass balance. mbal is emitted minus received, so water
-                // that forcing created counts like an inflow node's (positive)
-                // and water it destroyed like a blackhole's (negative).
-                self.mbal += self.sid_adjustment_volume;
-                // The through-flow term is added below, as on every step.
             } else {
                 // Solve backward Euler
                 let (v_final, ds_flows, spill, row, solver_area_km2) = 
