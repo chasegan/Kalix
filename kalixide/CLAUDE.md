@@ -206,7 +206,12 @@ the map draws per node (names / akas only / hidden, with the hover rule) and the
 toolbar button cycles it; `MapRenderer` draws the lines it is given. The editor
 tokenises annotation lines as `Token.ANNOTATION`.
 
-Key files: `IniSyntax.java`, `AnnotationKey.java`, `ModelParser.java`, `ClusterIndex.java`, `NodeLabelMode.java`, `ToolBarBuilder.java`
+The map draws clusters from pure functions, tested without a display: `MapLayers` (the
+order of node layers), `ClusterBox`, `ClusterIcon` and `MapLinks`. Which clusters are
+collapsed is session view state in `ClusterCollapse`, one per `MapPanel`; the design is
+`docs/clusters.md`, Architecture.
+
+Key files: `IniSyntax.java`, `AnnotationKey.java`, `ModelParser.java`, `ClusterIndex.java`, `NodeLabelMode.java`, `ToolBarBuilder.java`, `MapLayers.java`, `ClusterBox.java`, `ClusterIcon.java`, `MapLinks.java`, `ClusterCollapse.java`
 
 ### Folding (#494)
 `KalixIniFoldParser` is the one fold grammar, registered for the Kalix INI style beside

@@ -1,8 +1,10 @@
 # Node Clusters
 
-Status: **design settled; V1a (model and rules) done: `#@cluster` is parsed and indexed,
-and the map's menu offers Create, Add, Remove, Rename and Disband, but the map doesn't draw
-clusters yet** (stages below). Issue [#476](https://github.com/chasegan/Kalix/issues/476).
+Status: **design settled; V1a (model and rules) and V1b (drawing) done: `#@cluster` is
+parsed and indexed, the map's menu offers Create, Add, Remove, Rename and Disband, and the
+map draws boxes and collapsed icons, with Collapse, Collapse all and Expand all on its
+menu; selecting, dragging and expanding one cluster wait for V1c** (stages below).
+Issue [#476](https://github.com/chasegan/Kalix/issues/476).
 The present tense below describes the design. A few choices are marked for checking at
 user testing (see Context menu).
 
@@ -74,7 +76,10 @@ name at the box's top left.
    Proposed). Everything starts collapsed on load, and so does a new cluster, even one
    just made from the map, since people may make several in a row. The nodes turning
    into an icon shows it worked. A three-state collapse button with a remembered
-   arrangement was dropped for V1; it may return if user testing misses it.
+   arrangement was dropped for V1; it may return if user testing misses it. "Load" means
+   opening a file: a reload in place keeps the state, as undo does. That is the
+   auto-reload of a file changed on disk, and the optimiser's `Copy to Main Window`; both
+   usually bring back the same clusters.
 
 6. **Showing or hiding boxes is a setting built like node-label mode:** a saved
    preference, applied to every open map, on the toolbar and the menu bar (ADR-0015 §2).
@@ -107,10 +112,10 @@ name at the box's top left.
 
     **In V1b, until an icon can be drawn as selected (V1c):** an edit or a collapse that
     hides selected nodes deselects them, and every link that ends at them, even when they
-    are the whole cluster. That is Collapse, Collapse all, and Create, Add or a merging
-    Rename into a collapsed cluster. A selection out of sight would otherwise be acted on by
-    Delete or Cut unseen. Find…, Show on map and `Select nodes ▸` can still select hidden
-    members.
+    are the whole cluster. That is Collapse, Collapse all, and Create, Add or Rename into
+    or of a collapsed cluster. A selection out of sight would otherwise be acted on by
+    Delete or Cut unseen. Other routes can still leave hidden members selected: Find…, Show
+    on map, `Select nodes ▸`, undo and redo, and hand edits.
 
 11. **The box name and proxy stand for the cluster** and behave like the icon: a click
     selects (all the members, when expanded) and takes the editor to the section of the
@@ -227,12 +232,14 @@ comments; those comments belong to the section above, with or without the new li
 its first annotation (`NodeSectionLocator`), so the clipboard and Delete already carry
 `#@cluster`.
 
-**Collapse state** is a session map keyed by `ClusterIndex.key()`, not by a spelling, so a
-rename that changes only capitalisation keeps its state; entries are **never removed
+**Collapse state** (`ClusterCollapse`, one per map panel, since only the map shows it) is
+a session map keyed by `ClusterIndex.key()`, not by a spelling, so a rename that changes
+only capitalisation keeps its state; entries are **never removed
 when a cluster vanishes**. Undo is the editor's own text undo followed by a reparse, so a
 cluster that undo brings back finds its old state. Create and Rename write entries
 explicitly: a new name starts collapsed, a rename to a new name copies the old name's
-state, and joining an existing cluster leaves its state alone.
+state, and joining an existing cluster leaves its state alone. The map's menu writes them,
+from the index as it was before the edit, since only that says whether a name is new.
 
 **Drawing order** (`MapRenderer`): links; loose nodes; for each cluster in order of its
 first mention in the file, its box and then its members; collapsed icons. Loose nodes draw
@@ -241,24 +248,32 @@ box, so its label stays clean of that box, which helps tell the two apart. A mem
 earlier cluster inside a later box is tinted too. Within each layer every shape is drawn
 before any label, so no shape covers a label in its own layer; a loose node's label can
 still lie under a member's shape, the cost of keeping loose nodes under the boxes.
-`MapLayers` decides this order.
+`MapLayers` decides this order. Icons come after every layer: all their cards, then all
+their names. The label of the node under the mouse is held back and drawn last, over
+everything, so the label being read is never covered.
 
 **Box bounds** are computed in screen space on every repaint. Nodes and labels are drawn at
 a fixed screen size and only positions scale, so a box's size relative to the map changes
 with zoom. Padding has to: keep selection halos clear of the border; keep rounded corners
 clear of the contents; cover each member's drawn label, with a small gap; and stay
-symmetric about the members. Labels shown only on hover don't widen a box.
+symmetric about the members. Labels shown only on hover don't widen a box. The box name
+sits in a band along the top, mirrored at the bottom to keep the symmetry; a long name
+widens the box, and in hidden label mode there is no band.
 
 **Links.** A link with one end on a member of a collapsed cluster is drawn to that
 cluster's icon. A link between two collapsed clusters runs icon to icon; a link within one
 collapsed cluster isn't drawn. Links with the same drawn ends in the same direction are
-drawn once.
+drawn once: solid if any of them is primary, and highlighted if any of them is selected
+(`MapLinks`).
 
 **Hit-testing** (`MapPanel`), in order: icon; node; proxy or box name, topmost first; a
 node's link ring (#435); link; empty space. Members of a collapsed cluster and their links
 drop out of every hit-test, hover and rectangle selection included. Rectangle selection
 picks an icon if the point it is drawn at lies inside. A selection made after an edit waits
-for the reparse, as Insert node's does.
+for the reparse, as Insert node's does. Where node shapes overlap, a click picks the one
+drawn on top. In V1b icons and box names aren't hit-tested yet (V1c), so a click on an
+icon reaches a node under it, and proxies aren't drawn yet; hidden members already drop
+out.
 
 **Locations** (`TextCoordinateUpdater.updateNodeCoordinates`). A drag moves each member by
 the same offset, as one atomic edit, with dotted ghosts of the members while dragging or
@@ -272,9 +287,12 @@ writes whichever form each member has.
   cluster spelled with different capitalisation). A thin slice of the menu, so the edits
   can be tried by hand: Create, Add, Remove, Rename and Disband, with every cluster counted
   as expanded.
-- **V1b: drawing.** Boxes, icons, links to icons, collapse state.
-- **V1c: interaction.** The rest of the menu (`Select nodes ▸ Cluster`, Collapse, Expand),
-  selection, hit-testing, drag, rotate, Delete.
+- **V1b: drawing.** Boxes, icons, links to icons, collapse state. `Collapse cluster(s)`,
+  `Collapse all clusters` and `Expand all clusters` came forward from V1c, so both states
+  can be reached; hidden members drop out of hit-tests.
+- **V1c: interaction.** The rest of the menu (`Select nodes ▸ Cluster`, `Expand
+  cluster(s)`), selection (rule 10 in full), icon hit-testing (and so the icon label on
+  hover in hidden mode, rule 8), drag, rotate, Delete.
 - **V1d: toolbar and menu bar.** The boxes setting and its preference. The last code stage,
   since nothing depends on it.
 - **V1e: docs.** A clusters section in `website/docs/docs/ide.md`, a release-note bullet.
