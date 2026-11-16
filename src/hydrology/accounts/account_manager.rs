@@ -284,8 +284,9 @@ impl AccountManager {
     #[inline(always)]
     pub fn start_of_step(&mut self, data_cache: &mut DataCache) {
         // A model with no accounts returns in the caller, and does not pay
-        // for the entry to the work below.
-        if self.accounts.is_empty() {
+        // for the entry to the work below. A group can ask for its opening
+        // balance with no accounts in it, so the recorders are tested too.
+        if self.accounts.is_empty() && !self.has_opening_recorders {
             return;
         }
         self.start_of_step_with_accounts(data_cache)
