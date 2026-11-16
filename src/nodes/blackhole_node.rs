@@ -92,6 +92,11 @@ impl Node for BlackholeNode {
         0f64
     }
 
+    #[inline(always)]
+    fn remove_dsflow_primary(&mut self) -> f64 {
+        0f64
+    }
+
     fn get_mass_balance(&self) -> f64 {
         self.mbal
     }
