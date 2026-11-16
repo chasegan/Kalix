@@ -11,6 +11,7 @@ use crate::misc::simulation_context::{
     set_context_phase, set_context_ras_section, set_context_var_block, ContextItem, SimPhase,
 };
 use crate::model_inputs::DynamicInput;
+use crate::nodes::node_enum::MAX_OUTLETS;
 use crate::nodes::{Link, Node, NodeEnum};
 use crate::ordering::simple_nodewise_ordering::SimpleNodewiseOrderingSystem;
 use crate::tid::utils::{time_of_day_string, u64_to_date_string_for_step_size, u64_to_iso_datetime_string};
@@ -45,6 +46,16 @@ pub struct Transfer {
     pub to_node: u32,
     pub from_outlet: u8,
     pub to_inlet: u8,
+}
+
+/// An outlet that can hold water and has no link. Water a node puts there
+/// leaves the model, and `volume` is how much has done so this run [ML]. The
+/// mass balance report takes it off the node's own figure.
+#[derive(Debug, Clone, Copy)]
+pub struct Outfall {
+    pub volume: f64,
+    pub node: u32,
+    pub outlet: u8,
 }
 
 /// One entry in the flow phase of a model with flow-phase var blocks: the
@@ -162,12 +173,13 @@ pub struct Model {
     /// Populated: during parsing or programmatic construction, via `add_var_block()`.
     pub var_blocks: Vec<VarBlock>,
 
-    /// Hot path: flow phase, read in run_timestep().
+    /// Read at setup by initialize_network(), and by the INI writer.
     /// Interleaved execution layout: nodes and var blocks in definition order.
     /// Built as sections are added (add_node / add_var_block), so file order
     /// IS execution order for var blocks exactly as it is for nodes
-    /// (ADR-0005 §1 extended to calculations). Only consulted
-    /// when var_blocks is non-empty; the plain node loop uses execution_order.
+    /// (ADR-0005 §1 extended to calculations). The flow phase walks
+    /// `flow_exec_items`, which is derived from this, or `execution_order`
+    /// when no flow-phase var block is interleaved.
     ///
     /// Populated: alongside `nodes`/`var_blocks`, via `add_node()`/`add_var_block()`.
     pub exec_items: Vec<ExecItem>,
@@ -211,6 +223,22 @@ pub struct Model {
     ///
     /// Populated: computed by `check_execution_order()` with `execution_order`.
     pub transfers: Vec<Transfer>,
+
+    /// Hot path: flow phase, swept once per step in run_timestep().
+    /// The outlets that can hold water and have no link. Every such outlet
+    /// is in `transfers` or here, unless its node is in `linkless_nodes`.
+    /// Usually a handful, often none.
+    ///
+    /// Populated: computed by `check_execution_order()` with `transfers`,
+    /// which also zeroes the volumes at the start of every run.
+    pub outfalls: Vec<Outfall>,
+
+    /// Read by the mass balance report. The nodes with no link in or out.
+    /// Everything such a node puts at its outlets leaves the model there, so
+    /// what it left is its own figure and its outlets are not swept.
+    ///
+    /// Populated: computed by `check_execution_order()` with `outfalls`.
+    pub linkless_nodes: Vec<u32>,
 
     /// Read at setup: the flow phase's transfers are built from it.
     /// Adjacency list for O(1) link lookup.
@@ -366,6 +394,8 @@ impl Model {
             flow_has_var_blocks: self.flow_has_var_blocks,
             links: self.links.clone(),
             transfers: self.transfers.clone(),
+            outfalls: self.outfalls.clone(),
+            linkless_nodes: self.linkless_nodes.clone(),
             outgoing_links: self.outgoing_links.clone(),
             incoming_links: self.incoming_links.clone(),
             execution_order: self.execution_order.clone(),
@@ -393,10 +423,18 @@ impl Model {
             var_blocks: self.var_blocks.clone(),
             exec_items: self.exec_items.clone(),
             ras_slot: self.ras_slot.clone(),
-            flow_exec_items: self.flow_exec_items.clone(),
+            flow_exec_items: vec![],
             flow_has_var_blocks: self.flow_has_var_blocks,
             links: self.links.clone(),
-            transfers: self.transfers.clone(),
+            // The lists built at setup (flow_exec_items above, transfers, and
+            // execution_order below) are left empty: initialize_network()
+            // rebuilds them before any run.
+            // The outfalls are the exception. They are kept, because the
+            // nodes above are copied with their own mass balance figures,
+            // and a report needs both.
+            transfers: vec![],
+            outfalls: self.outfalls.clone(),
+            linkless_nodes: self.linkless_nodes.clone(),
             outgoing_links: self.outgoing_links.clone(),
             incoming_links: self.incoming_links.clone(),
             execution_order: vec![],
@@ -1134,9 +1172,9 @@ impl Model {
         // blocks, per ADR-0005 §1 extended to calculations).
         set_context_phase(SimPhase::Flow);
         // Two loop shapes, chosen once per timestep: models without var
-        // blocks — the overwhelmingly common case — run the original plain
-        // node loop, byte-identical to before var blocks existed (adding a
-        // per-item match to that loop was a measured regression). Only
+        // blocks — the overwhelmingly common case — run the plain node loop,
+        // which has no per-item match (adding one to that loop was a measured
+        // regression). Only
         // models that actually interleave var blocks pay for the dispatch.
         // The node body is duplicated in both branches deliberately: a shared
         // &mut self helper can't be called while iterating a borrowed field,
@@ -1208,6 +1246,13 @@ impl Model {
             }
         }
 
+        // Water at an outlet with no link leaves the model. Take it and keep
+        // the total, for the mass balance report. Whatever is there is
+        // counted, with no test: the node counted it the same way.
+        for outfall in &mut self.outfalls {
+            outfall.volume += self.nodes[outfall.node as usize].remove_dsflow(outfall.outlet);
+        }
+
         // Accounting recorders
         self.account_manager.record_results(&mut self.data_cache);
     }
@@ -1258,10 +1303,25 @@ impl Model {
         // The flow pass of a model with flow-phase var blocks: each node's
         // step from the execution order (which is in node order), with the
         // var blocks at their file positions.
+        // Both flow loops walk `transfers` with one cursor, which is only
+        // right if the nodes come in the order the transfers were laid out
+        // in: node order. add_node() builds the layout that way. Refuse to
+        // run otherwise, since the cursor would take water from the wrong
+        // nodes, or move none, and say nothing.
         self.flow_exec_items.clear();
+        let mut next_node = 0;
         for &item in &flow_layout {
             self.flow_exec_items.push(match item {
-                ExecItem::Node(node_idx) => FlowExecItem::Node(self.execution_order[node_idx]),
+                ExecItem::Node(node_idx) => {
+                    if node_idx != next_node {
+                        return Err(format!(
+                            "Internal error: node {} is out of order in the execution layout (expected node {}).",
+                            node_idx, next_node
+                        ));
+                    }
+                    next_node += 1;
+                    FlowExecItem::Node(self.execution_order[node_idx])
+                }
                 ExecItem::VarBlock(vb_idx) => FlowExecItem::VarBlock(vb_idx),
             });
         }
@@ -1348,6 +1408,14 @@ impl Model {
     /// otherwise. It deliberately does NOT topologically sort - the model
     /// file must remain a faithful, readable account of what runs.
     fn check_execution_order(&mut self) -> Result<(), String> {
+        // Cleared before the check, so a model that fails it holds no lists
+        // from an earlier run. initialize_nodes() has already zeroed the
+        // nodes' own figures by then, and the outfalls must go with them.
+        self.execution_order.clear();
+        self.transfers.clear();
+        self.outfalls.clear();
+        self.linkless_nodes.clear();
+
         // Check execution order is consistent with flow phase using link info:
         // The node below each link must have a higher index than the node above the link
         for link in &self.links {
@@ -1364,10 +1432,12 @@ impl Model {
 
         // Execution order according to node index. Each node's links are laid
         // out behind the previous node's, in the order they were added, so the
-        // flow phase reads them in one pass.
-        self.execution_order.clear();
-        self.transfers.clear();
+        // flow phase reads them in one pass. An outlet that can hold water and
+        // has no link is an outfall, so every such outlet is in one list or
+        // the other, unless its node has no links at all. This runs at the start of every run, which is also what
+        // zeroes the outfalls' volumes.
         for node_idx in 0..self.nodes.len() {
+            let mut linked = [false; MAX_OUTLETS as usize];
             for &link_idx in &self.outgoing_links[node_idx] {
                 let link = &self.links[link_idx];
                 self.transfers.push(Transfer {
@@ -1375,6 +1445,22 @@ impl Model {
                     from_outlet: link.from_outlet,
                     to_inlet: link.to_inlet,
                 });
+                if let Some(is_linked) = linked.get_mut(link.from_outlet as usize) {
+                    *is_linked = true;
+                }
+            }
+            // A node with no link in or out needs no outfalls. Everything it
+            // puts at its outlets leaves the model there, so what it left is
+            // its own figure, and the report uses that. A lone catchment, the
+            // commonest calibration model, then has nothing to sweep each step.
+            if self.outgoing_links[node_idx].is_empty() && self.incoming_links[node_idx].is_empty() {
+                self.linkless_nodes.push(node_idx as u32);
+            } else {
+                for outlet in 0..MAX_OUTLETS {
+                    if !linked[outlet as usize] && self.nodes[node_idx].can_strand_water(outlet) {
+                        self.outfalls.push(Outfall { volume: 0.0, node: node_idx as u32, outlet });
+                    }
+                }
             }
             self.execution_order.push(FlowStep {
                 node: node_idx as u32,
@@ -1388,6 +1474,12 @@ impl Model {
 
     /// Initialize all the nodes
     fn initialize_nodes(&mut self) -> Result<(), String> {
+        // The nodes' own mass balance figures are zeroed below, one node at a
+        // time. What the last run left at outfalls goes first, so that a node
+        // that fails to initialise leaves no totals against zeroed figures.
+        // check_execution_order() rebuilds both lists.
+        self.outfalls.clear();
+        self.linkless_nodes.clear();
         for i in 0..self.nodes.len() {
             self.nodes[i].initialise(&mut self.data_cache, &mut self.account_manager)?
         }
@@ -1405,7 +1497,11 @@ impl Model {
     }
 
     /// Each node's mass balance per timestep (ML/timestep), as
-    /// `(node_name, type_name, value)`, ordered by node type (preferred
+    /// `(node_name, type_name, value)`. A node's mass balance is the water its
+    /// outgoing links carried away less the water its incoming links brought.
+    /// It is worked out as what the node says it emitted less what it
+    /// received, less the water left at its outlets that have no link.
+    /// Ordered by node type (preferred
     /// types first, then any others alphabetically) and by node name within
     /// a type. `generate_mass_balance_report` and the Python `_get_mass_balance`
     /// binding are both projections of this same ordered list, so the text
@@ -1418,12 +1514,26 @@ impl Model {
             .collect();
         remaining_nodes.sort();
 
+        // Water left at each node's outlets that have no link
+        let mut left_at_outfalls = vec![0.0; self.nodes.len()];
+        for outfall in &self.outfalls {
+            left_at_outfalls[outfall.node as usize] += outfall.volume;
+        }
+        // A node with no links left everything it emitted, and its outlets
+        // were not swept: what it left is its own figure. It then reads zero,
+        // or NaN if its figure is not finite.
+        for &node_idx in &self.linkless_nodes {
+            left_at_outfalls[node_idx as usize] = self.nodes[node_idx as usize].get_internal_mbal();
+        }
+
         let mut by_type: HashMap<String, Vec<(String, f64)>> = HashMap::new();
         for node_name in &remaining_nodes {
-            let node = self.get_node(node_name).unwrap();
+            let node_idx = self.node_lookup[&node_name.to_lowercase()];
+            let node = &self.nodes[node_idx];
             let type_name = node.get_type_as_string();
-            let mbal_per_timestep =
-                node.get_mass_balance() / (self.configuration.sim_nsteps as f64);
+            // Subtract, then divide once
+            let mbal_per_timestep = (node.get_internal_mbal() - left_at_outfalls[node_idx])
+                / (self.configuration.sim_nsteps as f64);
             by_type
                 .entry(type_name)
                 .or_default()

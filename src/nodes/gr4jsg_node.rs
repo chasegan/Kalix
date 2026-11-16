@@ -19,7 +19,7 @@ const GLACIER_PARAM_NAMES: [&str; 4] = ["ddfi", "tmelt", "return_flow", "accumul
 pub struct Gr4jsgNode {
     pub name: String,
     pub location: Location,
-    pub mbal: f64,
+    pub internal_mbal: f64,
     pub rain_mm_input: DynamicInput,
     pub evap_mm_input: DynamicInput,
     pub tmax_input: DynamicInput,
@@ -78,7 +78,7 @@ impl Node for Gr4jsgNode {
 
     fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(), String> {
         // Initialize only internal state
-        self.mbal = 0.0;
+        self.internal_mbal = 0.0;
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
 
@@ -152,7 +152,7 @@ impl Node for Gr4jsgNode {
         self.dsflow_primary = self.usflow + runoff_volume_megs;
 
         // Update mass balance
-        self.mbal += runoff_volume_megs;
+        self.internal_mbal += runoff_volume_megs;
 
         // Record results
         if let Some(idx) = self.recorder_idx_runoff_volume_megs {

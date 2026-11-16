@@ -90,6 +90,7 @@ repository has the complete record.
 
 Newest first.
 
+- [ADR-0022 — A node's mass balance is what its links carry](0022-mass-balance-is-what-the-links-carry.md)
 - [ADR-0021 — A data file's name decides its format, and an unknown extension is CSV](0021-data-file-extensions.md)
 - [ADR-0020 — Field crops take the basal coefficient only](0020-field-crops-take-the-basal-coefficient.md)
 - [ADR-0019 — `distribute` shares one signed volume across a group by weight, capped and redistributed](0019-distribute-shares-a-volume-by-weight.md)

@@ -280,7 +280,7 @@ pub struct FieldNode {
     // Properties - basic
     pub name: String,
     pub location: Location,
-    pub mbal: f64,
+    pub internal_mbal: f64,
 
     // Properties - the field
     pub area: f64,                  // km2
@@ -555,8 +555,8 @@ impl Node for FieldNode {
         std::mem::take(&mut self.dsflow_primary)
     }
 
-    fn get_mass_balance(&self) -> f64 {
-        self.mbal
+    fn get_internal_mbal(&self) -> f64 {
+        self.internal_mbal
     }
 
     fn dsorders_mut(&mut self) -> &mut [f64] {
@@ -637,7 +637,7 @@ impl Node for FieldNode {
         }
 
         // Initialize only internal state: all fallow to begin with
-        self.mbal = 0.0;
+        self.internal_mbal = 0.0;
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
         self.dsflow_return = 0.0;
@@ -841,13 +841,13 @@ impl Node for FieldNode {
         // Water leaves on two links and nothing is lost here. ds_1: the bypass, which the
         // irrigator did not take, and the river's share of the runoff. ds_2: the share the farm
         // catches, return_flow, for the modeller to drain, or to feed back to the farm storage
-        // through an inflow node above it (`inflow = node.<field>.return_flow[-1, 0]`). mbal is
+        // through an inflow node above it (`inflow = node.<field>.return_flow[-1, 0]`). internal_mbal is
         // emitted minus received, as on a storage: rain, evapotranspiration, escape and the
         // change in water held all show through it.
         let return_flow = excess * self.return_fraction;
         self.dsflow_primary = bypass + excess - return_flow;
         self.dsflow_return = return_flow;
-        self.mbal += self.dsflow_primary + self.dsflow_return - self.usflow;
+        self.internal_mbal += self.dsflow_primary + self.dsflow_return - self.usflow;
 
         // Record results. Depletion is as it stands at the end of the step, as a storage's
         // volume is (area, days, ks and the rules were written by `planting`). A slot not in

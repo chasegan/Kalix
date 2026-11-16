@@ -10,7 +10,7 @@ Here is how you would run a model called "my_model.ini" and save the output resu
 You can also output a mass balance report like this:
 > kalix simulate my_model.ini -o my_results.csv -m my_mbal.txt
 
-The mass balance report is great for verifying that the simulation hasn't changed (e.g. for new kalix software version or when the user makes a non-functional change in the model file). If a previous mass balance report is available as "previous_mbal.txt" then you can run the model and do the verification in one step like this:
+The mass balance report is great for verifying that the simulation hasn't changed (e.g. for new kalix software version or when the user makes a non-functional change in the model file). A node's value in the report is the water its downstream links carried away less the water its upstream links brought, so a node with no downstream link reads zero for the water it made. Reports saved by Kalix 0.4.10 or earlier use an older meaning and can differ at nodes that have an outlet with no link, and at storages with a forced level, with no change in the simulation. If a previous mass balance report is available as "previous_mbal.txt" then you can run the model and do the verification in one step like this:
 > kalix simulate my_model.ini -v my_previous_mbal.txt
 
 If you need to know more about the Kalix CLI commands, you can use the help system (built using clap).

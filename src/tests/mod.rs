@@ -162,6 +162,9 @@ mod test_ordering_visit_order;
 // Nodes with several incoming regulated links
 mod test_ordering_inlets;
 
+// Mass balance at outlets with no link
+mod test_mass_balance_outfalls;
+
 // Unregulated user: supply outlets (ds_2 to ds_4)
 mod test_unregulated_user_supply_outlets;
 

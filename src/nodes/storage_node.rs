@@ -206,7 +206,7 @@ enum StorageOrdering {
 pub struct StorageNode {
     pub name: String,
     pub location: Location,
-    pub mbal: f64,
+    pub internal_mbal: f64,
     pub dimensions: Table,       // Level m, Volume ML, Area km2, Spill ML
     pub volume: f64,
     pub vol_initial: f64,
@@ -339,6 +339,15 @@ impl StorageNode {
     // level, exactly as spill is (docs/storage_outlet_semantics.md). Storages
     // with any outlet curve solve via solve_rating below; storages without
     // take solve_no_rating, bit-identical with the historical solver.
+
+    /// Whether a forced release is set on this outlet (0 is ds_1). A forced
+    /// release needs no order, so it can put water at an outlet with no link.
+    pub fn has_forced_release(&self, outlet: u8) -> bool {
+        match self.ds_force_release_input.get(outlet as usize) {
+            Some(DynamicInput::None { .. }) | None => false,
+            Some(_) => true,
+        }
+    }
 
     /// Determine whether the release at the outlet should be the forced release optionally
     /// supplied by the user or the order determined by the model.
@@ -1182,7 +1191,7 @@ impl Node for StorageNode {
 
     fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(),String> {
         // Initialize only internal state
-        self.mbal = 0.0;
+        self.internal_mbal = 0.0;
         self.usflow = 0.0;
         self.dsflow = 0.0;
         self.ds_flows = [0.0; MAX_DS_LINKS];
@@ -1568,12 +1577,6 @@ impl Node for StorageNode {
                 self.ds_flows = ds_flows;
                 self.dsflow = self.ds_flows.iter().sum();
                 self.sid_adjustment_volume = solver_adjustment_volume;
-
-                // Update mass balance. mbal is emitted minus received, so water
-                // that forcing created counts like an inflow node's (positive)
-                // and water it destroyed like a blackhole's (negative).
-                self.mbal += self.sid_adjustment_volume;
-                // The through-flow term is added below, as on every step.
             } else {
                 // Solve backward Euler
                 let (v_final, ds_flows, spill, row, solver_area_km2) = 
@@ -1598,7 +1601,7 @@ impl Node for StorageNode {
         }
 
         // Update mass balance
-        self.mbal += self.dsflow - self.usflow;
+        self.internal_mbal += self.dsflow - self.usflow;
 
         // Record results
         if let Some(idx) = self.recorder_idx_volume {
@@ -1699,8 +1702,8 @@ impl Node for StorageNode {
         std::mem::take(&mut self.ds_flows[0])
     }
 
-    fn get_mass_balance(&self) -> f64 {
-        self.mbal
+    fn get_internal_mbal(&self) -> f64 {
+        self.internal_mbal
     }
 
     fn dsorders_mut(&mut self) -> &mut [f64] {

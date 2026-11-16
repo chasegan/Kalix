@@ -103,7 +103,7 @@ pub enum StorageRoutingMethod {
 pub struct RoutingNode<const USING_REACH_LOSS: bool> {
     pub name: String,
     pub location: Location,
-    pub mbal: f64,
+    pub internal_mbal: f64,
 
     // Internal state only
     usflow: f64,
@@ -499,7 +499,7 @@ impl<const USING_REACH_LOSS: bool> Node for RoutingNode<USING_REACH_LOSS> {
     fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(), String>{
 
         // Initialize only internal state
-        self.mbal = 0.0;
+        self.internal_mbal = 0.0;
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
         self.storage_volume = 0.0;
@@ -741,7 +741,7 @@ impl<const USING_REACH_LOSS: bool> Node for RoutingNode<USING_REACH_LOSS> {
         self.route_divisions(flow_out_of_lag_reach, evap_mm);
 
         // Update mass balance
-        self.mbal += self.dsflow_primary - self.usflow;
+        self.internal_mbal += self.dsflow_primary - self.usflow;
 
         // Record results
         if let Some(idx) = self.recorder_idx_volume {

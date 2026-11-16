@@ -13,7 +13,7 @@ const MAX_DS_LINKS: usize = 1;
 pub struct AwbmNode {
     pub name: String,
     pub location: Location,
-    pub mbal: f64,
+    pub internal_mbal: f64,
     pub rain_mm_input: DynamicInput,
     pub evap_mm_input: DynamicInput,
     /// Optional multiplier on the three store capacities, evaluated each step
@@ -46,7 +46,7 @@ impl Default for AwbmNode {
         Self {
             name: String::new(),
             location: Location::default(),
-            mbal: 0.0,
+            internal_mbal: 0.0,
             rain_mm_input: DynamicInput::default(),
             evap_mm_input: DynamicInput::default(),
             cap_ave_input: DynamicInput::default(),
@@ -81,7 +81,7 @@ impl Node for AwbmNode {
 
     fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(), String> {
         // Initialize only internal state
-        self.mbal = 0.0;
+        self.internal_mbal = 0.0;
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
 
@@ -149,7 +149,7 @@ impl Node for AwbmNode {
         self.dsflow_primary = self.usflow + runoff_volume_megs;
 
         // Update mass balance
-        self.mbal += runoff_volume_megs;
+        self.internal_mbal += runoff_volume_megs;
 
         // Record results
         if let Some(idx) = self.recorder_idx_runoff_volume_megs {

@@ -602,11 +602,12 @@ that drains to a tailwater dam or a channel is `ds_2` to that node.
 
 #### Mass balance
 
-Only what the field keeps and loses leaves the model at the field: the water the soil holds, in
-every bucket and layer, evapotranspiration, intercepted rain, and escape. To see the balance
+When `ds_1` and `ds_2` both have links, only what the field keeps and loses leaves the model at
+the field: the water the soil holds, in every bucket and layer, evapotranspiration, intercepted
+rain, and escape. To see the balance
 close, record `volume` with `rain_vol`, `intercepted`, `supply`, `escape`, `et_vol`
 and `excess`: the day-to-day change in the first is the sum of the rest, every day. `bypass`, `excess` and `return_flow` are still
-in the model, on `ds_1` and `ds_2`.
+in the model, on `ds_1` and `ds_2`. Water at an outlet with no link leaves the model at the field too.
 
 ## Provenance
 

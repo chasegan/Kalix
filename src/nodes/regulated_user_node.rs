@@ -37,7 +37,7 @@ pub struct RegulatedUserNode {
     // Properties - basic
     pub name: String,
     pub location: Location,
-    pub mbal: f64,
+    pub internal_mbal: f64,
     pub order_input: DynamicInput,
 
     // Properties - regulated user stuff
@@ -220,8 +220,8 @@ impl Node for RegulatedUserNode {
         std::mem::take(&mut self.dsflow_primary)
     }
 
-    fn get_mass_balance(&self) -> f64 {
-        self.mbal
+    fn get_internal_mbal(&self) -> f64 {
+        self.internal_mbal
     }
 
     fn dsorders_mut(&mut self) -> &mut [f64] {
@@ -230,7 +230,7 @@ impl Node for RegulatedUserNode {
 
     fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(), String> {
         // Initialize only internal state
-        self.mbal = 0.0;
+        self.internal_mbal = 0.0;
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
         self.diversion = 0.0;
@@ -560,10 +560,10 @@ impl RegulatedUserNode {
         }
         self.diversion = diversion_regulated + diversion_opportunistic;
 
-        // Extract the water and update mbal. What goes down the supply outlets stays in the
+        // Extract the water and update internal_mbal. What goes down the supply outlets stays in the
         // model; what the user keeps for its own use leaves it here.
         self.dsflow_primary = self.usflow - self.diversion;
-        self.mbal -= if SUPPLY_OUTLETS { self.diversion - outlet_take } else { self.diversion };
+        self.internal_mbal -= if SUPPLY_OUTLETS { self.diversion - outlet_take } else { self.diversion };
 
         // Record results
         if let Some(idx) = self.recorder_idx_diversion {

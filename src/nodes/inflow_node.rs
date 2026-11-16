@@ -10,7 +10,7 @@ const MAX_DS_LINKS: usize = 1;
 pub struct InflowNode {
     pub name: String,
     pub location: Location,
-    pub mbal: f64,
+    pub internal_mbal: f64,
     pub inflow_input: DynamicInput,
     pub expected_inflow_input: DynamicInput,
 
@@ -49,7 +49,7 @@ impl Node for InflowNode {
 
     fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(), String> {
         // Initialize only internal state
-        self.mbal = 0.0;
+        self.internal_mbal = 0.0;
         self.usflow = 0.0;
         self.inflow_value = 0.0;
         self.dsflow_primary = 0.0;
@@ -103,7 +103,7 @@ impl Node for InflowNode {
         self.dsflow_primary = self.usflow + self.inflow_value;
 
         // Update mass balance
-        self.mbal += self.inflow_value;
+        self.internal_mbal += self.inflow_value;
         
         // Record results
         if let Some(idx) = self.recorder_idx_inflow {

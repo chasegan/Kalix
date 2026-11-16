@@ -227,7 +227,7 @@ When the user cannot divert everything that is due — the flow is short, or the
 
 Everything that limits or meters the take applies to the whole diversion, the supply outlets' share included: `pump`, the accounts' balance, and the debit to the accounts. It is the user's water. Water that the node below returns to the river is not credited back.
 
-For the mass balance, only what the user keeps for itself leaves the model at the user; the water sent down a supply outlet is still in the model, on that link. What the user keeps is `diversion − ds_2 − ds_3 − ds_4`, and `usflow = ds_1 + diversion`.
+For the mass balance, only what the user keeps for itself leaves the model at the user; the water sent down a supply outlet is still in the model, on that link. What the user keeps is `diversion − ds_2 − ds_3 − ds_4`, and `usflow = ds_1 + diversion`. If `ds_1` has no link, the water there leaves the model at the user as well.
 
 ## References
 

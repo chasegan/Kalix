@@ -13,7 +13,7 @@ const MAX_DS_LINKS: usize = 1;
 pub struct Gr4jNode {
     pub name: String,
     pub location: Location,
-    pub mbal: f64,
+    pub internal_mbal: f64,
     pub rain_mm_input: DynamicInput,
     pub evap_mm_input: DynamicInput,
     pub area_km2: f64,
@@ -61,7 +61,7 @@ impl Node for Gr4jNode {
 
     fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(), String> {
         // Initialize only internal state
-        self.mbal = 0.0;
+        self.internal_mbal = 0.0;
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
         self.rain = 0.0;
@@ -128,7 +128,7 @@ impl Node for Gr4jNode {
         let routing_store_mm = self.gr4j_model.routing_store;
 
         // Update mass balance
-        self.mbal += self.runoff_volume_megs;
+        self.internal_mbal += self.runoff_volume_megs;
 
         // Record results
         if let Some(idx) = self.recorder_idx_runoff_volume_megs {
