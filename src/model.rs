@@ -1296,7 +1296,8 @@ impl Model {
         // Both flow loops walk `transfers` with one cursor, which is only
         // right if the nodes come in the order the transfers were laid out
         // in: node order. add_node() builds the layout that way. Refuse to
-        // run otherwise, since the cursor would move no water and say nothing.
+        // run otherwise, since the cursor would take water from the wrong
+        // nodes, or move none, and say nothing.
         self.flow_exec_items.clear();
         let mut next_node = 0;
         for &item in &flow_layout {
