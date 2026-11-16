@@ -90,6 +90,7 @@ repository has the complete record.
 
 Newest first.
 
+- [ADR-0023 — An input that asks a node for negative water adds none, and is recorded as given](0023-negative-inputs-add-no-water.md)
 - [ADR-0022 — A node's mass balance is what its links carry](0022-mass-balance-is-what-the-links-carry.md)
 - [ADR-0021 — A data file's name decides its format, and an unknown extension is CSV](0021-data-file-extensions.md)
 - [ADR-0020 — Field crops take the basal coefficient only](0020-field-crops-take-the-basal-coefficient.md)

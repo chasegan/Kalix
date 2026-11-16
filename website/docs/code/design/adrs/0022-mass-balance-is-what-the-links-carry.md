@@ -165,4 +165,8 @@ cheapest nodes and the most links.
 
 ## Amendments
 
-*None yet.*
+- *2026-11-16* — The consequence about a negative volume at a linked outlet
+  has fewer ways to arise. An inflow node and a gauge no longer put negative
+  water at an outlet when their input is negative, and no node is meant to.
+  [ADR-0023](0023-negative-inputs-add-no-water.md) records that, and the
+  run-time check that was measured and left out.
