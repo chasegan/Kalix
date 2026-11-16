@@ -11,7 +11,8 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Which cluster items the map menu offers, for the selection cases S1–S12 of the design.
+ * Which cluster items the map menu offers, for every kind of selection: loose nodes,
+ * members of expanded clusters, collapsed clusters, mixes of these, and nothing selected.
  * A collapsed cluster whose members are all selected counts as one selected thing; a
  * partly selected one counts as members, since selecting part of it expands it. Each row
  * reads as the menu would: only what is offered is listed.
@@ -56,53 +57,53 @@ class ClusterMenuRulesTest {
     }
 
     @Test
-    void s1OneLooseNode() {
+    void oneLooseNode() {
         assertEquals("create | add[a,b,c,d] | node-rename | collapse-all", menu("x"));
     }
 
     @Test
-    void s1InAModelWithNoClustersOffersOnlyCreate() {
+    void inAModelWithNoClustersOffersOnlyCreate() {
         ClusterMenuRules rules = ClusterMenuRules.of(List.of("x"), ClusterIndex.EMPTY, Set.of());
         assertEquals("create | node-rename", describe(rules));
     }
 
     @Test
-    void s2SeveralLooseNodes() {
+    void severalLooseNodes() {
         assertEquals("create | add[a,b,c,d] | rotate | collapse-all", menu("x", "y"));
     }
 
     @Test
-    void s3OneMemberNode() {
+    void oneMemberNode() {
         assertEquals("create | add[b,c,d] | remove | disband[a] | collapse[a] | select-cluster"
                 + " | node-rename | collapse-all", menu("a1"));
     }
 
     @Test
-    void s3TheOnlyMemberOfItsClusterIsAlsoTheWholeCluster() {
+    void theOnlyMemberOfItsClusterIsAlsoTheWholeCluster() {
         assertEquals("create | add[a,b,d] | remove | rename[c] | disband[c] | collapse[c]"
                 + " | select-cluster | node-rename | collapse-all", menu("c1"));
     }
 
     @Test
-    void s4PartOfOneCluster() {
+    void partOfOneCluster() {
         assertEquals("create | add[b,c,d] | remove | disband[a] | collapse[a] | select-cluster"
                 + " | rotate | collapse-all", menu("a1", "a2"));
     }
 
     @Test
-    void s5TheWholeOfOneExpandedCluster() {
+    void theWholeOfOneExpandedCluster() {
         assertEquals("create | add[b,c,d] | remove | rename[a] | disband[a] | collapse[a]"
                 + " | select-cluster | rotate | collapse-all", menu("a1", "a2", "a3"));
     }
 
     @Test
-    void s6MembersOfOneClusterPlusLooseNodesCanAddTheLooseOnesToIt() {
+    void membersOfOneClusterPlusLooseNodesCanAddTheLooseOnesToIt() {
         assertEquals("create | add[a,b,c,d] | remove | disband[a] | collapse[a] | select-cluster"
                 + " | rotate | collapse-all", menu("a1", "x"));
     }
 
     @Test
-    void s7MembersOfTwoClusters() {
+    void membersOfTwoClusters() {
         String expected = "create | add[a,b,c,d] | remove | disband[a,b] | collapse[a,b]"
                 + " | select-cluster | rotate | collapse-all";
         assertEquals(expected, menu("a1", "b1"));
@@ -110,13 +111,13 @@ class ClusterMenuRulesTest {
     }
 
     @Test
-    void s8OneCollapsedCluster() {
+    void oneCollapsedCluster() {
         assertEquals("rename[a] | disband[a] | expand[a] | collapse-all | expand-all",
                 menu(Set.of("a"), "a1", "a2", "a3"));
     }
 
     @Test
-    void s8AOneMemberCollapsedClusterIsAClusterNotANode() {
+    void oneMemberCollapsedClusterIsAClusterNotANode() {
         // Neither node Rename nor Rotate: the one selected thing is a cluster (clusters.md,
         // settled decisions 12 and 17).
         assertEquals("rename[c] | disband[c] | expand[c] | collapse-all | expand-all",
@@ -124,31 +125,31 @@ class ClusterMenuRulesTest {
     }
 
     @Test
-    void s9TwoCollapsedClusters() {
+    void twoCollapsedClusters() {
         assertEquals("disband[a,b] | expand[a,b] | rotate | collapse-all | expand-all",
                 menu(Set.of("a", "b"), "a1", "a2", "a3", "b1", "b2"));
     }
 
     @Test
-    void s10ACollapsedClusterPlusLooseNodesOffersOnlyThatClusterToAddTo() {
+    void aCollapsedClusterPlusLooseNodesOffersOnlyThatClusterToAddTo() {
         assertEquals("add[a] | disband[a] | expand[a] | rotate | collapse-all | expand-all",
                 menu(Set.of("a"), "a1", "a2", "a3", "x"));
     }
 
     @Test
-    void s10TwoCollapsedClustersPlusALooseNodeOfferBothToAddTo() {
+    void twoCollapsedClustersPlusALooseNodeOfferBothToAddTo() {
         assertEquals("add[a,b] | disband[a,b] | expand[a,b] | rotate | collapse-all | expand-all",
                 menu(Set.of("a", "b"), "a1", "a2", "a3", "b1", "b2", "x"));
     }
 
     @Test
-    void s11ACollapsedClusterPlusAMemberOfAnExpandedOne() {
+    void aCollapsedClusterPlusAMemberOfAnExpandedOne() {
         assertEquals("add[a] | remove | disband[a,b] | collapse[b] | expand[a] | select-cluster"
                 + " | rotate | collapse-all | expand-all", menu(Set.of("a"), "a1", "a2", "a3", "b1"));
     }
 
     @Test
-    void s12NothingSelectedOffersOnlyTheAllItems() {
+    void nothingSelectedOffersOnlyTheAllItems() {
         assertEquals("collapse-all", menu(), "all expanded");
         assertEquals("expand-all", menu(Set.of("a", "b", "c", "d")), "all collapsed");
         assertEquals("collapse-all | expand-all", menu(Set.of("a")), "mixed");

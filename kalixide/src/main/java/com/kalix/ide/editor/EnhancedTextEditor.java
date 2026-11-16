@@ -708,8 +708,8 @@ public class EnhancedTextEditor extends JPanel {
     /**
      * Asks for a name and puts the nodes in that cluster, moving them from any they were
      * in (the map's {@code Create cluster…}). An existing name joins it, with its spelling
-     * if it was typed in another case. Cancelled or empty does nothing; an invalid name is
-     * reported and changes nothing.
+     * if it was typed with other capitalisation. Cancelled or empty does nothing; an
+     * invalid name is reported and changes nothing.
      *
      * @return true if the text changed
      */

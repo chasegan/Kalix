@@ -686,7 +686,7 @@ public class CommandExecutor {
     }
 
     /**
-     * Puts the nodes in a cluster, moving them from any they were in: Add.
+     * Puts the nodes in a cluster, moving them from any they were in (the map's {@code Add to}).
      *
      * @return false if the name is invalid (reported) or nothing needed changing
      */
@@ -696,8 +696,8 @@ public class CommandExecutor {
     }
 
     /**
-     * Puts the nodes in the cluster named {@code typed}: Create. A name that exists in
-     * another case joins that cluster with its spelling.
+     * Puts the nodes in the cluster named {@code typed} (the map's {@code Create cluster…}).
+     * A name that exists with other capitalisation joins that cluster with its spelling.
      *
      * @return false if the name is invalid (reported) or nothing needed changing
      */

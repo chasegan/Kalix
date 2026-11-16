@@ -372,16 +372,16 @@ public class INIModelParser {
      * nothing to. A second {@code cluster} on a node is a warning on the later
      * line, naming the one before it: the last one counts. A cluster name that
      * breaks the node-name rule is a warning on its line, earlier lines included:
-     * the node is drawn loose if it is the last. A dotted key belongs
-     * to another tool and is never checked. {@code sectionName} is {@code null}
-     * for a malformed header, which still consumes the annotations but cannot say
-     * what they apply to.
+     * the node is drawn loose if it is the last. A dotted key belongs to another
+     * tool and is never checked. {@code sectionName} is {@code null} for a
+     * malformed header, which still consumes the annotations but cannot say what
+     * they apply to, so a warning about them names no section.
      *
      * <p>A node's last valid {@code cluster} line is a mention of that cluster. One
-     * spelled differently from the cluster's first mention, in capitalisation only, is a warning
-     * naming that first mention: they are one cluster, shown with the first spelling
-     * ({@link ClusterIndex}). {@code firstClusterMentions} holds the first mention of
-     * each cluster so far, by {@link ClusterIndex#key}.</p>
+     * spelled differently from the cluster's first mention, in capitalisation only,
+     * is a warning naming that first mention: they are one cluster, shown with the
+     * first spelling ({@link ClusterIndex}). {@code firstClusterMentions} holds the
+     * first mention of each cluster so far, by {@link ClusterIndex#key}.</p>
      */
     private static void checkAnnotations(List<PendingAnnotation> pending, String sectionName,
                                          Map<String, PendingAnnotation> firstClusterMentions, ParsedModel model) {

@@ -18,10 +18,10 @@ import java.util.Map;
  * member. Immutable. Two indexes are equal only if their clusters, spellings and members
  * are the same and in the same order.
  *
- * <p>Names that differ only in case are one cluster (ADR-0010 §6.2), found from any
+ * <p>Names that differ only in capitalisation are one cluster (ADR-0010 §6.2), found from any
  * spelling. Two choices about that are assumptions, each made in one place so it is
- * cheap to change: that case is ignored at all ({@link #key}), and that a cluster shows
- * the spelling of its first mention in the file ({@link #of}).</p>
+ * cheap to change: that capitalisation is ignored at all ({@link #key}), and that a
+ * cluster shows the spelling of its first mention in the file ({@link #of}).</p>
  */
 public final class ClusterIndex {
 

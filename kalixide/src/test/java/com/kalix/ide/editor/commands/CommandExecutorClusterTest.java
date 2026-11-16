@@ -99,51 +99,6 @@ class CommandExecutorClusterTest {
         assertEquals(0, area.changesOutsideAtomicEdit);
     }
 
-    /** Sees each document change, and whether an atomic edit was open when it happened. */
-    private static final class CountingTextArea extends RSyntaxTextArea implements DocumentListener {
-        private int depth;
-        private int atomicEdits;
-        private int changesInsideAtomicEdit;
-        private int changesOutsideAtomicEdit;
-
-        @Override
-        public void beginAtomicEdit() {
-            if (depth++ == 0) {
-                atomicEdits++;
-            }
-            super.beginAtomicEdit();
-        }
-
-        @Override
-        public void endAtomicEdit() {
-            super.endAtomicEdit();
-            depth--;
-        }
-
-        private void changed() {
-            if (depth > 0) {
-                changesInsideAtomicEdit++;
-            } else {
-                changesOutsideAtomicEdit++;
-            }
-        }
-
-        @Override
-        public void insertUpdate(DocumentEvent e) {
-            changed();
-        }
-
-        @Override
-        public void removeUpdate(DocumentEvent e) {
-            changed();
-        }
-
-        @Override
-        public void changedUpdate(DocumentEvent e) {
-            // Attribute changes aren't text.
-        }
-    }
-
     @Test
     void anEditWithNothingToDoLeavesNoUndoStep() {
         Fixture f = fixture();
@@ -188,5 +143,51 @@ class CommandExecutorClusterTest {
         Fixture f = fixture();
         assertFalse(f.executor().createCluster(List.of("c"), "Not Valid"));
         assertEquals(MODEL, f.area().getText());
+        assertFalse(f.area().canUndo());
+    }
+
+    /** Sees each document change, and whether an atomic edit was open when it happened. */
+    private static final class CountingTextArea extends RSyntaxTextArea implements DocumentListener {
+        private int depth;
+        private int atomicEdits;
+        private int changesInsideAtomicEdit;
+        private int changesOutsideAtomicEdit;
+
+        @Override
+        public void beginAtomicEdit() {
+            if (depth++ == 0) {
+                atomicEdits++;
+            }
+            super.beginAtomicEdit();
+        }
+
+        @Override
+        public void endAtomicEdit() {
+            super.endAtomicEdit();
+            depth--;
+        }
+
+        private void changed() {
+            if (depth > 0) {
+                changesInsideAtomicEdit++;
+            } else {
+                changesOutsideAtomicEdit++;
+            }
+        }
+
+        @Override
+        public void insertUpdate(DocumentEvent e) {
+            changed();
+        }
+
+        @Override
+        public void removeUpdate(DocumentEvent e) {
+            changed();
+        }
+
+        @Override
+        public void changedUpdate(DocumentEvent e) {
+            // Attribute changes aren't text.
+        }
     }
 }

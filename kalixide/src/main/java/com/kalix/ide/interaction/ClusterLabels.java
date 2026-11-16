@@ -13,10 +13,9 @@ import java.util.Set;
  * <p>A cluster whose name is also a node's name, anywhere in the model, is labelled
  * with {@code (cluster)} after the name and outside any quotes: {@code Rename "farm_3"
  * (cluster)…}. Otherwise one menu could hold the node's {@code Rename "farm_3"} and the
- * cluster's beside it, reading the same. The suffix isn't part of the name, so it stays
- * outside the quotes. Compared against the whole model, not the selection, so a
- * cluster's label doesn't change with what is selected. Node names match ignoring case
- * (ADR-0006 amendment, 2026-10-29), so the comparison does too.
+ * cluster's beside it, reading the same. Compared against the whole model, not the
+ * selection, so a cluster's label doesn't change with what is selected. Node names
+ * match ignoring case (ADR-0006 amendment, 2026-10-29), so the comparison does too.
  */
 final class ClusterLabels {
 

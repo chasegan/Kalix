@@ -8,7 +8,11 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** The annotation lints of ADR-0010 §2 to §4: malformed, misplaced, unknown key, no effect, a repeated cluster, an invalid cluster name, a cluster spelled in two cases. */
+/**
+ * The annotation lints of ADR-0010 §2 to §4 and §6.2: malformed, misplaced, unknown key,
+ * no effect, a repeated cluster, an invalid cluster name, and one cluster spelled with
+ * different capitalisation.
+ */
 class INIModelParserAnnotationTest {
 
     private static List<SyntaxIssue> issues(String model) {

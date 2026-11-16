@@ -47,9 +47,9 @@ final class ClusterEdits {
 
     /**
      * Puts each node in the cluster named {@code typed}, as {@link #assign}. A cluster that
-     * exists in another case is joined with its own spelling, read from the text through
-     * {@link ClusterIndex} so the spelling is chosen in one place: a mistyped case never
-     * rewrites the other members (Rename is how a spelling changes).
+     * exists with other capitalisation is joined with its own spelling, read from the text
+     * through {@link ClusterIndex} so the spelling is chosen in one place: a mistyped
+     * capital never rewrites the other members (Rename is how a spelling changes).
      */
     static List<CommandExecutor.TextEdit> create(String text, Collection<String> nodes, String typed) {
         String existing = ClusterIndex.of(ModelParser.parse(text).getNodes()).name(typed);

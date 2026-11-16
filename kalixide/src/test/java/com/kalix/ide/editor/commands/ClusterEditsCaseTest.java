@@ -8,8 +8,8 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * The edits find a cluster by any spelling, since names differing only in case are one
- * cluster (ADR-0010 §6.2), and bring the spellings of the nodes they touch back together.
+ * The edits find a cluster by any spelling (names differing only in capitalisation are
+ * one cluster, ADR-0010 §6.2), and bring the spellings of the nodes they touch back together.
  * Joining an existing cluster, by Create or by a Rename that merges, writes that
  * cluster's spelling; a Rename within one cluster writes the name as typed.
  */
@@ -93,7 +93,7 @@ class ClusterEditsCaseTest {
 
     @Test
     void createWithAnExistingNameInAnotherCaseWritesTheClusterSpelling() {
-        // Never a rewrite of the other members: a mistyped case must not bulk out the diff.
+        // Never a rewrite of the other members: a mistyped capital must not bulk out the diff.
         String text = member("north", "a") + body("b");
         assertEquals(member("north", "a") + member("north", "b"),
                 applied(text, ClusterEdits.create(text, List.of("b"), "North")));

@@ -16,10 +16,11 @@ import java.util.Set;
  * names into labels through {@link ClusterLabels} (ADR-0003 §2).
  *
  * <p>The selection is sorted into three kinds. A <em>collapsed</em> cluster with every
- * member selected counts as one selected thing, which is how it is selected (the design,
- * rule 10). A <em>member</em> is a selected node of any other cluster, including part of
- * a collapsed one, since selecting part of a cluster expands it. A <em>loose</em> node is
- * in no cluster. Links take no part: the menu passes only the selected nodes.
+ * member selected counts as one selected thing, which is how it is selected
+ * (clusters.md, settled decision 10). A <em>member</em> is a selected node of any other
+ * cluster, including part of a collapsed one, since selecting part of a cluster expands
+ * it. A <em>loose</em> node is in no cluster. Links take no part: the menu passes only
+ * the selected nodes.
  */
 final class ClusterMenuRules {
 
