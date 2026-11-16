@@ -96,18 +96,19 @@ impl Node for InflowNode {
             data_cache.add_value_at_index(idx, self.usflow);
         }
 
-        // Get lateral inflow. A negative inflow is no inflow: the node adds
-        // water and never takes it, so it cannot put negative water at its
-        // outlet. An inflow that is not a number is left as it is, and no
-        // link carries it.
-        let inflow = self.inflow_input.get_value(data_cache);
-        self.inflow_value = if inflow < 0.0 { 0.0 } else { inflow };
+        // Get lateral inflow. inflow_value is what the expression gave, and
+        // is what the `inflow` result records, so a modeller can see when it
+        // went negative. The node adds water and never takes it: a negative
+        // inflow adds none (ADR-0023). An inflow that is not a number is left
+        // as it is, and no link carries it.
+        self.inflow_value = self.inflow_input.get_value(data_cache);
+        let added = if self.inflow_value < 0.0 { 0.0 } else { self.inflow_value };
 
         // Compute outflow based on inflow
-        self.dsflow_primary = self.usflow + self.inflow_value;
+        self.dsflow_primary = self.usflow + added;
 
         // Update mass balance
-        self.internal_mbal += self.inflow_value;
+        self.internal_mbal += added;
         
         // Record results
         if let Some(idx) = self.recorder_idx_inflow {
