@@ -36,13 +36,15 @@ ds_1 = my_other_node
 | ds\_1 | Downstream flow on link ds\_1 [ML] |
 | ds\_1\_order | Order on link ds\_1 [ML] |
 | inflow | The value of the inflow expression [ML]. This is the lateral flow only, not including the component that came from any upstream nodes. A negative value is recorded as it was given, and adds no water. |
-| expected\_inflow | The value of the expected\_inflow expression [ML] which is used to reduce required upstream flow when adjusting for orders. |
+| expected\_inflow | The value of the expected\_inflow expression [ML] which is used to reduce required upstream flow when adjusting for orders. A negative value is recorded as it was given, and reduces nothing. |
 
 ## How the node works
 
 The inflow node simply adds inflows to the system as specified by the “inflow” property. The downstream flow is therefore
 
 `dsflow=usflow+inflow`
+
+A negative inflow adds no water, so on that timestep the downstream flow equals the upstream flow.
 
 ## References
 
