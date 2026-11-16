@@ -54,7 +54,8 @@ macro_rules! dispatch {
     };
 }
 
-/// The most outlets any node type has (ds_1 to ds_4).
+/// The outlets the model asks each node about when it looks for outlets with
+/// no link: ds_1 to ds_4. No node type puts water at an outlet beyond these.
 pub const MAX_OUTLETS: u8 = 4;
 
 impl NodeEnum {

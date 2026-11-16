@@ -44,7 +44,7 @@ pub(crate) fn recorder(data_cache: &mut DataCache, node_name: &str, output: &str
 
 /// The five Node methods that are identical for every node with a single
 /// primary outlet (fields: usflow, dsflow_primary, internal_mbal, dsorders). Expands
-/// to exactly the code it replaced in each node - this is notation, not
+/// to the code each node would otherwise write out - this is notation, not
 /// abstraction; read it here once instead of nine times.
 macro_rules! single_outlet_node_impls {
     () => {

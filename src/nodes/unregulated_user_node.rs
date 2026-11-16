@@ -249,7 +249,7 @@ impl Node for UnregulatedUserNode {
 
 impl UnregulatedUserNode {
     /// remove_dsflow for ds_2 to ds_4. Out of line, so that remove_dsflow stays the few
-    /// instructions it was for the ds_1 every user has, and inlines into the step loop as before.
+    /// instructions it was for the ds_1 every user has.
     #[cold]
     #[inline(never)]
     fn remove_supply_outlet_flow(&mut self, outlet: u8) -> f64 {

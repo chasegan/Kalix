@@ -173,12 +173,13 @@ pub struct Model {
     /// Populated: during parsing or programmatic construction, via `add_var_block()`.
     pub var_blocks: Vec<VarBlock>,
 
-    /// Hot path: flow phase, read in run_timestep().
+    /// Read at setup by initialize_network(), and by the INI writer.
     /// Interleaved execution layout: nodes and var blocks in definition order.
     /// Built as sections are added (add_node / add_var_block), so file order
     /// IS execution order for var blocks exactly as it is for nodes
-    /// (ADR-0005 §1 extended to calculations). Only consulted
-    /// when var_blocks is non-empty; the plain node loop uses execution_order.
+    /// (ADR-0005 §1 extended to calculations). The flow phase walks
+    /// `flow_exec_items`, which is derived from this, or `execution_order`
+    /// when no flow-phase var block is interleaved.
     ///
     /// Populated: alongside `nodes`/`var_blocks`, via `add_node()`/`add_var_block()`.
     pub exec_items: Vec<ExecItem>,
@@ -1155,9 +1156,9 @@ impl Model {
         // blocks, per ADR-0005 §1 extended to calculations).
         set_context_phase(SimPhase::Flow);
         // Two loop shapes, chosen once per timestep: models without var
-        // blocks — the overwhelmingly common case — run the original plain
-        // node loop, byte-identical to before var blocks existed (adding a
-        // per-item match to that loop was a measured regression). Only
+        // blocks — the overwhelmingly common case — run the plain node loop,
+        // which has no per-item match (adding one to that loop was a measured
+        // regression). Only
         // models that actually interleave var blocks pay for the dispatch.
         // The node body is duplicated in both branches deliberately: a shared
         // &mut self helper can't be called while iterating a borrowed field,
