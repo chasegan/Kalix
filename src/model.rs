@@ -414,10 +414,16 @@ impl Model {
             var_blocks: self.var_blocks.clone(),
             exec_items: self.exec_items.clone(),
             ras_slot: self.ras_slot.clone(),
-            flow_exec_items: self.flow_exec_items.clone(),
+            flow_exec_items: vec![],
             flow_has_var_blocks: self.flow_has_var_blocks,
             links: self.links.clone(),
-            transfers: self.transfers.clone(),
+            // The lists built at setup (flow_exec_items above, transfers, and
+            // execution_order below) are left empty: initialize_network()
+            // rebuilds them before any run.
+            // The outfalls are the exception. They are kept, because the
+            // nodes above are copied with their own mass balance figures,
+            // and a report needs both.
+            transfers: vec![],
             outfalls: self.outfalls.clone(),
             outgoing_links: self.outgoing_links.clone(),
             incoming_links: self.incoming_links.clone(),
@@ -1287,10 +1293,24 @@ impl Model {
         // The flow pass of a model with flow-phase var blocks: each node's
         // step from the execution order (which is in node order), with the
         // var blocks at their file positions.
+        // Both flow loops walk `transfers` with one cursor, which is only
+        // right if the nodes come in the order the transfers were laid out
+        // in: node order. add_node() builds the layout that way. Refuse to
+        // run otherwise, since the cursor would move no water and say nothing.
         self.flow_exec_items.clear();
+        let mut next_node = 0;
         for &item in &flow_layout {
             self.flow_exec_items.push(match item {
-                ExecItem::Node(node_idx) => FlowExecItem::Node(self.execution_order[node_idx]),
+                ExecItem::Node(node_idx) => {
+                    if node_idx != next_node {
+                        return Err(format!(
+                            "Internal error: node {} is out of order in the execution layout (expected node {}).",
+                            node_idx, next_node
+                        ));
+                    }
+                    next_node += 1;
+                    FlowExecItem::Node(self.execution_order[node_idx])
+                }
                 ExecItem::VarBlock(vb_idx) => FlowExecItem::VarBlock(vb_idx),
             });
         }
