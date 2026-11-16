@@ -7,12 +7,20 @@ use crate::io::ini_model_io::IniModelIO;
 use crate::model::Model;
 use std::collections::HashMap;
 
-fn mass_balance(nodes: &str) -> HashMap<String, f64> {
+fn run(nodes: &str) -> Model {
     let ini = format!("[kalix]\nstart = 2020-01-01\nend = 2020-01-10\n\n{nodes}");
     let mut model: Model = IniModelIO::read_model_string(&ini).expect("model should load");
     model.configure().expect("model should configure");
     model.run().expect("simulation should run");
+    model
+}
+
+fn report(model: &Model) -> HashMap<String, f64> {
     model.get_mass_balance_data().into_iter().map(|(name, _, v)| (name, v)).collect()
+}
+
+fn mass_balance(nodes: &str) -> HashMap<String, f64> {
+    report(&run(nodes))
 }
 
 const RIVER: &str = "[node.river]\ntype = inflow\nloc = 0, 0\ninflow = 100\nds_1 = next\n\n";
@@ -60,4 +68,14 @@ fn test_a_splitter_with_both_outlets_linked_reads_zero() {
 fn test_an_inflow_with_no_link_adds_nothing_to_the_network() {
     let mbal = mass_balance("[node.river]\ntype = inflow\nloc = 0, 0\ninflow = 100\n");
     assert_eq!(mbal["river"], 0.0);
+}
+
+#[test]
+fn test_a_run_that_fails_keeps_nothing_from_the_run_before() {
+    let mut model = run(&format!("{RIVER}[node.next]\ntype = gauge\nloc = 0, 10\n"));
+    assert_eq!(report(&model)["next"], -100.0);
+    // A link that points up the file: the next run is refused
+    model.add_link(1, 0, 0, 0);
+    assert!(model.run().is_err());
+    assert_eq!(report(&model)["next"], 0.0, "the earlier run's outfall is not held over");
 }

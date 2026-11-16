@@ -1376,6 +1376,13 @@ impl Model {
     /// otherwise. It deliberately does NOT topologically sort - the model
     /// file must remain a faithful, readable account of what runs.
     fn check_execution_order(&mut self) -> Result<(), String> {
+        // Cleared before the check, so a model that fails it holds no lists
+        // from an earlier run. initialize_nodes() has already zeroed the
+        // nodes' own figures by then, and the outfalls must go with them.
+        self.execution_order.clear();
+        self.transfers.clear();
+        self.outfalls.clear();
+
         // Check execution order is consistent with flow phase using link info:
         // The node below each link must have a higher index than the node above the link
         for link in &self.links {
@@ -1396,9 +1403,6 @@ impl Model {
         // has no link is an outfall, so every such outlet is in one list or
         // the other. This runs at the start of every run, which is also what
         // zeroes the outfalls' volumes.
-        self.execution_order.clear();
-        self.transfers.clear();
-        self.outfalls.clear();
         for node_idx in 0..self.nodes.len() {
             let mut linked = [false; MAX_OUTLETS as usize];
             for &link_idx in &self.outgoing_links[node_idx] {
