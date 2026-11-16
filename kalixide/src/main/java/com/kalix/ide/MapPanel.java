@@ -24,6 +24,7 @@ import java.awt.event.KeyEvent;
 import java.awt.geom.Arc2D;
 import java.awt.image.BufferedImage;
 
+import com.kalix.ide.model.ClusterCollapse;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelNode;
 import com.kalix.ide.interaction.LinkDragManager;
@@ -115,6 +116,9 @@ public class MapPanel extends JPanel {
     // Display settings
     private boolean showGridlines = true;
     private NodeLabelMode labelMode = NodeLabelMode.NAMES;
+
+    /** Which clusters are collapsed, for this panel's model, for the session. */
+    private final ClusterCollapse clusterCollapse = new ClusterCollapse();
 
     /**
      * Node whose label changes because the mouse is over it. Only ever set while
@@ -724,6 +728,14 @@ public class MapPanel extends JPanel {
     /** The text drawn under each node. */
     public NodeLabelMode getLabelMode() {
         return labelMode;
+    }
+
+    /**
+     * Which clusters are collapsed. Collapsing or expanding isn't a model event, so whoever
+     * changes it repaints the map.
+     */
+    public ClusterCollapse getClusterCollapse() {
+        return clusterCollapse;
     }
 
     /**

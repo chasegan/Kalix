@@ -711,12 +711,12 @@ public class EnhancedTextEditor extends JPanel {
      * if it was typed with other capitalisation. Cancelled or empty does nothing; an
      * invalid name is reported and changes nothing.
      *
-     * @return true if the text changed
+     * @return the name as typed, trimmed, if the text changed; otherwise {@code null}
      */
-    public boolean createCluster(java.util.Collection<String> nodeNames) {
+    public String createCluster(java.util.Collection<String> nodeNames) {
         String name = askClusterName("Create Cluster", "Name for the new cluster:", "");
         CommandExecutor executor = clusterExecutor();
-        return name != null && executor != null && executor.createCluster(nodeNames, name);
+        return name != null && executor != null && executor.createCluster(nodeNames, name) ? name : null;
     }
 
     /** Puts the nodes in an existing cluster (the map's {@code Add to}). */
@@ -736,14 +736,14 @@ public class EnhancedTextEditor extends JPanel {
      * Cancelled, empty or unchanged does nothing; an invalid name is reported and
      * changes nothing.
      *
-     * @return true if the text changed
+     * @return the new name as typed, trimmed, if the text changed; otherwise {@code null}
      */
-    public boolean renameCluster(String cluster) {
+    public String renameCluster(String cluster) {
         String name = askClusterName("Rename Cluster", "Enter new name for cluster '" + cluster + "':", cluster);
         CommandExecutor executor = clusterExecutor();
         // The shown spelling is allowed: it rewrites only members spelled otherwise, and an
         // unchanged cluster comes back as nothing to do.
-        return name != null && executor != null && executor.renameCluster(cluster, name);
+        return name != null && executor != null && executor.renameCluster(cluster, name) ? name : null;
     }
 
     /** Takes every member out of the clusters; the nodes stay (the map's {@code Disband}). */

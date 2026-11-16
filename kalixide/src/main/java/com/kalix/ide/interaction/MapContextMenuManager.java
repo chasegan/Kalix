@@ -1,6 +1,7 @@
 package com.kalix.ide.interaction;
 
 import com.kalix.ide.constants.AppShortcut;
+import com.kalix.ide.model.ClusterIndex;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelNode;
 import com.kalix.ide.MapPanel;
@@ -225,7 +226,17 @@ public class MapContextMenuManager {
         menu.add(insertNodeTemplateMenu);
 
         if (clusterRules.offersCreate()) {
-            menu.add(clusterItem("Create cluster…", () -> textEditor.createCluster(selectedNodes)));
+            menu.add(clusterItem("Create cluster…", () -> {
+                // The clusters before the edit, read at the click: only they say whether
+                // the name is new.
+                ClusterIndex before = model.getClusters();
+                String name = textEditor.createCluster(selectedNodes);
+                if (name == null) {
+                    return false;
+                }
+                mapPanel.getClusterCollapse().created(before, name);
+                return true;
+            }));
         }
 
         menu.addSeparator();
@@ -264,7 +275,15 @@ public class MapContextMenuManager {
         }
         String renameCluster = clusterRules.renameTarget();
         if (renameCluster != null) {
-            menu.add(clusterItem(clusterLabels.rename(renameCluster), () -> textEditor.renameCluster(renameCluster)));
+            menu.add(clusterItem(clusterLabels.rename(renameCluster), () -> {
+                ClusterIndex before = model.getClusters();
+                String name = textEditor.renameCluster(renameCluster);
+                if (name == null) {
+                    return false;
+                }
+                mapPanel.getClusterCollapse().renamed(before, renameCluster, name);
+                return true;
+            }));
         }
         List<String> disbandTargets = clusterRules.disbandTargets();
         if (!disbandTargets.isEmpty()) {
