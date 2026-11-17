@@ -61,6 +61,12 @@ class VarSectionValidatorTest {
     }
 
     @Test
+    @DisplayName("phase = ras should be accepted")
+    void testPhaseRas() {
+        assertNoIssues("[var.a]\nphase = ras\nx = 1\n");
+    }
+
+    @Test
     @DisplayName("An unrecognised phase should be flagged")
     void testInvalidPhase() {
         assertHasIssue("[var.a]\nphase = bogus\nx = 1\n", "invalid phase");
