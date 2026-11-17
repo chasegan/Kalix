@@ -116,9 +116,11 @@ order available = max(0, balance − committed) / debit_factor
 The accepted order is committed as the order times the factor. So `committed`
 stays in the units of the balance.
 
-An account in `order_accounts` authorises an order up to the take available
-from it. When the order is placed, the account is debited the part of the
-order it authorises, times the factor.
+An account in `order_accounts` can authorise up to its balance over its
+`debit_factor`, i.e. the water it can authorise orders for. It authorises the
+excess of an order over what the regular accounts can cover, and is debited the
+part it authorises times the factor. See
+[Order accounts](regulated-user.md#order-accounts).
 
 In a list or a [combination](#combining-accounts) each account uses its own
 factor. In `a | b` the take available is the sum of what is available from
