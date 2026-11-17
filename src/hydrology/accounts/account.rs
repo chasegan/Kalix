@@ -80,7 +80,7 @@ pub struct Account {
 impl Account {
 
     // Constructor
-    pub fn new_with_size(name: String, account_type: String, size: f64, initial_balance: f64) -> Self {
+    pub fn new(name: String, account_type: String, size: f64, initial_balance: f64) -> Self {
         Account {
             name,
             account_type,

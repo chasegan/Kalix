@@ -255,7 +255,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
 
             let mut member_ids = Vec::with_capacity(table.names.len());
             for (row, name) in table.names.iter().enumerate() {
-                let account = Account::new_with_size(
+                let account = Account::new(
                     name.clone(),
                     group_name.to_string(), // account_type carries the group name
                     table.sizes[row],
