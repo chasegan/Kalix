@@ -2308,10 +2308,11 @@ fn parse_account_table(flat: &str, model: &mut Model) -> Result<AccountTableData
                         .map_err(|_| format!("Invalid debit factor '{}' for account '{}': must be a number",
                             cell, table_name))?;
                     // A factor of zero would make any take available from the account, and a
-                    // negative one would credit it. NaN fails the comparison and is refused
-                    // with them.
-                    if !(debit_factor > 0.0 && debit_factor.is_finite()) {
-                        return Err(format!("Account '{}' has debit factor {}: it must be a finite number greater than 0",
+                    // negative one would credit it. A subnormal one is no real factor: it is
+                    // refused as a policy, not to protect the arithmetic. NaN fails the
+                    // comparison and is refused with them.
+                    if !(debit_factor > 0.0 && debit_factor.is_normal()) {
+                        return Err(format!("Account '{}' has debit factor {}: it must be a finite number greater than 0, and not below about 2.2e-308",
                             table_name, cell));
                     }
                 }

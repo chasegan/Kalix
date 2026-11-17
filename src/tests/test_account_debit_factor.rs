@@ -11,7 +11,7 @@
 // 5. [ras.*] actions are not factored.
 // 6. A factor of 1, written or not, gives the results of a model without the column. Every
 //    user applies the factor, with no test for whether it is 1.
-// 7. The factor must be finite and greater than 0.
+// 7. The factor must be finite, greater than 0 and not subnormal.
 // 8. `acc.<name>.debit_factor` reads as a static; a group has none.
 // 9. The column is saved where any member's factor is not 1, at full precision, and a node's
 //    plain accounts list is saved as a list.
@@ -360,7 +360,7 @@ fn ras_actions_work_in_the_balances_units() {
 
 #[test]
 fn the_factor_must_be_finite_and_greater_than_zero() {
-    for bad in ["0", "-1.2", "nan", "inf"] {
+    for bad in ["0", "-1.2", "nan", "inf", "1e-320"] {
         let e = load_error(&unregulated_model(1.0, &format!("a, 1000, 100, {bad},"), "accounts = a"));
         assert!(e.contains("Account 'a' has debit factor") && e.contains("finite number greater than 0"), "{bad}: {e}");
     }
