@@ -383,8 +383,8 @@ impl RegulatedUserNode {
         // cap is the balance less those orders - the accounts' `committed`
         // forecast - and the order accepted now is committed in its turn, due in
         // the travel time. Only the diversion is ever debited; the account
-        // releases the commitment on the step the order falls due, delivered or
-        // not (AccountManager::end_of_step).
+        // releases the commitment at the start of the next step's ordering,
+        // delivered or not (AccountManager::start_of_ordering).
         // order_accounts extend the cap, and the portion of the approved order
         // beyond what the regular accounts can cover is debited from them NOW
         // (debit-on-order, excess-only, walked in list order). Regular accounts

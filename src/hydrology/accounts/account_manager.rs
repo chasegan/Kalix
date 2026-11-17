@@ -389,10 +389,10 @@ impl AccountManager {
         self.accounts[account_id].debits_this_period += amount;
     }
 
-    /// The take available from an account: its balance, floored at zero, over
-    /// its debit factor. In the units of the take, not of the balance. A
-    /// division and not a multiplication by a stored reciprocal, so that 120
-    /// at a factor of 1.2 makes 100 available and not 100.00000000000001.
+    /// The take available from an account is its balance in the units of the
+    /// take, i.e. over its debit factor. It divides rather than multiplying by
+    /// a stored reciprocal, so 45.15 at a factor of 1.05 makes 43 available,
+    /// not 42.99999999999999 (IEEE 754, which Rust follows per RFC 3514).
     #[inline(always)]
     pub fn get_account_available_take(&self, account_id: usize) -> f64 {
         let account = &self.accounts[account_id];
