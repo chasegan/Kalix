@@ -445,6 +445,8 @@ impl SimpleNodewiseOrderingSystem {
     }
 
     /// One node's order phase and the order it sends upstream; both entry points visit through it.
+    // Inlined into both loops: left to the compiler, regulated models timed 1-5% slower
+    // (ADR-0004 §4)
     #[inline(always)]
     fn visit_node(&self, entry: &RegulatedNodeEntry, nodes: &mut Vec<NodeEnum>, data_cache: &mut DataCache,
                   account_manager: &mut AccountManager) {
