@@ -71,6 +71,9 @@ public class LinkDragManager {
         String nearest = null;
         double nearestDistance = reach;
         for (ModelNode node : model.getAllNodes()) {
+            if (mapPanel.isHidden(node.getName())) {
+                continue;
+            }
             double distance = screenPoint.distance(mapPanel.toScreenX(node.getX()), mapPanel.toScreenY(node.getY()));
             if (distance <= nearestDistance) {
                 nearest = node.getName();

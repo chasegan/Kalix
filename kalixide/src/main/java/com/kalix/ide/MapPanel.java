@@ -23,7 +23,11 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.geom.Arc2D;
 import java.awt.image.BufferedImage;
+import java.util.ArrayList;
+import java.util.List;
 
+import com.kalix.ide.model.ClusterCollapse;
+import com.kalix.ide.rendering.MapLayers;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelNode;
 import com.kalix.ide.interaction.LinkDragManager;
@@ -116,6 +120,9 @@ public class MapPanel extends JPanel {
     private boolean showGridlines = true;
     private NodeLabelMode labelMode = NodeLabelMode.NAMES;
 
+    /** Which clusters are collapsed, for this panel's model, for the session. */
+    private final ClusterCollapse clusterCollapse = new ClusterCollapse();
+
     /**
      * Node whose label changes because the mouse is over it. Only ever set while
      * {@link #labelMode} reveals on hover — in names mode there is nothing to
@@ -156,7 +163,7 @@ public class MapPanel extends JPanel {
         this.interactionManager = new MapInteractionManager(this, model, textUpdater);
         this.clipboardManager = new MapClipboardManager(model, textEditor, textUpdater);
         this.mapSearchManager = new MapSearchManager(this, model);
-        this.contextMenuManager = new MapContextMenuManager(this, interactionManager, model);
+        this.contextMenuManager = new MapContextMenuManager(this, interactionManager, model, clusterCollapse);
         this.contextMenuManager.setMapSearchManager(mapSearchManager);
         this.contextMenuManager.setClipboardManager(clipboardManager);
         this.contextMenuManager.setTextEditor(textEditor);
@@ -620,7 +627,8 @@ public class MapPanel extends JPanel {
 
         mapRenderer.renderMap(g2d, getWidth(), getHeight(), zoomLevel, panX, panY,
                              showGridlines, model, nodeTheme, selectionStart, selectionCurrent,
-                             mouseWorldX, mouseWorldY, mouseInPanel, labelMode, hoveredNodeName);
+                             mouseWorldX, mouseWorldY, mouseInPanel, labelMode, hoveredNodeName,
+                             clusterCollapse);
         linkDragManager.paint(g2d);
 
         g2d.dispose();
@@ -724,6 +732,28 @@ public class MapPanel extends JPanel {
     /** The text drawn under each node. */
     public NodeLabelMode getLabelMode() {
         return labelMode;
+    }
+
+    /**
+     * Which clusters are collapsed. Collapsing or expanding isn't a model event, so whoever
+     * changes it repaints the map.
+     */
+    public ClusterCollapse getClusterCollapse() {
+        return clusterCollapse;
+    }
+
+    /**
+     * Whether a node is hidden in a collapsed cluster. Hidden nodes and their links drop out
+     * of every hit-test: click, hover, the link ring and rectangle selection (clusters.md,
+     * "Hit-testing").
+     */
+    public boolean isHidden(String node) {
+        return clusterCollapse.isHidden(node, model.getClusters());
+    }
+
+    /** Whether a link is hidden: an end of it is. */
+    private boolean isHidden(com.kalix.ide.model.ModelLink link) {
+        return isHidden(link.getUpstreamTerminus()) || isHidden(link.getDownstreamTerminus());
     }
 
     /**
@@ -865,7 +895,8 @@ public class MapPanel extends JPanel {
     // Hit testing for node interaction
     
     /**
-     * Find the node at the given screen coordinates.
+     * Find the node at the given screen coordinates: the one drawn on top, so the layers
+     * are scanned in reverse of their drawing order, and hidden nodes are never found.
      * @param screenPoint Screen coordinates (mouse position)
      * @return Node name if found, null if no node at that position
      */
@@ -873,9 +904,13 @@ public class MapPanel extends JPanel {
         if (model == null) {
             return null;
         }
-        
-        // Check each node to see if the screen point is within its bounds
-        for (ModelNode node : model.getAllNodes()) {
+
+        List<ModelNode> drawn = new ArrayList<>();
+        for (MapLayers.Layer layer : MapLayers.of(model, clusterCollapse)) {
+            drawn.addAll(layer.nodes());
+        }
+        // Check each node, topmost first, to see if the screen point is within its bounds
+        for (ModelNode node : drawn.reversed()) {
             // Transform node world coordinates to screen coordinates
             double screenX = toScreenX(node.getX());
             double screenY = toScreenY(node.getY());
@@ -906,8 +941,12 @@ public class MapPanel extends JPanel {
 
         final double LINK_HIT_TOLERANCE = 8.0; // pixels
 
-        // Check each link to see if the screen point is near the line
+        // Check each link to see if the screen point is near the line; a link drawn to an
+        // icon can't be selected (clusters.md, settled decision 12)
         for (com.kalix.ide.model.ModelLink link : model.getAllLinks()) {
+            if (isHidden(link)) {
+                continue;
+            }
             // Get upstream and downstream nodes
             com.kalix.ide.model.ModelNode upstreamNode = model.getNode(link.getUpstreamTerminus());
             com.kalix.ide.model.ModelNode downstreamNode = model.getNode(link.getDownstreamTerminus());
@@ -1213,6 +1252,9 @@ public class MapPanel extends JPanel {
 
         // Find all nodes within the rectangle
         for (ModelNode node : model.getAllNodes()) {
+            if (isHidden(node.getName())) {
+                continue;
+            }
             // Transform node world coordinates to screen coordinates
             double screenX = toScreenX(node.getX());
             double screenY = toScreenY(node.getY());
@@ -1227,6 +1269,9 @@ public class MapPanel extends JPanel {
 
         // Find all links within the rectangle (check if link midpoint or any part intersects)
         for (com.kalix.ide.model.ModelLink link : model.getAllLinks()) {
+            if (isHidden(link)) {
+                continue;
+            }
             // Get upstream and downstream nodes
             com.kalix.ide.model.ModelNode upstreamNode = model.getNode(link.getUpstreamTerminus());
             com.kalix.ide.model.ModelNode downstreamNode = model.getNode(link.getDownstreamTerminus());

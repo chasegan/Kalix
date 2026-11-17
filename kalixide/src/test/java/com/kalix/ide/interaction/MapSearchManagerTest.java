@@ -10,8 +10,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** The find box matches on name or aka and lists an annotated node as "aka (name)". */
 class MapSearchManagerTest {
 
-    private static final ModelNode PLAIN = new ModelNode("gauge_1", "gauge", 0, 0, null);
-    private static final ModelNode NAMED = new ModelNode("teemburra", "storage", 0, 0, "Teemburra Dam");
+    private static final ModelNode PLAIN = new ModelNode("gauge_1", "gauge", 0, 0, null, null);
+    private static final ModelNode NAMED = new ModelNode("teemburra", "storage", 0, 0, "Teemburra Dam", null);
 
     @Test
     void filterMatchesNameOrAkaCaseInsensitively() {

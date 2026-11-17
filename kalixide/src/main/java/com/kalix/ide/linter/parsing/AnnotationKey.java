@@ -1,10 +1,12 @@
 package com.kalix.ide.linter.parsing;
 
+import com.kalix.ide.utils.EngineNames;
+
 /**
  * The annotation keys Kalix owns (ADR-0010 §4, §6): the IDE's one registry. A
  * dotted key such as {@code pycalib.bounds} belongs to the tool its prefix names
- * and is never looked up here. Adding a key is one constant and one
- * {@link #appliesTo} answer.
+ * and is never looked up here. Adding a key is one constant and one answer each
+ * from {@link #appliesTo}, {@link #isValidValue} and {@link #valueRule}.
  */
 public enum AnnotationKey {
 
@@ -51,5 +53,42 @@ public enum AnnotationKey {
             case AKA, CLUSTER, LOC -> sectionName.startsWith(NODE_SECTION_PREFIX);
             case REGION -> true;
         };
+    }
+
+    /**
+     * True if {@code value} is one this key accepts (ADR-0010 §4). Only a cluster
+     * constrains its value today, by the node-name rule (ADR-0010 §6.2), asked of
+     * {@link EngineNames} so the two rules can't drift apart. Nothing checks a
+     * {@code loc} yet.
+     */
+    public boolean isValidValue(String value) {
+        return switch (this) {
+            case CLUSTER -> EngineNames.isValidNodeName(value);
+            case AKA, REGION, LOC -> true;
+        };
+    }
+
+    /**
+     * The rule {@link #isValidValue} applies, in words, for every message that refuses
+     * a value; {@code null} for a key that accepts any value.
+     */
+    public String valueRule() {
+        return switch (this) {
+            case CLUSTER -> "Cluster names may contain only letters, digits and underscores";
+            case AKA, REGION, LOC -> null;
+        };
+    }
+
+    /**
+     * What is wrong with {@code value} for this key, or {@code null} if nothing is: the
+     * one message for a refused value, shown by the linter and by an edit alike. An
+     * empty value is called missing: quoted, {@code ''} reads like the start of a
+     * quotation. Only name-valued keys refuse values (ADR-0010 §6.2), hence "name".
+     */
+    public String valueError(String value) {
+        if (isValidValue(value)) {
+            return null;
+        }
+        return value.isEmpty() ? "Missing " + key + " name" : valueRule() + ": '" + value + "'";
     }
 }

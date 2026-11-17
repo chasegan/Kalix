@@ -24,6 +24,8 @@ public class HydrologicalModel {
     // Core data structures optimized for performance
     private final Map<String, ModelNode> nodes;
     private final List<ModelLink> links;
+    // Replaced whole at each parse, so volatile is all its thread safety needs
+    private volatile ClusterIndex clusters = ClusterIndex.EMPTY;
     
     // Change tracking for incremental updates
     private final Set<String> modifiedNodes;
@@ -132,6 +134,13 @@ public class HydrologicalModel {
     }
     
     /**
+     * The model's clusters, as of the last parse.
+     */
+    public ClusterIndex getClusters() {
+        return clusters;
+    }
+
+    /**
      * Update model from parsed INI data
      */
     public void updateFromParsedData(ModelParser.ParseResult parseResult) {
@@ -147,6 +156,8 @@ public class HydrologicalModel {
         // Add parsed links
         links.addAll(parseResult.getLinks());
         
+        clusters = ClusterIndex.of(parseResult.getNodes());
+
         // Clear change tracking since this is a full update
         clearChangeTracking();
         notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.MODEL_RELOADED, null));
@@ -210,8 +221,18 @@ public class HydrologicalModel {
         // Calculate diff and apply incremental updates
         ModelDiff diff = new ModelDiff(previousParseResult, newResult);
         
+        // Before the no-changes exit: the diff compares nodes by name, so sections
+        // moved in the file with no links to compare are no change to it, but they
+        // can change the order of clusters and their members.
+        ClusterIndex newClusters = ClusterIndex.of(newResult.getNodes());
+        boolean clustersChanged = !newClusters.equals(clusters);
+        clusters = newClusters;
+
         if (!diff.hasChanges()) {
-            // No changes - skip update
+            // No node or link changes - skip update, unless the drawing order moved
+            if (clustersChanged) {
+                notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.MODEL_RELOADED, null));
+            }
             return;
         }
         
@@ -515,7 +536,7 @@ public class HydrologicalModel {
         
         // Create a new node with updated coordinates (ModelNode is immutable)
         ModelNode updatedNode = new ModelNode(existingNode.getName(), existingNode.getType(), x, y,
-                existingNode.getAka());
+                existingNode.getAka(), existingNode.getCluster());
 
         // Update in main collection
         nodes.put(nodeName, updatedNode);

@@ -190,12 +190,28 @@ A `#@key = value` line at column zero is an annotation: a comment the IDE reads 
 the engine never does. `IniSyntax.annotation()` is the only lexer for it, and to every
 other `IniSyntax` rule the line is still a comment, so parsers that strip comments are
 untouched. `ModelParser` attaches an `aka` above a `[node.*]` header to that node
-(`ModelNode.getAka()`); a code line in between orphans it. `NodeLabelMode` owns what
-the map draws per node (names / aka only / hidden, with the hover rule) and the one
+(`ModelNode.getAka()`); a code line in between orphans it. A `cluster` attaches the same
+way (`ModelNode.getCluster()`), the last line counting and an invalid name leaving the
+node loose, and `HydrologicalModel.getClusters()` holds a `ClusterIndex` rebuilt at each
+parse, which owns how names compare (ignoring case) and which spelling is shown (the
+first mention's); the design is `docs/clusters.md`. `AnnotationKey` owns which values a
+key accepts and the message refusing one, so the parser, linter and edits can't disagree.
+`ClusterEdits` computes cluster edits as pure functions, and `CommandExecutor` applies
+them as one atomic edit. `ClusterLabels` makes
+every menu label that names a cluster, with its `(cluster)` suffix rule, and
+`ClusterMenuRules` decides, as a pure function, which cluster items a selection is
+offered; `MapContextMenuManager` asks it with the selected nodes only, and its
+`buildMenu()` lets a test read the real menu without a display. `NodeLabelMode` owns what
+the map draws per node (names / akas only / hidden, with the hover rule) and the one
 toolbar button cycles it; `MapRenderer` draws the lines it is given. The editor
 tokenises annotation lines as `Token.ANNOTATION`.
 
-Key files: `IniSyntax.java`, `ModelParser.java`, `NodeLabelMode.java`, `ToolBarBuilder.java`
+The map draws clusters from pure functions, tested without a display: `MapLayers` (the
+order of node layers), `ClusterBox`, `ClusterIcon` and `MapLinks`. Which clusters are
+collapsed is session view state in `ClusterCollapse`, one per `MapPanel`; the design is
+`docs/clusters.md`, Architecture.
+
+Key files: `IniSyntax.java`, `AnnotationKey.java`, `ModelParser.java`, `ClusterIndex.java`, `NodeLabelMode.java`, `ToolBarBuilder.java`, `MapLayers.java`, `ClusterBox.java`, `ClusterIcon.java`, `MapLinks.java`, `ClusterCollapse.java`
 
 ### Folding (#494)
 `KalixIniFoldParser` is the one fold grammar, registered for the Kalix INI style beside
