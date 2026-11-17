@@ -1,6 +1,5 @@
 package com.kalix.ide.flowviz;
 
-import com.kalix.ide.components.PopupTriggerListener;
 import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.constants.UIConstants;
 import com.kalix.ide.dataview.DataFindController;
@@ -9,6 +8,7 @@ import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.transform.PlotType;
 import com.kalix.ide.io.TimeSeriesTable;
+import com.kalix.ide.utils.TableCells;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
@@ -109,13 +109,7 @@ public final class DataVizPanel extends JPanel {
 
         // Right-clicking outside the selection moves it there first, so the menu
         // acts on the cell under the cursor (matching platform convention).
-        table.addMouseListener(new PopupTriggerListener(e -> {
-            int row = table.rowAtPoint(e.getPoint());
-            int column = Math.max(0, table.columnAtPoint(e.getPoint()));
-            if (row >= 0 && !table.isCellSelected(row, column)) {
-                table.changeSelection(row, column, false, false);
-            }
-        }));
+        TableCells.selectOnPopup(table, menu);
 
         table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
              .put(

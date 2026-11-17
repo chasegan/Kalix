@@ -1,11 +1,11 @@
 package com.kalix.ide.tableview;
 
-import com.kalix.ide.components.PopupTriggerListener;
 import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.constants.UIConstants;
 import com.kalix.ide.icons.MenuIcons;
 import com.kalix.ide.utils.DialogUtils;
+import com.kalix.ide.utils.TableCells;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
@@ -230,13 +230,8 @@ public class TableViewWindow extends JDialog {
             popupMenu.add(deleteRowsItem);
         }
 
-        // Select row under mouse before showing popup
-        table.addMouseListener(new PopupTriggerListener(e -> {
-            int row = table.rowAtPoint(e.getPoint());
-            if (row >= 0 && !table.isRowSelected(row)) {
-                table.setRowSelectionInterval(row, row);
-            }
-        }));
+        // Select the right-clicked cell as the menu opens
+        TableCells.selectOnPopup(table, popupMenu);
 
         table.setComponentPopupMenu(popupMenu);
     }

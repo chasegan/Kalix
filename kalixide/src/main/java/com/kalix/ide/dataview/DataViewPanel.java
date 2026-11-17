@@ -1,8 +1,8 @@
 package com.kalix.ide.dataview;
 
-import com.kalix.ide.components.PopupTriggerListener;
 import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.constants.UIConstants;
+import com.kalix.ide.utils.TableCells;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -184,13 +184,7 @@ public final class DataViewPanel extends JPanel {
 
         // Right-clicking outside the selection moves it there first, so the menu
         // acts on the cell under the cursor (matching platform convention).
-        table.addMouseListener(new PopupTriggerListener(e -> {
-            int row = table.rowAtPoint(e.getPoint());
-            int column = Math.max(0, table.columnAtPoint(e.getPoint()));
-            if (row >= 0 && !table.isCellSelected(row, column)) {
-                table.changeSelection(row, column, false, false);
-            }
-        }));
+        TableCells.selectOnPopup(table, menu);
 
         table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
             .put(KeyStroke.getKeyStroke(KeyEvent.VK_F, AppShortcut.menuMask()), "data-find");
