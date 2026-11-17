@@ -206,6 +206,16 @@ fn two_ands_under_a_pipe() {
 }
 
 #[test]
+fn a_nested_and_handed_less_than_it_covers_takes_only_that() {
+    // (cap & big) covers 12 but is handed 5 a day: each side pays 5 a day, and a nothing
+    let mut model = run(&unregulated_model(5.0, "accounts = (cap & big) | a"));
+    assert_eq!(series(&mut model, "node.user.diversion"), vec![5.0, 5.0]);
+    assert_eq!(balance(&model, "cap"), 2.0);
+    assert_eq!(balance(&model, "big"), 90.0);
+    assert_eq!(balance(&model, "a"), 10.0);
+}
+
+#[test]
 fn pipe_carries_past_a_nested_and_to_the_account_after_it() {
     // Demand 50 of inflow 50: a 10, then (b & cap) 5, then big 35; next day big alone
     let mut model = run(&unregulated_model(50.0, "accounts = a | (b & cap) | big"));
@@ -327,6 +337,81 @@ fn commit_overflow_goes_on_the_first_account_of_each_side_that_fell_short() {
     assert_eq!(committed(b), 5.0);
     assert_eq!(committed(big), 40.0);
     assert_eq!(tree.available_order(manager), 0.0);
+}
+
+/// A dam, a reach with a lag of 2, a regulated user ordering 20 a day and a blackhole, run for
+/// three days. Orders are en route while the next are placed and as the first is delivered.
+fn lagged_model(accounts_line: &str) -> String {
+    format!(r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-03
+
+[acc.pools]
+accounts = name, size, initial,
+           a,    1000, 30,
+           b,    1000, 100,
+           c,    1000, 1000,
+           d,    1000, 100,
+
+[node.dam]
+type = storage
+loc = 0, 0
+initial_volume = 12000
+dimensions = 0,  0,     0,  0,
+             10, 12000, 10, 0,
+             11, 12100, 10, 1000,
+ds_1 = reach
+
+[node.reach]
+type = routing
+loc = 0, 10
+lag = 2
+ds_1 = user
+
+[node.user]
+type = regulated_user
+loc = 0, 20
+order = 20
+{accounts_line}
+ds_1 = sink
+
+[node.sink]
+type = blackhole
+loc = 0, 30
+
+[outputs]
+node.user.diversion
+acc.a.committed
+acc.b.committed
+acc.d.committed
+acc.a.closing_balance
+acc.d.closing_balance
+"#)
+}
+
+/// A nested `&` commits what the uncommitted balances cover, not the balances. On day 1, (a & b)
+/// covers 30 and commits the 20 to each. Day 2 it covers min(30 - 20, 100 - 20) = 10, and d
+/// commits the other 10.
+#[test]
+fn a_nested_and_commits_against_what_is_not_yet_committed() {
+    for accounts_line in ["accounts = (a & b) | d", "accounts = ((a & b) | d) & c"] {
+        let mut model = run(&lagged_model(accounts_line));
+        assert_eq!(series(&mut model, "acc.a.committed")[..3], [0.0, 20.0, 30.0], "{accounts_line}");
+        assert_eq!(series(&mut model, "acc.b.committed")[..3], [0.0, 20.0, 30.0], "{accounts_line}");
+        assert_eq!(series(&mut model, "acc.d.committed")[..3], [0.0, 0.0, 10.0], "{accounts_line}");
+    }
+}
+
+/// A delivery through a nested `&` is limited by the balances, not by what is uncommitted.
+/// On day 3, a holds 30, all of it committed, and the 20 ordered on day 1 arrives. (a & b) still
+/// takes it all, so a pays 20 and d pays nothing.
+#[test]
+fn a_nested_and_delivers_against_the_balance_of_the_day() {
+    let mut model = run(&lagged_model("accounts = ((a & b) | d) & c"));
+    assert_eq!(series(&mut model, "node.user.diversion")[2], 20.0);
+    assert_eq!(series(&mut model, "acc.a.closing_balance")[2], 10.0);
+    assert_eq!(series(&mut model, "acc.d.closing_balance")[2], 100.0);
 }
 
 // ------------------------------------------------------------------------------------------

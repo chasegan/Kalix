@@ -202,6 +202,128 @@ acc.scheme.committed
     assert_eq!(series(&mut m, "acc.scheme.committed"), vec![0.0]);
 }
 
+/// An order account is debited at order time, so what it authorises is its
+/// balance, whatever another user has committed against it as a regular
+/// account. The downstream user orders first and commits 30 of the pool's 100;
+/// the upstream user may still order the whole 100 on it.
+#[test]
+fn test_an_order_account_authorises_its_balance_not_its_uncommitted_balance() {
+    let mut m = run(r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-01
+
+[acc.scheme]
+accounts = name, size, initial,
+           pool, 1000, 100,
+
+[node.dam]
+type = storage
+loc = 0, 0
+initial_volume = 12000
+dimensions = 0,  0,     0,  0,
+             10, 12000, 10, 0,
+             11, 12100, 10, 1000,
+ds_1 = upstream_user
+
+[node.upstream_user]
+type = regulated_user
+loc = 0, 10
+order = 100
+order_accounts = pool
+ds_1 = downstream_user
+
+[node.downstream_user]
+type = regulated_user
+loc = 0, 20
+order = 30
+accounts = pool
+ds_1 = sink
+
+[node.sink]
+type = blackhole
+loc = 0, 30
+
+[outputs]
+node.upstream_user.order
+node.downstream_user.order
+"#);
+    assert_eq!(series(&mut m, "node.downstream_user.order"), vec![30.0]);
+    assert_eq!(series(&mut m, "node.upstream_user.order"), vec![100.0]);
+}
+
+/// An unregulated user's take is limited by the balance, not by what a
+/// regulated user sharing the account has committed. The commitment is a
+/// forecast of the regulated user's own diversion. The regulated user commits
+/// 30 of the pool's 100 on day 1, and the unregulated user still takes 90.
+/// Day 2 shows the 30 was committed, and the unregulated user takes the 10 left.
+#[test]
+fn test_an_unregulated_take_is_not_limited_by_another_users_commitment() {
+    for accounts_line in ["accounts = pool", "accounts = pool & cap"] {
+        let mut m = run(&format!(r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-02
+
+[acc.scheme]
+accounts = name, size, initial,
+           pool, 1000, 100,
+           cap,  1000, 1000,
+
+[node.dam]
+type = storage
+loc = 0, 0
+initial_volume = 12000
+dimensions = 0,  0,     0,  0,
+             10, 12000, 10, 0,
+             11, 12100, 10, 1000,
+ds_1 = reach
+
+[node.reach]
+type = routing
+loc = 0, 10
+lag = 2
+ds_1 = regulated
+
+[node.regulated]
+type = regulated_user
+loc = 0, 20
+order = 30
+accounts = pool
+ds_1 = sink
+
+[node.sink]
+type = blackhole
+loc = 0, 30
+
+[node.creek]
+type = inflow
+loc = 10, 0
+inflow = 500
+ds_1 = unregulated
+
+[node.unregulated]
+type = unregulated_user
+loc = 10, 10
+demand = 90
+{accounts_line}
+ds_1 = sink2
+
+[node.sink2]
+type = blackhole
+loc = 10, 20
+
+[outputs]
+node.regulated.order
+node.unregulated.diversion
+acc.pool.committed
+"#));
+        assert_eq!(series(&mut m, "node.regulated.order"), vec![30.0, 0.0], "{accounts_line}");
+        assert_eq!(series(&mut m, "acc.pool.committed"), vec![0.0, 30.0], "{accounts_line}");
+        assert_eq!(series(&mut m, "node.unregulated.diversion"), vec![90.0, 10.0], "{accounts_line}");
+    }
+}
+
 /// Orders from a supply outlet are the user's orders: they are committed and
 /// released with its own. A field on ds_2 ordering 30 a day plus the user's
 /// own 30: day 1 commits 60, day 2 has 40 left and serves the outlet first
