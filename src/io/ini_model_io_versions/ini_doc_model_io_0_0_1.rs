@@ -2283,19 +2283,19 @@ fn parse_account_table(flat: &str, model: &mut Model) -> Result<AccountTableData
                     }
                 }
                 "size" => {
-                    size = cell.parse::<f64>()
-                        .map_err(|_| format!("Invalid size '{}' for account '{}': must be a number",
+                    // NaN parses as an f64 but is not a number, and would pass the comparisons below
+                    size = cell.parse::<f64>().ok().filter(|v| !v.is_nan())
+                        .ok_or_else(|| format!("Invalid size '{}' for account '{}': must be a number",
                             cell, table_name))?;
-                    // Written as !(size >= 0.0), not size < 0.0, so NaN (which parses fine as f64
-                    // but fails every comparison) is caught here too instead of slipping through.
-                    if !(size >= 0.0) {
+                    if size < 0.0 {
                         return Err(format!("Account '{}' has negative size {}",
                             table_name, size));
                     }
                 }
                 "initial" => {
-                    initial = cell.parse::<f64>()
-                        .map_err(|_| format!("Invalid initial balance '{}' for account '{}': must be a number",
+                    // As for size: the range check below would let NaN through
+                    initial = cell.parse::<f64>().ok().filter(|v| !v.is_nan())
+                        .ok_or_else(|| format!("Invalid initial balance '{}' for account '{}': must be a number",
                             cell, table_name))?;
                 }
                 "pair" => {
