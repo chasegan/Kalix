@@ -363,7 +363,7 @@ public class ToolBarBuilder {
      * @return Color for toolbar icons that contrasts with the current theme
      */
     private static Color getThemeAwareIconColor() {
-        return ThemeUtils.iconColor(UIManager.getColor("ToolBar.background"));
+        return ThemeUtils.toolBarIconColor();
     }
 
     /**
