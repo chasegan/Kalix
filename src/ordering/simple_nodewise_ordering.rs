@@ -419,9 +419,10 @@ impl SimpleNodewiseOrderingSystem {
     }
 
     /// The order phase with order-phase var blocks: the visit list with each block in its
-    /// place, at its file position bottom-up (ADR-0005 §1), keys top to bottom. Blocks run
-    /// even when the model has no ordering; the list then holds only blocks. The ordering
-    /// system knows only where a block runs: `run_var_block` (the model's) evaluates it.
+    /// place, at its file position bottom-up (ADR-0005 §1 extended to the order phase), keys
+    /// top to bottom. Blocks run even when the model has no ordering; the list then holds only
+    /// blocks. The ordering system knows only where a block runs: `run_var_block` (the model's)
+    /// evaluates it.
     // Out of line: inlined into run_timestep, regulated models that never call it timed 4-6%
     // slower than with it out of line (ADR-0004 §4)
     #[inline(never)]
