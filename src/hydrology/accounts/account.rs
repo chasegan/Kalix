@@ -3,7 +3,8 @@ use crate::numerical::fifo_buffer::FifoBuffer;
 /// A single account: pure state — name, cap, balance. Accounts carry no
 /// behaviour and no calendar; everything that changes a balance is a [ras.*]
 /// action or a node take (kalix-allocation-components.md §3.1).
-#[derive(Default, Clone)]
+// No Default: an account is built only by `new`, which sets its debit factor
+#[derive(Clone)]
 pub struct Account {
     // Properties
     pub name: String,
@@ -80,7 +81,9 @@ pub struct Account {
 impl Account {
 
     // Constructor
-    pub fn new(name: String, account_type: String, size: f64, initial_balance: f64) -> Self {
+    pub fn new(name: String, account_type: String, size: f64, initial_balance: f64, debit_factor: f64) -> Self {
+        // The reader enforces this
+        debug_assert!(debit_factor > 0.0 && debit_factor.is_normal(), "debit_factor {} must be finite, normal and > 0", debit_factor);
         Account {
             name,
             account_type,
@@ -96,7 +99,7 @@ impl Account {
             committed: 0.0,
             commit_ring: Vec::new(),
             commit_cursor: 0,
-            debit_factor: 1.0,
+            debit_factor,
         }
     }
 

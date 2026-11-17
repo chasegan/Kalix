@@ -260,10 +260,10 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     group_name.to_string(), // account_type carries the group name
                     table.sizes[row],
                     table.initials[row],
+                    table.debit_factors[row],
                 );
                 let account_idx = model.account_manager.add_account(account)
                     .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", accounts_prop.line_number, e)))?;
-                model.account_manager.set_account_debit_factor(account_idx, table.debit_factors[row]);
                 if let Some(pairs) = &table.pairs {
                     pending_pairs.push((account_idx, pairs[row].clone(), accounts_prop.line_number));
                 }

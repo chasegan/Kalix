@@ -453,12 +453,6 @@ impl AccountManager {
         self.commit_account(account_id, order * factor, due_in);
     }
 
-    /// Set an account's debit factor, as the model is read. The reader has
-    /// checked that it is finite and greater than zero.
-    pub fn set_account_debit_factor(&mut self, account_id: usize, debit_factor: f64) {
-        self.accounts[account_id].debit_factor = debit_factor;
-    }
-
     /// Whether any of these accounts has a debit factor other than 1, which
     /// is when the accounts table is saved with the column.
     pub fn any_debit_factor(&self, account_ids: impl Iterator<Item = usize>) -> bool {
