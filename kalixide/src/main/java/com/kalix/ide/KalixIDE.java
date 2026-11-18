@@ -541,16 +541,12 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
         if (map != null) {
             // Map appearance from saved preferences (follow mode resolves to the
-            // application theme's linked node palette).
+            // application theme's linked node palette). Gridlines and labels are only
+            // this map's starting point: its toolbar changes them for this map alone.
             map.setNodeTheme(ThemePreferences.effectiveNodeTheme());
             map.setShowGridlines(PreferenceKeys.MAP_SHOW_GRIDLINES.get());
             map.setLabelMode(NodeLabelMode.saved());
             map.setTrackpadNavigation(PreferenceKeys.MAP_TRACKPAD_NAVIGATION.get());
-        }
-        MapView mapView = document.getMapView();
-        if (mapView != null) {
-            // The map toolbar's toggles apply to every open map and are saved.
-            mapView.setDisplayActions(this::toggleGridlines, this::setLabelMode);
         }
 
         if (document.isModel()) {
@@ -1682,10 +1678,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     public void showPreferences() {
         // Narrow callbacks for the preference pages; each page receives only what it uses.
         Runnable onMapPreferencesChanged = () -> {
-            // Update map display with new preferences
-            boolean showGridlines = PreferenceKeys.MAP_SHOW_GRIDLINES.get();
-            toggleGridlines(showGridlines);
-
+            // Gridlines are only the default for new maps: open maps keep their own.
             // Update node theme (follow mode resolves to the application theme's)
             setNodeTheme(ThemePreferences.effectiveNodeTheme());
 
@@ -1939,29 +1932,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                     }
                 });
             }); // a failure is reported by StdioTaskManager before the future completes
-    }
-    
-    private void toggleGridlines(boolean showGridlines) {
-        // Apply to every open document's map so background tabs stay consistent.
-        for (KalixDocument document : documentManager.getDocuments()) {
-            MapPanel map = document.getMapPanel();
-            if (map != null) {
-                map.setShowGridlines(showGridlines);
-            }
-        }
-        // Save preference
-        PreferenceKeys.MAP_SHOW_GRIDLINES.set(showGridlines);
-    }
-
-    private void setLabelMode(NodeLabelMode mode) {
-        // Apply to every open document's map so background tabs stay consistent.
-        for (KalixDocument document : documentManager.getDocuments()) {
-            MapPanel map = document.getMapPanel();
-            if (map != null) {
-                map.setLabelMode(mode);
-            }
-        }
-        mode.save();
     }
     
     @Override

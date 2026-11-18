@@ -6,120 +6,100 @@ import org.junit.jupiter.api.Test;
 
 import javax.swing.Icon;
 import javax.swing.JToggleButton;
-import java.util.ArrayList;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Pins the map toolbar: its buttons follow their own map's state, clicks go through
- * the installed actions, and an unwired toolbar refuses rather than acting alone.
- */
+/** Pins the map toolbar: its buttons change and follow their own map, and no other. */
 class MapToolBarTest {
 
-    private static MapToolBar toolBar(MapView view) {
-        return assertInstanceOf(MapToolBar.class, view.getComponent(0), "the toolbar sits first, at the top");
+    private static MapView view(ModelDocument doc) {
+        return assertInstanceOf(MapView.class, doc.getContextView());
     }
 
-    private static JToggleButton gridlinesButton(MapView view) {
-        return (JToggleButton) toolBar(view).getComponent(0);
+    private static MapToolBar toolBar(ModelDocument doc) {
+        return assertInstanceOf(MapToolBar.class, view(doc).getComponent(0), "the toolbar sits first, at the top");
     }
 
-    private static JToggleButton labelsButton(MapView view) {
-        return (JToggleButton) toolBar(view).getComponent(1);
+    private static JToggleButton gridlinesButton(ModelDocument doc) {
+        return (JToggleButton) toolBar(doc).getComponent(0);
+    }
+
+    private static JToggleButton labelsButton(ModelDocument doc) {
+        return (JToggleButton) toolBar(doc).getComponent(1);
     }
 
     @Test
     void modelContextViewIsTheMapUnderItsToolBar() {
         ModelDocument doc = new ModelDocument();
-        assertSame(doc.getMapView(), doc.getContextView());
-        assertSame(doc.getMapPanel(), doc.getMapView().getComponent(1));
+        assertSame(doc.getMapPanel(), view(doc).getComponent(1));
     }
 
     @Test
     void buttonsFollowTheMap() {
         ModelDocument doc = new ModelDocument();
         MapPanel map = doc.getMapPanel();
-        MapView view = doc.getMapView();
 
         map.setShowGridlines(false);
-        assertFalse(gridlinesButton(view).isSelected());
-        assertEquals("Gridlines hidden - click to show", gridlinesButton(view).getToolTipText());
+        assertFalse(gridlinesButton(doc).isSelected());
+        assertEquals("Gridlines hidden - click to show", gridlinesButton(doc).getToolTipText());
         map.setShowGridlines(true);
-        assertTrue(gridlinesButton(view).isSelected());
+        assertTrue(gridlinesButton(doc).isSelected());
 
         map.setLabelMode(NodeLabelMode.AKA);
-        assertTrue(labelsButton(view).isSelected());
-        assertEquals("Node labels: akas only - click to hide", labelsButton(view).getToolTipText());
+        assertTrue(labelsButton(doc).isSelected());
+        assertEquals("Node labels: akas only - click to hide", labelsButton(doc).getToolTipText());
         map.setLabelMode(NodeLabelMode.HIDDEN);
-        assertFalse(labelsButton(view).isSelected());
+        assertFalse(labelsButton(doc).isSelected());
     }
 
     @Test
     void labelIconChangesWithTheMode() {
         ModelDocument doc = new ModelDocument();
-        Icon names = labelsButton(doc.getMapView()).getIcon();
+        Icon names = labelsButton(doc).getIcon();
         doc.getMapPanel().setLabelMode(NodeLabelMode.AKA);
-        assertNotSame(names, labelsButton(doc.getMapView()).getIcon());
+        assertNotSame(names, labelsButton(doc).getIcon());
     }
 
     @Test
-    void clicksGoThroughTheInstalledActions() {
+    void clicksChangeTheirOwnMap() {
         ModelDocument doc = new ModelDocument();
         MapPanel map = doc.getMapPanel();
-        MapView view = doc.getMapView();
         map.setShowGridlines(true);
         map.setLabelMode(NodeLabelMode.NAMES);
-        List<Boolean> gridlines = new ArrayList<>();
-        List<NodeLabelMode> modes = new ArrayList<>();
-        view.setDisplayActions(gridlines::add, modes::add);
 
-        gridlinesButton(view).doClick();
-        labelsButton(view).doClick();
+        gridlinesButton(doc).doClick();
+        labelsButton(doc).doClick();
 
-        assertEquals(List.of(false), gridlines, "asks for the opposite of the map's gridlines");
-        assertEquals(List.of(NodeLabelMode.AKA), modes, "asks for the mode after the map's");
-        // The recording actions leave the map unchanged, so the buttons must show that.
-        assertTrue(gridlinesButton(view).isSelected());
-        assertTrue(labelsButton(view).isSelected());
+        assertFalse(map.isShowGridlines());
+        assertFalse(gridlinesButton(doc).isSelected());
+        assertEquals(NodeLabelMode.AKA, map.getLabelMode());
+        assertTrue(labelsButton(doc).isSelected());
     }
 
     @Test
-    void everyToolBarFollowsASettingAppliedToAllMaps() {
-        ModelDocument first = new ModelDocument();
-        ModelDocument second = new ModelDocument();
-        List<ModelDocument> docs = List.of(first, second);
-        for (ModelDocument doc : docs) {
-            doc.getMapView().setDisplayActions(
-                show -> docs.forEach(d -> d.getMapPanel().setShowGridlines(show)),
-                mode -> docs.forEach(d -> d.getMapPanel().setLabelMode(mode)));
-        }
+    void clicksLeaveOtherMapsAlone() {
+        ModelDocument clicked = new ModelDocument();
+        ModelDocument other = new ModelDocument();
 
-        gridlinesButton(first.getMapView()).doClick();
-        labelsButton(first.getMapView()).doClick();
+        gridlinesButton(clicked).doClick();
+        labelsButton(clicked).doClick();
 
-        assertFalse(gridlinesButton(second.getMapView()).isSelected());
-        assertEquals("Node labels: akas only - click to hide", labelsButton(second.getMapView()).getToolTipText());
-    }
-
-    @Test
-    void clickBeforeWiringThrows() {
-        ModelDocument doc = new ModelDocument();
-        assertThrows(IllegalStateException.class, () -> gridlinesButton(doc.getMapView()).doClick());
-        assertTrue(doc.getMapPanel().isShowGridlines(), "the map is untouched");
+        assertTrue(other.getMapPanel().isShowGridlines());
+        assertTrue(gridlinesButton(other).isSelected());
+        assertEquals(NodeLabelMode.NAMES, other.getMapPanel().getLabelMode());
+        assertEquals("Node labels: names - click to show akas only", labelsButton(other).getToolTipText());
     }
 
     @Test
     void themeChangeRebuildsTheIcons() {
         ModelDocument doc = new ModelDocument();
-        Icon before = gridlinesButton(doc.getMapView()).getIcon();
-        toolBar(doc.getMapView()).updateUI();
-        assertNotSame(before, gridlinesButton(doc.getMapView()).getIcon());
+        Icon before = gridlinesButton(doc).getIcon();
+        toolBar(doc).updateUI();
+        assertNotSame(before, gridlinesButton(doc).getIcon());
     }
 }

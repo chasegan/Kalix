@@ -60,11 +60,6 @@ public class ModelDocument extends KalixDocument {
         return mapPanel;
     }
 
-    @Override
-    public MapView getMapView() {
-        return mapView;
-    }
-
     /** A model's contextual view is its map, under the map's toolbar. */
     @Override
     public Component getContextView() {

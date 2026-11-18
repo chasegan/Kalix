@@ -56,13 +56,13 @@ public class NodeDiagramPreferencePage extends AbstractPreferencePage {
 
         // Map gridlines setting
         gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-        gridlinesCheckBox = new JCheckBox("Show gridlines on map");
+        gridlinesCheckBox = new JCheckBox("Show gridlines on new maps");
         gridlinesCheckBox.setSelected(PreferenceKeys.MAP_SHOW_GRIDLINES.get());
         gridlinesCheckBox.addActionListener(e -> {
             boolean enabled = gridlinesCheckBox.isSelected();
             PreferenceKeys.MAP_SHOW_GRIDLINES.set(enabled);
 
-            // Notify callbacks to update map display and toolbar button
+            // Open maps keep their own gridlines; only new maps take this.
             onMapPreferencesChanged.run();
             onGridlinesChanged.accept(enabled);
         });

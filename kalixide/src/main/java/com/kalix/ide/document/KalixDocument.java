@@ -1,7 +1,6 @@
 package com.kalix.ide.document;
 
 import com.kalix.ide.MapPanel;
-import com.kalix.ide.MapView;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.linter.parsing.INIModelParser;
 import com.kalix.ide.model.HydrologicalModel;
@@ -176,11 +175,6 @@ public abstract class KalixDocument implements OpenModel {
 
     /** The map visualising this document's model, or {@code null} for non-model kinds. */
     public MapPanel getMapPanel() {
-        return null;
-    }
-
-    /** The map with its toolbar, or {@code null} for non-model kinds. */
-    public MapView getMapView() {
         return null;
     }
 
