@@ -1,6 +1,7 @@
 package com.kalix.ide.windows;
 
 import com.kalix.ide.components.JCheckboxTree;
+import com.kalix.ide.components.TreeHoverHighlight;
 import com.kalix.ide.flowviz.VisualizationTabManager;
 import com.kalix.ide.flowviz.VizHost;
 import com.kalix.ide.flowviz.data.DerivedSeriesLabel;
@@ -474,13 +475,13 @@ public class RunManager extends JFrame {
         JPanel runsPanel = new JPanel(new BorderLayout());
         runsPanel.setBorder(BorderFactory.createTitledBorder("Kalix"));
         JScrollPane treeScrollPane = new JScrollPane(timeseriesSourceTree);
-        runsPanel.add(treeScrollPane, BorderLayout.CENTER);
+        runsPanel.add(TreeHoverHighlight.layerAround(treeScrollPane), BorderLayout.CENTER);
 
         // Bottom of left side: timeseries tree with filter
         JPanel timeseriesPanel = new JPanel(new BorderLayout());
         timeseriesPanel.setBorder(BorderFactory.createTitledBorder("Timeseries"));
         timeseriesPanel.add(treeFilterManager.getFilterPanel(), BorderLayout.NORTH);
-        timeseriesPanel.add(timeseriesScrollPane, BorderLayout.CENTER);
+        timeseriesPanel.add(TreeHoverHighlight.layerAround(timeseriesScrollPane), BorderLayout.CENTER);
 
         leftSplitPane.setTopComponent(runsPanel);
         leftSplitPane.setBottomComponent(timeseriesPanel);

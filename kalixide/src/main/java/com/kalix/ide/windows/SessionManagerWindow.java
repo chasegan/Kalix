@@ -11,6 +11,7 @@ import com.kalix.ide.utils.JsonUtils;
 import com.kalix.ide.utils.ThemeUtils;
 
 import com.kalix.ide.components.KalixPlainTextArea;
+import com.kalix.ide.components.TreeHoverHighlight;
 import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.utils.StatusReporter;
 import org.fife.ui.rtextarea.RTextScrollPane;
@@ -211,7 +212,7 @@ public class SessionManagerWindow extends JFrame {
         JPanel leftPanel = new JPanel(new BorderLayout());
         leftPanel.setBorder(BorderFactory.createTitledBorder("Sessions"));
         JScrollPane treeScrollPane = new JScrollPane(sessionTree);
-        leftPanel.add(treeScrollPane, BorderLayout.CENTER);
+        leftPanel.add(TreeHoverHighlight.layerAround(treeScrollPane), BorderLayout.CENTER);
 
         // Right panel: vertical split (details top, log bottom)
         JSplitPane rightSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT);

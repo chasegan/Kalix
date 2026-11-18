@@ -12,17 +12,12 @@ import javax.swing.JPopupMenu;
 import javax.swing.JTree;
 import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
-import javax.swing.UIManager;
 import javax.swing.event.TreeExpansionEvent;
 import javax.swing.event.TreeWillExpandListener;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
-import java.awt.Color;
 import java.awt.Component;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
-import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
@@ -39,10 +34,11 @@ import java.util.Set;
  * The project file tree: a {@link JTree} over a lazily-loaded filesystem model, kept live by
  * a native directory watcher (FSEvents on macOS via {@code io.methvin:directory-watcher}).
  *
- * <p>Provides full-width row hover, path tooltips, a right-click context menu (Open, Reveal,
- * New File/Folder, Rename, Delete, Refresh), and open-on-double-click / Enter (zip archives
- * are unzipped instead of opened). Files are opened through the supplied consumer (which adds
- * them as editor tabs).
+ * <p>Provides path tooltips, a right-click context menu (Open, Reveal, New File/Folder,
+ * Rename, Delete, Refresh), and open-on-double-click / Enter (zip archives are unzipped
+ * instead of opened). Files are opened through the supplied consumer (which adds them as
+ * editor tabs). The full-width row hover is added by {@code ProjectTreePanel}, which shows
+ * the tree's scroll pane through a {@code TreeHoverHighlight} layer.
  *
  * <p>All model mutations happen on the EDT; watcher callbacks marshal onto it.
  */
@@ -59,7 +55,6 @@ public class ProjectTree extends JTree {
 
     private DefaultTreeModel model;
     private final FsWatcher fsWatcher = new FsWatcher(this::applyFsEvent);
-    private int hoveredRow = -1;
     // Whether dotfiles/folders are shown. Read live by every FileTreeNode at (re)load time via the
     // supplier handed to it, so toggling re-filters on the next directory sync (see setShowHidden).
     private boolean showHidden = true;
@@ -207,31 +202,6 @@ public class ProjectTree extends JTree {
         }
     }
 
-    // --- Hover (full-width overlay) ---
-
-    @Override
-    protected void paintComponent(Graphics g) {
-        super.paintComponent(g);
-        if (hoveredRow >= 0 && hoveredRow < getRowCount() && !isRowSelected(hoveredRow)) {
-            Rectangle bounds = getRowBounds(hoveredRow);
-            if (bounds != null) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setColor(hoverColor());
-                g2.fillRect(0, bounds.y, getWidth(), bounds.height);
-                g2.dispose();
-            }
-        }
-    }
-
-    private static Color hoverColor() {
-        Color base = UIManager.getColor("Tree.selectionBackground");
-        if (base == null) {
-            base = Color.GRAY;
-        }
-        // Subtle translucent wash so the row text remains legible.
-        return new Color(base.getRed(), base.getGreen(), base.getBlue(), 40);
-    }
-
     // --- Tooltips ---
 
     @Override
@@ -243,19 +213,8 @@ public class ProjectTree extends JTree {
     // --- Mouse / keyboard ---
 
     private void installMouseAndKeyHandlers() {
-        addMouseMotionListener(new MouseAdapter() {
-            @Override
-            public void mouseMoved(MouseEvent e) {
-                setHoveredRow(getRowForPath(TreeRows.fullWidthPathAt(ProjectTree.this, e.getY())));
-            }
-        });
         addMouseListener(new PopupTriggerListener(this::showPopup));
         addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseExited(MouseEvent e) {
-                setHoveredRow(-1);
-            }
-
             @Override
             public void mouseClicked(MouseEvent e) {
                 if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 2) {
@@ -327,13 +286,6 @@ public class ProjectTree extends JTree {
      *  root guards (per ADR-0002 §4: rename/duplicate/delete never apply). */
     boolean isRoot(FileTreeNode node) {
         return model != null && node == model.getRoot();
-    }
-
-    private void setHoveredRow(int row) {
-        if (row != hoveredRow) {
-            hoveredRow = row;
-            repaint();
-        }
     }
 
     private void showPopup(MouseEvent e) {

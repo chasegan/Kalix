@@ -1,6 +1,7 @@
 package com.kalix.ide.workspace;
 
 import com.kalix.ide.components.PopupTriggerListener;
+import com.kalix.ide.components.TreeHoverHighlight;
 import com.kalix.ide.workspace.tree.ProjectTree;
 import com.kalix.ide.workspace.tree.TreeHost;
 
@@ -48,7 +49,7 @@ public class ProjectTreePanel extends JPanel {
         scroll.putClientProperty("JScrollPane.smoothScrolling", Boolean.TRUE);
 
         add(header, BorderLayout.NORTH);
-        add(scroll, BorderLayout.CENTER);
+        add(TreeHoverHighlight.layerAround(scroll), BorderLayout.CENTER);
     }
 
     /** Opens the given folder: loads the tree and sets the header to the folder name. */
