@@ -1,5 +1,7 @@
 package com.kalix.ide.components;
 
+import com.kalix.ide.utils.TreeRows;
+
 import javax.swing.AbstractAction;
 import javax.swing.JTree;
 import javax.swing.KeyStroke;
@@ -417,7 +419,7 @@ public class JCheckboxTree extends JTree {
                 if (e.isPopupTrigger() || !SwingUtilities.isLeftMouseButton(e)) {
                     return;
                 }
-                TreePath path = getPathForLocation(e.getX(), e.getY());
+                TreePath path = TreeRows.fullWidthPathAt(JCheckboxTree.this, e.getY());
                 if (path != null && isOverCheckbox(e.getX(), path)) {
                     togglePath(path);
                 }
@@ -431,7 +433,7 @@ public class JCheckboxTree extends JTree {
                 if (e.isPopupTrigger() || !SwingUtilities.isLeftMouseButton(e) || e.getClickCount() != 2) {
                     return;
                 }
-                TreePath path = getPathForLocation(e.getX(), e.getY());
+                TreePath path = TreeRows.fullWidthPathAt(JCheckboxTree.this, e.getY());
                 if (path == null || isOverCheckbox(e.getX(), path)) {
                     return;
                 }

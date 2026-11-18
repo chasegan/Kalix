@@ -34,6 +34,7 @@ import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.renderers.OutputsTreeCellRenderer;
 import com.kalix.ide.renderers.RunTreeCellRenderer;
 import com.kalix.ide.utils.StatusReporter;
+import com.kalix.ide.utils.TreeRows;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -339,10 +340,7 @@ public class RunManager extends JFrame {
         timeseriesSourceTree = new JCheckboxTree(treeModel) {
             @Override
             public String getToolTipText(MouseEvent evt) {
-                if (getRowForLocation(evt.getX(), evt.getY()) == -1) {
-                    return null;
-                }
-                TreePath curPath = getPathForLocation(evt.getX(), evt.getY());
+                TreePath curPath = TreeRows.fullWidthPathAt(this, evt.getY());
                 if (curPath == null) {
                     return null;
                 }

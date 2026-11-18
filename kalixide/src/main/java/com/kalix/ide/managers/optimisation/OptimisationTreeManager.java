@@ -3,6 +3,7 @@ package com.kalix.ide.managers.optimisation;
 import com.kalix.ide.components.PopupTriggerListener;
 import com.kalix.ide.managers.SessionTreeBookkeeping;
 import com.kalix.ide.renderers.OptimisationTreeCellRenderer;
+import com.kalix.ide.utils.TreeRows;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -267,13 +268,11 @@ public class OptimisationTreeManager {
         contextMenu.add(removeItem);
 
         tree.addMouseListener(new PopupTriggerListener(e -> {
-            TreePath path = tree.getPathForLocation(e.getX(), e.getY());
+            // The menu's actions read the single selected optimisation.
+            TreePath path = TreeRows.selectOnlyForPopup(tree, e.getY());
             if (path == null) {
                 return;
             }
-            // The menu's actions read the single selected optimisation, so the clicked
-            // row replaces any multi-selection.
-            tree.setSelectionPath(path);
             DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
 
             if (node.getUserObject() instanceof OptimisationInfo info) {

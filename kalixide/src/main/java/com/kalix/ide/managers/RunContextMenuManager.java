@@ -10,6 +10,7 @@ import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.io.CompressedCsvFormat;
 import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.utils.StatusReporter;
+import com.kalix.ide.utils.TreeRows;
 import com.kalix.ide.windows.MinimalEditorWindow;
 import com.kalix.ide.windows.SessionManagerWindow;
 
@@ -26,7 +27,6 @@ import javax.swing.event.PopupMenuListener;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
-import java.awt.Rectangle;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -205,13 +205,11 @@ public class RunContextMenuManager {
         categoryMenu.add(removeAllItem);
 
         runTree.addMouseListener(new PopupTriggerListener(e -> {
-            TreePath path = runTree.getPathForLocation(e.getX(), e.getY());
+            // The menu's actions read the single selected run.
+            TreePath path = TreeRows.selectOnlyForPopup(runTree, e.getY());
             if (path == null) {
                 return;
             }
-            // The menu's actions read the single selected run, so the clicked row replaces
-            // any multi-selection.
-            runTree.setSelectionPath(path);
 
             // Pick the menu by node type — runs and loaded datasets share the tree
             // but get different actions.
@@ -333,17 +331,8 @@ public class RunContextMenuManager {
         contextMenu.add(showSelectedItem);
 
         outputsTree.addMouseListener(new PopupTriggerListener(e -> {
-            // Get the path at the mouse location (full-width hit test)
-            int row = outputsTree.getClosestRowForLocation(0, e.getY());
-            Rectangle bounds = row < 0 ? null : outputsTree.getRowBounds(row);
-            boolean onRow = bounds != null
-                && e.getY() >= bounds.y && e.getY() < bounds.y + bounds.height;
-            if (!onRow) {
-                // Empty space below the last row: the menu acts on the root.
-                outputsTree.clearSelection();
-            } else if (!outputsTree.isRowSelected(row)) {
-                outputsTree.setSelectionRow(row);
-            }
+            // Empty space below the last row clears the selection: the menu acts on the root.
+            boolean onRow = TreeRows.selectForPopup(outputsTree, e.getY()) != null;
             // Enable/disable and hide/show menu items based on context (ADR-0002 §4).
             // "Show selected" cannot apply to an empty-space click, which just cleared the selection
             showSelectedItem.setVisible(onRow);

@@ -3,6 +3,7 @@ package com.kalix.ide.workspace.tree;
 import com.kalix.ide.components.PopupTriggerListener;
 import com.kalix.ide.io.FsWatcher;
 import com.kalix.ide.io.CsvZipFormat;
+import com.kalix.ide.utils.TreeRows;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -235,7 +236,7 @@ public class ProjectTree extends JTree {
 
     @Override
     public String getToolTipText(MouseEvent event) {
-        FileTreeNode node = nodeAt(event.getX(), event.getY());
+        FileTreeNode node = nodeAt(event.getY());
         return node != null ? node.getFile().getAbsolutePath() : null;
     }
 
@@ -245,7 +246,7 @@ public class ProjectTree extends JTree {
         addMouseMotionListener(new MouseAdapter() {
             @Override
             public void mouseMoved(MouseEvent e) {
-                setHoveredRow(fullWidthRowAt(e.getY()));
+                setHoveredRow(getRowForPath(TreeRows.fullWidthPathAt(ProjectTree.this, e.getY())));
             }
         });
         addMouseListener(new PopupTriggerListener(this::showPopup));
@@ -258,7 +259,7 @@ public class ProjectTree extends JTree {
             @Override
             public void mouseClicked(MouseEvent e) {
                 if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 2) {
-                    FileTreeNode node = nodeAt(e.getX(), e.getY());
+                    FileTreeNode node = nodeAt(e.getY());
                     if (node != null && node.getFile().isFile()) {
                         openOrUnzip(node.getFile());
                     }
@@ -336,23 +337,13 @@ public class ProjectTree extends JTree {
     }
 
     private void showPopup(MouseEvent e) {
-        int row = fullWidthRowAt(e.getY());
-        List<FileTreeNode> subject;
         JPopupMenu menu;
-        if (row < 0) {
+        if (TreeRows.selectForPopup(this, e.getY()) == null) {
             // Empty space is not subject-less: the click acts on the open folder itself
             // (ADR-0002 §4) — so New file…/New folder… etc. work at the root.
-            clearSelection();
             menu = model == null ? null : contextMenu.buildFromRoot((FileTreeNode) model.getRoot());
         } else {
-            if (!isRowSelected(row)) {
-                // Right-clicking a row outside the current selection acts on that row alone;
-                // right-clicking within a multi-selection keeps it, so the menu acts on all of
-                // it.
-                setSelectionRow(row);
-            }
-            subject = selectedNodes();
-            menu = contextMenu.build(subject);
+            menu = contextMenu.build(selectedNodes());
         }
         if (menu != null) {
             menu.show(this, e.getX(), e.getY());
@@ -620,32 +611,12 @@ public class ProjectTree extends JTree {
     }
 
     /**
-     * The node at {@code (x, y)}, treating rows as full-width (matching the full-width
-     * hover/selection painting) rather than {@link #getPathForLocation}, which only hits the
-     * renderer's actual (label-width) bounds. {@code x} is otherwise unused, kept only so call
-     * sites reporting a mouse position read naturally.
+     * Returns the node at {@code y}, treating rows as full-width, as the hover and selection
+     * paint them.
      */
-    private FileTreeNode nodeAt(int x, int y) {
-        int row = fullWidthRowAt(y);
-        if (row < 0) {
-            return null;
-        }
-        TreePath path = getPathForRow(row);
+    private FileTreeNode nodeAt(int y) {
+        TreePath path = TreeRows.fullWidthPathAt(this, y);
         return path != null && path.getLastPathComponent() instanceof FileTreeNode node ? node : null;
-    }
-
-    /**
-     * The row at {@code y}, treating rows as full-width (matching the full-width hover/selection
-     * painting) rather than {@link #getRowForLocation} which only hits the renderer's actual
-     * (label-width) bounds. Returns -1 below the last row.
-     */
-    private int fullWidthRowAt(int y) {
-        int row = getClosestRowForLocation(0, y);
-        if (row < 0) {
-            return -1;
-        }
-        Rectangle bounds = getRowBounds(row);
-        return (bounds != null && y >= bounds.y && y < bounds.y + bounds.height) ? row : -1;
     }
 
     /**
