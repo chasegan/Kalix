@@ -6,6 +6,12 @@ import org.junit.jupiter.api.Test;
 
 import javax.swing.Icon;
 import javax.swing.JToggleButton;
+import java.awt.Dimension;
+import java.awt.Rectangle;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseWheelEvent;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -22,7 +28,7 @@ class MapToolBarTest {
     }
 
     private static MapToolBar toolBar(ModelDocument doc) {
-        return assertInstanceOf(MapToolBar.class, view(doc).getComponent(0), "the toolbar sits first, at the top");
+        return assertInstanceOf(MapToolBar.class, view(doc).getComponent(0), "the toolbar is the top layer");
     }
 
     private static JToggleButton gridlinesButton(ModelDocument doc) {
@@ -37,6 +43,33 @@ class MapToolBarTest {
     void modelContextViewIsTheMapUnderItsToolBar() {
         ModelDocument doc = new ModelDocument();
         assertSame(doc.getMapPanel(), view(doc).getComponent(1));
+    }
+
+    @Test
+    void mapFillsTheViewAndTheToolBarFloatsTopRight() {
+        ModelDocument doc = new ModelDocument();
+        MapView view = view(doc);
+        view.setSize(600, 400);
+        view.doLayout();
+
+        assertEquals(new Rectangle(0, 0, 600, 400), doc.getMapPanel().getBounds());
+        Dimension size = toolBar(doc).getPreferredSize();
+        assertEquals(new Rectangle(600 - size.width - MapView.TOOLBAR_INSET, MapView.TOOLBAR_INSET,
+            size.width, size.height), toolBar(doc).getBounds());
+        assertTrue(view.getLayer(toolBar(doc)) > view.getLayer(doc.getMapPanel()), "the toolbar paints over the map");
+    }
+
+    @Test
+    void wheelOverTheToolBarReachesTheMap() {
+        ModelDocument doc = new ModelDocument();
+        List<MouseWheelEvent> received = new ArrayList<>();
+        doc.getMapPanel().addMouseWheelListener(received::add);
+        MapToolBar bar = toolBar(doc);
+
+        bar.dispatchEvent(new MouseWheelEvent(bar, MouseEvent.MOUSE_WHEEL, 0L, 0, 5, 5, 0, false,
+            MouseWheelEvent.WHEEL_UNIT_SCROLL, 1, 1));
+
+        assertEquals(1, received.size());
     }
 
     @Test
