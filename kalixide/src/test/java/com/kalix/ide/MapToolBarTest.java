@@ -1,8 +1,10 @@
 package com.kalix.ide;
 
 import com.kalix.ide.document.ModelDocument;
+import com.kalix.ide.icons.HollowIcon;
 import com.kalix.ide.rendering.NodeLabelMode;
 import org.junit.jupiter.api.Test;
+import org.kordamp.ikonli.swing.FontIcon;
 
 import javax.swing.Icon;
 import javax.swing.JToggleButton;
@@ -96,6 +98,24 @@ class MapToolBarTest {
         Icon names = labelsButton(doc).getIcon();
         doc.getMapPanel().setLabelMode(NodeLabelMode.AKA);
         assertNotSame(names, labelsButton(doc).getIcon());
+    }
+
+    @Test
+    void labelButtonKeepsItsSizeInEveryMode() {
+        ModelDocument doc = new ModelDocument();
+        Dimension names = labelsButton(doc).getPreferredSize();
+        for (NodeLabelMode mode : NodeLabelMode.values()) {
+            doc.getMapPanel().setLabelMode(mode);
+            assertEquals(names, labelsButton(doc).getPreferredSize(), mode.name());
+        }
+    }
+
+    @Test
+    void hiddenLabelsShowAHollowTag() {
+        ModelDocument doc = new ModelDocument();
+        assertInstanceOf(FontIcon.class, labelsButton(doc).getIcon(), "names: the solid tag");
+        doc.getMapPanel().setLabelMode(NodeLabelMode.HIDDEN);
+        assertInstanceOf(HollowIcon.class, labelsButton(doc).getIcon());
     }
 
     @Test

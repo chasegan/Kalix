@@ -1,12 +1,14 @@
 package com.kalix.ide;
 
 import com.kalix.ide.constants.AppConstants;
+import com.kalix.ide.icons.HollowIcon;
 import com.kalix.ide.rendering.NodeLabelMode;
 import com.kalix.ide.utils.ThemeUtils;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
 import javax.swing.BorderFactory;
+import javax.swing.Icon;
 import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
 import javax.swing.UIManager;
@@ -101,9 +103,19 @@ public final class MapToolBar extends JToolBar {
     /** The label icon depends on the mode, so it is rebuilt here. */
     private void refreshLabels() {
         NodeLabelMode mode = map.getLabelMode();
-        labelsButton.setIcon(icon(mode == NodeLabelMode.AKA ? FontAwesomeSolid.FONT : FontAwesomeSolid.TAG));
+        labelsButton.setIcon(labelIcon(mode));
         labelsButton.setSelected(mode.drawsLabels());
         labelsButton.setToolTipText(labelModeTooltip(mode));
+    }
+
+    /** Names: the tag. Akas: the "A". Hidden: the tag, hollow. */
+    private static Icon labelIcon(NodeLabelMode mode) {
+        return switch (mode) {
+            case NAMES -> icon(FontAwesomeSolid.TAG);
+            case AKA -> icon(FontAwesomeSolid.FONT);
+            case HIDDEN -> HollowIcon.of(FontAwesomeSolid.TAG, AppConstants.TOOLBAR_ICON_SIZE,
+                ThemeUtils.toolBarIconColor());
+        };
     }
 
     private static FontIcon icon(FontAwesomeSolid glyph) {
