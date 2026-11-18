@@ -18,6 +18,8 @@
 use crate::io::ini_model_io::IniModelIO;
 use crate::misc::configuration::SaveMethod;
 use crate::model::{Model, VarPhase};
+use std::fs;
+use std::path::Path;
 
 /// Load a model expected to fail at parse/load, returning the error text.
 /// (`Model` is not `Debug`, so `Result::expect_err` cannot be used.)
@@ -1130,6 +1132,7 @@ type = blackhole
 var.a.x
 ";
     let err = run_err(ini);
+    assert!(err.contains("'var.b.y', which has no value yet"), "unexpected: {err}");
     assert!(err.contains("Var block: '[var.a]'"), "context should name the block: {err}");
 }
 
@@ -1488,4 +1491,144 @@ type = blackhole";
     let model = run_model(&order_rig("set_order = var.o.x", mid, ""));
     assert_series(&series(&model, "var.o.x"), &[10.0; 5], "reads the user below bare");
     assert_series(&series(&model, "node.ctrl.set_order"), &[10.0; 5], "ctrl above reads it bare");
+}
+
+/// `phase` is read in any case: `ORDER` is the order phase, and a saved file
+/// keeps the text as written.
+#[test]
+fn phase_order_in_any_case() {
+    let mid = "[var.o]\nphase = ORDER\nx = node.user.order * 2";
+    let ini = order_rig("set_order = var.o.x", mid, "");
+    let model = run_model(&ini);
+    assert_eq!(model.var_blocks[0].phase, VarPhase::Order, "ORDER is the order phase");
+    assert_series(&series(&model, "node.ctrl.set_order"), &[10.0; 5], "ctrl above reads it bare");
+    let rendered = IniModelIO::model_to_string(&model);
+    assert!(rendered.contains("phase = ORDER"), "phase kept as written:\n{rendered}");
+}
+
+// ============================================================================
+// 11. All three phases in one model
+// ============================================================================
+
+/// One step runs the ras slot, then the order phase, then the flow phase. An
+/// order block reads a ras var and the user below it bare; the ctrl above reads
+/// the order block bare; a flow block at the top of the file reads both bare.
+#[test]
+fn ras_order_and_flow_blocks_in_one_model() {
+    let ini = "\
+[kalix]
+start = 2020-01-30
+end = 2020-02-03
+
+[var.r]
+phase = ras
+x = (sim.step + 1) * 10
+
+[var.f]
+z = var.o.y * 2 + var.r.x
+
+[node.dam]
+loc = 0, 0
+type = storage
+initial_volume = 2000
+dimensions = 0, 0, 0, 0, 1, 10000, 0, 0, 1.1, 10001, 0, 10000, 1.2, 10002, 0, 10000
+ds_1 = ctrl
+
+[node.ctrl]
+loc = 0, 10
+type = order_control
+set_order = var.o.y
+ds_1 = user
+
+[var.o]
+phase = order
+y = var.r.x + node.user.order
+
+[node.user]
+loc = 0, 20
+type = regulated_user
+order = 5
+ds_1 = gauge
+
+[node.gauge]
+loc = 0, 30
+type = gauge
+
+[outputs]
+node.ctrl.set_order
+";
+    let model = run_model(ini);
+    assert_series(&series(&model, "var.r.x"), &[10.0, 20.0, 30.0, 40.0, 50.0], "ras");
+    assert_series(&series(&model, "var.o.y"), &[15.0, 25.0, 35.0, 45.0, 55.0], "order reads ras and the user");
+    assert_series(&series(&model, "node.ctrl.set_order"), &[15.0, 25.0, 35.0, 45.0, 55.0], "ctrl reads order");
+    assert_series(&series(&model, "var.f.z"), &[40.0, 70.0, 100.0, 130.0, 160.0], "flow reads order and ras");
+}
+
+// ============================================================================
+// 12. The order phase with var blocks, on the regulated regression models
+// ============================================================================
+
+/// Regulated regression models, between them ordering through storages,
+/// routing, order controls, confluences, splitters, losses, fields and accounts.
+const REGULATED_REGRESSION_MODELS: &[&str] = &[
+    "15_order_controls/model.ini",
+    "16_alternating_water_source/model.ini",
+    "19_lots_of_ordering/model.ini",
+    "20_loss_extrapolation/model.ini",
+    "23_order_lag/model.ini",
+    "32_model_with_ras/model.ini",
+    "38_reg_splitter/kalix.ini",
+    "39_field/kalix.ini",
+    "41_field_rotation/kalix.ini",
+    "5_model_with_every_node/model_with_every_node_type.ini",
+];
+
+/// Load and run model text, resolving its data files from `dir`.
+fn run_model_in(dir: &Path, ini: &str) -> Model {
+    let mut model = IniModelIO::read_model_string_with_working_directory(ini, Some(dir.to_path_buf()))
+        .unwrap_or_else(|e| panic!("model in {} should load: {e}", dir.display()));
+    model.configure().unwrap_or_else(|e| panic!("configure should succeed: {e}"));
+    model.run().unwrap_or_else(|e| panic!("run should succeed: {e}"));
+    model
+}
+
+/// An unread order block before every node section sends the model through the
+/// order phase with var blocks, which must visit the same nodes the same way:
+/// every series the plain model has comes out bit-identical.
+#[test]
+fn unread_order_blocks_leave_regulated_regression_models_unchanged() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("regression_tests/simulations");
+    for rel in REGULATED_REGRESSION_MODELS {
+        let path = root.join(rel);
+        let dir = path.parent().unwrap();
+        let ini = fs::read_to_string(&path).unwrap_or_else(|e| panic!("{rel}: {e}"));
+
+        let mut probed = String::new();
+        let mut blocks = 0;
+        for line in ini.lines() {
+            if line.starts_with("[node.") {
+                probed.push_str(&format!("[var.order_probe_{blocks}]\nphase = order\nx = sim.step\n\n"));
+                blocks += 1;
+            }
+            probed.push_str(line);
+            probed.push('\n');
+        }
+        assert!(blocks > 0, "{rel}: no node sections found");
+
+        let plain = run_model_in(dir, &ini);
+        let with_blocks = run_model_in(dir, &probed);
+        assert!(!plain.simple_ordering_system.has_order_var_blocks(), "{rel}: plain model has order blocks");
+        assert!(with_blocks.simple_ordering_system.has_order_var_blocks(), "{rel}: probes not merged");
+
+        for (idx, name) in plain.data_cache.series_name.iter().enumerate() {
+            let other = with_blocks.data_cache.get_existing_series_idx(name)
+                .unwrap_or_else(|| panic!("{rel}: series '{name}' missing with order blocks"));
+            let a = &plain.data_cache.series[idx].values;
+            let b = &with_blocks.data_cache.series[other].values;
+            assert_eq!(a.len(), b.len(), "{rel}: '{name}' length differs");
+            for (step, (x, y)) in a.iter().zip(b).enumerate() {
+                assert_eq!(x.to_bits(), y.to_bits(), "{rel}: '{name}' differs at step {step}: {x} vs {y}");
+            }
+        }
+    }
 }
