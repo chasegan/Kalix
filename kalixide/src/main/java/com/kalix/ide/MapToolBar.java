@@ -70,7 +70,7 @@ public final class MapToolBar extends JToolBar {
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2.setColor(themeColor("ToolBar.background", Color.WHITE));
         g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, ARC, ARC);
-        g2.setColor(themeColor("Component.borderColor", Color.LIGHT_GRAY));
+        g2.setColor(themeColor("ToolBar.borderColor", themeColor("Component.borderColor", Color.LIGHT_GRAY)));
         g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, ARC, ARC);
         g2.dispose();
     }
