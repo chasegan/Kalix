@@ -272,8 +272,10 @@ The node runs these steps in this order.
 1. **Planting, harvest and abandonment.** These run first, so that the day's orders and
    fluxes use the day's areas. The rules they read, `crop_N_plant` and `crop_N_viable_area`,
    are read in the order phase, like `crop_N_order`, before any node's flow phase has run, so
-   they see the previous step's values (`[-1, 0]`). A field outside every regulated zone has
-   no order phase and reads them at the start of its flow phase instead.
+   they read flow results at the previous step (`[-1, 0]`). They read bare the ras-phase
+   values and the order-phase values of nodes and var blocks below the field (see
+   [Phase](vars.md#phase)). A field outside every regulated zone has no order phase and reads
+   them at the start of its flow phase instead.
 
    A crop whose days since planting reach its `season_len` is harvested and its land goes
    back to the fallow. A crop's area then becomes `min(area, crop_N_viable_area)`. Under the
