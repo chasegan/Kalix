@@ -1,5 +1,6 @@
 package com.kalix.ide.filedialog;
 
+import com.kalix.ide.components.PopupTriggerListener;
 import com.kalix.ide.io.FileVisuals;
 
 import javax.swing.JComponent;
@@ -92,17 +93,8 @@ final class ListFileView {
                     activate(selectedEntry());
                 }
             }
-
-            @Override
-            public void mousePressed(MouseEvent e) {
-                maybeShowPopup(e);
-            }
-
-            @Override
-            public void mouseReleased(MouseEvent e) {
-                maybeShowPopup(e);
-            }
         });
+        table.addMouseListener(new PopupTriggerListener(this::showPopup));
         // Enter activates; JTable's default Enter action (move to next row) is overridden.
         table.addKeyListener(new KeyAdapter() {
             @Override
@@ -246,10 +238,7 @@ final class ListFileView {
         }
     }
 
-    private void maybeShowPopup(MouseEvent e) {
-        if (!e.isPopupTrigger()) {
-            return;
-        }
+    private void showPopup(MouseEvent e) {
         int viewRow = table.rowAtPoint(e.getPoint());
         if (viewRow < 0) {
             // Empty space acts on the folder being viewed (ADR-0002 §4).

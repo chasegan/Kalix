@@ -1,5 +1,6 @@
 package com.kalix.ide.workspace.tree;
 
+import com.kalix.ide.components.PopupTriggerListener;
 import com.kalix.ide.io.FsWatcher;
 import com.kalix.ide.io.CsvZipFormat;
 import org.slf4j.Logger;
@@ -247,20 +248,11 @@ public class ProjectTree extends JTree {
                 setHoveredRow(fullWidthRowAt(e.getY()));
             }
         });
+        addMouseListener(new PopupTriggerListener(this::showPopup));
         addMouseListener(new MouseAdapter() {
             @Override
             public void mouseExited(MouseEvent e) {
                 setHoveredRow(-1);
-            }
-
-            @Override
-            public void mousePressed(MouseEvent e) {
-                maybeShowPopup(e);
-            }
-
-            @Override
-            public void mouseReleased(MouseEvent e) {
-                maybeShowPopup(e);
             }
 
             @Override
@@ -343,10 +335,7 @@ public class ProjectTree extends JTree {
         }
     }
 
-    private void maybeShowPopup(MouseEvent e) {
-        if (!e.isPopupTrigger()) {
-            return;
-        }
+    private void showPopup(MouseEvent e) {
         int row = fullWidthRowAt(e.getY());
         List<FileTreeNode> subject;
         JPopupMenu menu;

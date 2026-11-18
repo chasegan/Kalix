@@ -1,5 +1,6 @@
 package com.kalix.ide.workspace;
 
+import com.kalix.ide.components.PopupTriggerListener;
 import com.kalix.ide.workspace.tree.ProjectTree;
 import com.kalix.ide.workspace.tree.TreeHost;
 
@@ -12,8 +13,6 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Font;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.io.File;
 
 /**
@@ -42,23 +41,8 @@ public class ProjectTreePanel extends JPanel {
 
         // Right-clicking the header acts on the open folder itself — the same root context menu
         // as right-clicking empty tree space (ADR-0002 §4).
-        header.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mousePressed(MouseEvent e) {
-                maybeShowRootMenu(e);
-            }
-
-            @Override
-            public void mouseReleased(MouseEvent e) {
-                maybeShowRootMenu(e);
-            }
-
-            private void maybeShowRootMenu(MouseEvent e) {
-                if (e.isPopupTrigger()) {
-                    tree.showRootContextMenu(header, e.getX(), e.getY());
-                }
-            }
-        });
+        header.addMouseListener(new PopupTriggerListener(
+            e -> tree.showRootContextMenu(header, e.getX(), e.getY())));
         JScrollPane scroll = new JScrollPane(tree);
         scroll.setBorder(null);
         scroll.putClientProperty("JScrollPane.smoothScrolling", Boolean.TRUE);

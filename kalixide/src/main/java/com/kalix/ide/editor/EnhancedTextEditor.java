@@ -33,6 +33,7 @@ import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
 import com.kalix.ide.components.KalixIniTextArea;
+import com.kalix.ide.components.PopupTriggerListener;
 import org.fife.ui.rsyntaxtextarea.RSyntaxDocument;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 import org.fife.ui.rsyntaxtextarea.TokenMaker;
@@ -443,191 +444,177 @@ public class EnhancedTextEditor extends JPanel {
      * Sets up the right-click context menu with context-aware commands.
      */
     private void setupContextMenu() {
-        textArea.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mousePressed(MouseEvent e) {
-                if (e.isPopupTrigger()) {
-                    showContextMenu(e);
-                }
-            }
+        textArea.addMouseListener(new PopupTriggerListener(this::showContextMenu));
+    }
 
-            @Override
-            public void mouseReleased(MouseEvent e) {
-                if (e.isPopupTrigger()) {
-                    showContextMenu(e);
-                }
-            }
+    private void showContextMenu(MouseEvent e) {
+        // Move caret to click position if not clicking within a selection
+        int clickOffset = textArea.viewToModel2D(e.getPoint());
+        int selStart = textArea.getSelectionStart();
+        int selEnd = textArea.getSelectionEnd();
 
-            private void showContextMenu(MouseEvent e) {
-                // Move caret to click position if not clicking within a selection
-                int clickOffset = textArea.viewToModel2D(e.getPoint());
-                int selStart = textArea.getSelectionStart();
-                int selEnd = textArea.getSelectionEnd();
+        boolean hasSelection = selStart != selEnd;
+        boolean clickInSelection = hasSelection && clickOffset >= selStart && clickOffset <= selEnd;
 
-                boolean hasSelection = selStart != selEnd;
-                boolean clickInSelection = hasSelection && clickOffset >= selStart && clickOffset <= selEnd;
+        if (!clickInSelection) {
+            // Move caret to click position
+            textArea.setCaretPosition(clickOffset);
+        }
 
-                if (!clickInSelection) {
-                    // Move caret to click position
-                    textArea.setCaretPosition(clickOffset);
-                }
+        // Build a fresh menu each time
+        JPopupMenu menu = createContextMenu();
 
-                // Build a fresh menu each time
-                JPopupMenu menu = createContextMenu();
+        // Show menu at click location
+        menu.show(e.getComponent(), e.getX(), e.getY());
+    }
 
-                // Show menu at click location
-                menu.show(e.getComponent(), e.getX(), e.getY());
-            }
+    /**
+     * Factory method that creates a fresh context menu with standard actions
+     * and context-aware commands.
+     */
+    private JPopupMenu createContextMenu() {
+        JPopupMenu menu = new JPopupMenu();
 
-            /**
-             * Factory method that creates a fresh context menu with standard actions
-             * and context-aware commands.
-             */
-            private JPopupMenu createContextMenu() {
-                JPopupMenu menu = new JPopupMenu();
+        // Add standard editing actions
+        menu.add(createMenuItem("Undo", textArea.getAction(org.fife.ui.rtextarea.RTextArea.UNDO_ACTION)));
+        menu.add(createMenuItem("Redo", textArea.getAction(org.fife.ui.rtextarea.RTextArea.REDO_ACTION)));
+        menu.addSeparator();
+        menu.add(createMenuItem("Cut", textArea.getAction(org.fife.ui.rtextarea.RTextArea.CUT_ACTION), MenuIcons.cut()));
+        menu.add(createMenuItem("Copy", textArea.getAction(org.fife.ui.rtextarea.RTextArea.COPY_ACTION), MenuIcons.copy()));
+        menu.add(createMenuItem("Paste", textArea.getAction(org.fife.ui.rtextarea.RTextArea.PASTE_ACTION), MenuIcons.paste()));
+        menu.add(createMenuItem("Delete", textArea.getAction(org.fife.ui.rtextarea.RTextArea.DELETE_ACTION), MenuIcons.delete()));
+        menu.addSeparator();
+        menu.add(createMenuItem("Select all", textArea.getAction(org.fife.ui.rtextarea.RTextArea.SELECT_ALL_ACTION)));
 
-                // Add standard editing actions
-                menu.add(createMenuItem("Undo", textArea.getAction(org.fife.ui.rtextarea.RTextArea.UNDO_ACTION)));
-                menu.add(createMenuItem("Redo", textArea.getAction(org.fife.ui.rtextarea.RTextArea.REDO_ACTION)));
-                menu.addSeparator();
-                menu.add(createMenuItem("Cut", textArea.getAction(org.fife.ui.rtextarea.RTextArea.CUT_ACTION), MenuIcons.cut()));
-                menu.add(createMenuItem("Copy", textArea.getAction(org.fife.ui.rtextarea.RTextArea.COPY_ACTION), MenuIcons.copy()));
-                menu.add(createMenuItem("Paste", textArea.getAction(org.fife.ui.rtextarea.RTextArea.PASTE_ACTION), MenuIcons.paste()));
-                menu.add(createMenuItem("Delete", textArea.getAction(org.fife.ui.rtextarea.RTextArea.DELETE_ACTION), MenuIcons.delete()));
-                menu.addSeparator();
-                menu.add(createMenuItem("Select all", textArea.getAction(org.fife.ui.rtextarea.RTextArea.SELECT_ALL_ACTION)));
+        // Show Suggestions (auto-complete)
+        // Tried event-based trigger, but couldn't get stable behaviour.
+        // Resorted to using a timer delay to allow UI to reestablish focus
+        // before launching autocomplete.
+        if (autoCompleteManager != null) {
+            menu.addSeparator();
+            JMenuItem suggestionsItem = new JMenuItem("Show suggestions");
+            // Shortcut hint belongs in the accelerator slot, not the label (ADR-0002 §2.7).
+            // Ctrl+Space on all platforms (Cmd+Space is Spotlight on macOS).
+            suggestionsItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, InputEvent.CTRL_DOWN_MASK));
+            suggestionsItem.addActionListener(ae -> {
+                javax.swing.Timer timer = new javax.swing.Timer(150, evt -> {
+                    textArea.requestFocusInWindow();
+                    showSuggestions();
+                });
+                timer.setRepeats(false);
+                timer.start();
+            });
+            menu.add(suggestionsItem);
+        }
 
-                // Show Suggestions (auto-complete)
-                // Tried event-based trigger, but couldn't get stable behaviour.
-                // Resorted to using a timer delay to allow UI to reestablish focus
-                // before launching autocomplete.
-                if (autoCompleteManager != null) {
+        // Add navigation items based on context
+        if (commandModelSupplier != null) {
+            com.kalix.ide.editor.commands.ContextDetector contextDetector = new com.kalix.ide.editor.commands.ContextDetector();
+            com.kalix.ide.editor.commands.EditorContext ctx = contextDetector.detectContext(
+                textArea.getCaretPosition(), textArea.getText(),
+                textArea.getSelectedText(), commandModelSupplier.get());
+
+            boolean addedSeparator = false;
+
+            // "Go to Node Definition" if cursor is on a ds_X property
+            if (ctx.getPropertyKey().isPresent() && ctx.getPropertyValue().isPresent()) {
+                String propKey = ctx.getPropertyKey().get();
+                String propValue = ctx.getPropertyValue().get();
+                if (propKey.matches("ds_\\d+") && !propValue.isEmpty()) {
                     menu.addSeparator();
-                    JMenuItem suggestionsItem = new JMenuItem("Show suggestions");
-                    // Shortcut hint belongs in the accelerator slot, not the label (ADR-0002 §2.7).
-                    // Ctrl+Space on all platforms (Cmd+Space is Spotlight on macOS).
-                    suggestionsItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, InputEvent.CTRL_DOWN_MASK));
-                    suggestionsItem.addActionListener(ae -> {
-                        javax.swing.Timer timer = new javax.swing.Timer(150, evt -> {
-                            textArea.requestFocusInWindow();
-                            showSuggestions();
-                        });
-                        timer.setRepeats(false);
-                        timer.start();
-                    });
-                    menu.add(suggestionsItem);
+                    addedSeparator = true;
+                    JMenuItem goToNodeItem = new JMenuItem("Go to node definition");
+                    goToNodeItem.addActionListener(ae -> scrollToNode(propValue));
+                    menu.add(goToNodeItem);
+                }
+            }
+
+            // "Show on Map" if cursor is in a node section
+            if (mapPanel != null && ctx.getNodeName().isPresent()) {
+                String nodeName = ctx.getNodeName().get();
+                if (!addedSeparator) {
+                    menu.addSeparator();
+                }
+                JMenuItem showOnMapItem = new JMenuItem("Show on map");
+                showOnMapItem.addActionListener(ae -> mapPanel.selectNodeFromEditor(nodeName));
+                menu.add(showOnMapItem);
+            }
+        }
+
+        // Add context-aware commands if available
+        if (contextCommandManager != null) {
+            java.util.List<com.kalix.ide.editor.commands.EditorCommand> commands =
+                contextCommandManager.getApplicableCommands();
+
+            if (!commands.isEmpty()) {
+                menu.addSeparator();
+
+                // Group commands by category
+                java.util.Map<String, java.util.List<com.kalix.ide.editor.commands.EditorCommand>> commandsByCategory =
+                    new java.util.LinkedHashMap<>();
+
+                for (com.kalix.ide.editor.commands.EditorCommand command : commands) {
+                    String category = command.getMetadata().getCategory();
+                    commandsByCategory.computeIfAbsent(category, k -> new java.util.ArrayList<>()).add(command);
                 }
 
-                // Add navigation items based on context
-                if (commandModelSupplier != null) {
-                    com.kalix.ide.editor.commands.ContextDetector contextDetector = new com.kalix.ide.editor.commands.ContextDetector();
-                    com.kalix.ide.editor.commands.EditorContext ctx = contextDetector.detectContext(
-                        textArea.getCaretPosition(), textArea.getText(),
-                        textArea.getSelectedText(), commandModelSupplier.get());
+                // Add menu items grouped by category
+                for (java.util.Map.Entry<String, java.util.List<com.kalix.ide.editor.commands.EditorCommand>> entry : commandsByCategory.entrySet()) {
+                    String category = entry.getKey();
+                    java.util.List<com.kalix.ide.editor.commands.EditorCommand> categoryCommands = entry.getValue();
 
-                    boolean addedSeparator = false;
-
-                    // "Go to Node Definition" if cursor is on a ds_X property
-                    if (ctx.getPropertyKey().isPresent() && ctx.getPropertyValue().isPresent()) {
-                        String propKey = ctx.getPropertyKey().get();
-                        String propValue = ctx.getPropertyValue().get();
-                        if (propKey.matches("ds_\\d+") && !propValue.isEmpty()) {
-                            menu.addSeparator();
-                            addedSeparator = true;
-                            JMenuItem goToNodeItem = new JMenuItem("Go to node definition");
-                            goToNodeItem.addActionListener(ae -> scrollToNode(propValue));
-                            menu.add(goToNodeItem);
+                    if (!category.isEmpty()) {
+                        // Commands with category - create submenu
+                        JMenu submenu = new JMenu(category);
+                        for (com.kalix.ide.editor.commands.EditorCommand command : categoryCommands) {
+                            JMenuItem item = new JMenuItem(buildMenuLabel(command, null));
+                            item.addActionListener(ae -> contextCommandManager.executeCommand(command));
+                            submenu.add(item);
                         }
-                    }
+                        menu.add(submenu);
+                    } else {
+                        // Commands with no category - add directly
+                        for (com.kalix.ide.editor.commands.EditorCommand command : categoryCommands) {
+                            // Customize display name for certain commands
+                            String displayName = command.getMetadata().getDisplayName();
 
-                    // "Show on Map" if cursor is in a node section
-                    if (mapPanel != null && ctx.getNodeName().isPresent()) {
-                        String nodeName = ctx.getNodeName().get();
-                        if (!addedSeparator) {
-                            menu.addSeparator();
-                        }
-                        JMenuItem showOnMapItem = new JMenuItem("Show on map");
-                        showOnMapItem.addActionListener(ae -> mapPanel.selectNodeFromEditor(nodeName));
-                        menu.add(showOnMapItem);
-                    }
-                }
-
-                // Add context-aware commands if available
-                if (contextCommandManager != null) {
-                    java.util.List<com.kalix.ide.editor.commands.EditorCommand> commands =
-                        contextCommandManager.getApplicableCommands();
-
-                    if (!commands.isEmpty()) {
-                        menu.addSeparator();
-
-                        // Group commands by category
-                        java.util.Map<String, java.util.List<com.kalix.ide.editor.commands.EditorCommand>> commandsByCategory =
-                            new java.util.LinkedHashMap<>();
-
-                        for (com.kalix.ide.editor.commands.EditorCommand command : commands) {
-                            String category = command.getMetadata().getCategory();
-                            commandsByCategory.computeIfAbsent(category, k -> new java.util.ArrayList<>()).add(command);
-                        }
-
-                        // Add menu items grouped by category
-                        for (java.util.Map.Entry<String, java.util.List<com.kalix.ide.editor.commands.EditorCommand>> entry : commandsByCategory.entrySet()) {
-                            String category = entry.getKey();
-                            java.util.List<com.kalix.ide.editor.commands.EditorCommand> categoryCommands = entry.getValue();
-
-                            if (!category.isEmpty()) {
-                                // Commands with category - create submenu
-                                JMenu submenu = new JMenu(category);
-                                for (com.kalix.ide.editor.commands.EditorCommand command : categoryCommands) {
-                                    JMenuItem item = new JMenuItem(buildMenuLabel(command, null));
-                                    item.addActionListener(ae -> contextCommandManager.executeCommand(command));
-                                    submenu.add(item);
-                                }
-                                menu.add(submenu);
-                            } else {
-                                // Commands with no category - add directly
-                                for (com.kalix.ide.editor.commands.EditorCommand command : categoryCommands) {
-                                    // Customize display name for certain commands
-                                    String displayName = command.getMetadata().getDisplayName();
-
-                                    // For rename command, include the node name
-                                    if ("rename_node".equals(command.getMetadata().getId())) {
-                                        com.kalix.ide.editor.commands.EditorContext context = contextCommandManager.getCurrentContext();
-                                        if (context.getNodeName().isPresent()) {
-                                            displayName = "Rename \"" + context.getNodeName().get() + "\"";
-                                        }
-                                    }
-
-                                    JMenuItem item = new JMenuItem(buildMenuLabel(command, displayName));
-                                    item.addActionListener(ae -> contextCommandManager.executeCommand(command));
-                                    menu.add(item);
+                            // For rename command, include the node name
+                            if ("rename_node".equals(command.getMetadata().getId())) {
+                                com.kalix.ide.editor.commands.EditorContext context = contextCommandManager.getCurrentContext();
+                                if (context.getNodeName().isPresent()) {
+                                    displayName = "Rename \"" + context.getNodeName().get() + "\"";
                                 }
                             }
+
+                            JMenuItem item = new JMenuItem(buildMenuLabel(command, displayName));
+                            item.addActionListener(ae -> contextCommandManager.executeCommand(command));
+                            menu.add(item);
                         }
                     }
                 }
-
-                return menu;
             }
+        }
 
-            /**
-             * Helper to create a menu item from an action.
-             */
-            private JMenuItem createMenuItem(String name, Action action) {
-                JMenuItem item = new JMenuItem(name);
-                if (action != null) {
-                    item.addActionListener(action);
-                    item.setEnabled(action.isEnabled());
-                }
-                return item;
-            }
+        return menu;
+    }
 
-            /** As {@link #createMenuItem(String, Action)} but with a sparse landmark icon (ADR-0002 §3). */
-            private JMenuItem createMenuItem(String name, Action action, Icon icon) {
-                JMenuItem item = createMenuItem(name, action);
-                item.setIcon(icon);
-                return item;
-            }
-        });
+    /**
+     * Helper to create a menu item from an action.
+     */
+    private JMenuItem createMenuItem(String name, Action action) {
+        JMenuItem item = new JMenuItem(name);
+        if (action != null) {
+            item.addActionListener(action);
+            item.setEnabled(action.isEnabled());
+        }
+        return item;
+    }
+
+    /** As {@link #createMenuItem(String, Action)} but with a sparse landmark icon (ADR-0002 §3). */
+    private JMenuItem createMenuItem(String name, Action action, Icon icon) {
+        JMenuItem item = createMenuItem(name, action);
+        item.setIcon(icon);
+        return item;
     }
 
     /**
