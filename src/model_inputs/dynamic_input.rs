@@ -2282,7 +2282,12 @@ impl DynamicInput {
             }
             advance_all(stateful, data_cache);
         }
-        optimised_ast.evaluate(data_cache)
+        // A bare stateful call (the common case) is read straight from its
+        // slot, skipping a second recursive dispatch.
+        match optimised_ast {
+            OptimizedExpressionNode::StateSlot { f_off } => data_cache.expr_state.f[*f_off],
+            _ => optimised_ast.evaluate(data_cache),
+        }
     }
 
     /// Get the expression string for serialization
