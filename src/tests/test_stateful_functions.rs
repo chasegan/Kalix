@@ -567,6 +567,245 @@ fn test_stateful_over_program_local() {
     assert_series(&got, &[2.0, 6.0, 10.0, 14.0], "moving_sum over local");
 }
 
+/// C17. A stateful call nested in each argument position of another advances
+/// first in the same step, so the outer call samples the inner's value as of
+/// this step. Advancing the outer first would sample last step's inner value
+/// and shift every series below by one step.
+#[test]
+fn test_nested_stateful_advances_before_its_parent() {
+    let values = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+    let cases: [(&str, [f64; 6]); 5] = [
+        // moving_sum(x,2,0) = [1,3,5,7,9,11]
+        ("moving_max(moving_sum(data.x, 2, 0), 2, 0)", [1.0, 3.0, 5.0, 7.0, 9.0, 11.0]),
+        ("sum_since(moving_sum(data.x, 2, 0), sim.step == 3)", [1.0, 4.0, 9.0, 7.0, 16.0, 27.0]),
+        // reset fires when moving_sum(x,2,0) > 6, i.e. steps 3, 4, 5
+        ("steps_since(moving_sum(data.x, 2, 0) > 6)", [0.0, 1.0, 2.0, 0.0, 0.0, 0.0]),
+        ("latch(moving_sum(data.x, 2, 0), sim.step == 2, 0)", [0.0, 0.0, 5.0, 5.0, 5.0, 5.0]),
+        // condition fires when moving_sum(x,2,0) > 6, sampling x at steps 3-5
+        ("latch(data.x, moving_sum(data.x, 2, 0) > 6, 0)", [0.0, 0.0, 0.0, 4.0, 5.0, 6.0]),
+    ];
+    for (expr, expected) in cases {
+        let mut dc = cache_with_x(&values);
+        let input = DynamicInput::from_string(expr, &mut dc, true, None).unwrap();
+        let got = run_steps(&input, &mut dc, values.len());
+        assert_series(&got, &expected, expr);
+    }
+}
+
+/// C18. A stateful call buried in stateless operators, inside another
+/// stateful call's argument, still advances every step.
+#[test]
+fn test_stateful_buried_in_stateless_tree_advances() {
+    let mut dc = cache_with_x(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+    let input = DynamicInput::from_string(
+        "1 + latch(abs(-moving_sum(data.x, 3, 0)) * 2, sim.step == 1 || sim.step == 4, 0)",
+        &mut dc, true, None).unwrap();
+    let got = run_steps(&input, &mut dc, 6);
+    // moving_sum(x,3,0) = [1,3,6,9,12,15]; sampled x2 at steps 1 and 4.
+    assert_series(&got, &[1.0, 7.0, 7.0, 7.0, 25.0, 25.0], "buried latch");
+}
+
+/// C19. Program interleave: a stateful call samples a local as assigned
+/// above it, not as reassigned below it.
+#[test]
+fn test_stateful_samples_local_before_later_reassignment() {
+    let mut dc = cache_with_x(&[1.0, 2.0, 3.0, 4.0]);
+    let input = DynamicInput::from_string(
+        "{ y = data.x; s = moving_sum(y, 2, 0); y = 100; s + y }", &mut dc, true, None)
+        .unwrap();
+    let got = run_steps(&input, &mut dc, 4);
+    // s = moving_sum(x,2,0) = [1,3,5,7]; result s + 100.
+    assert_series(&got, &[101.0, 103.0, 105.0, 107.0], "interleaved local");
+}
+
+/// C20. Guard on a bare single-slot call (read straight from its slot): a
+/// second get_value in the same step returns the same value and does not
+/// advance again.
+#[test]
+fn test_guard_no_double_advance_bare_slot() {
+    let values = [1.0, 2.0, 3.0, 4.0, 5.0];
+    for expr in ["sum_since(data.x, sim.step == 3)", "steps_since(0)",
+                 "latch(data.x, sim.step >= 2, 0)"] {
+        let mut dc = cache_with_x(&values);
+        let once = DynamicInput::from_string(expr, &mut dc, true, None).unwrap();
+        let twice = DynamicInput::from_string(expr, &mut dc, true, None).unwrap();
+        for k in 0..values.len() {
+            dc.set_current_step(k);
+            let a = once.get_value(&mut dc);
+            let b1 = twice.get_value(&mut dc);
+            let b2 = twice.get_value(&mut dc);
+            assert_eq!(b1, b2, "{} step {}: a second call must not advance state", expr, k);
+            assert_eq!(a, b1, "{} step {}: twice-calling must match once-calling", expr, k);
+        }
+    }
+}
+
+/// C21. Step-0 read validation covers a stateful call's inputs even when
+/// evaluation never reads them: a held latch's value is never evaluated,
+/// yet a reference with no value must still fail on the first step.
+#[test]
+#[should_panic(expected = "has no value yet")]
+fn test_step0_validation_covers_held_latch_value() {
+    let mut dc = cache_with_x(&[1.0, 2.0]);
+    add_series(&mut dc, "data.empty", &[], true);
+    let input = DynamicInput::from_string("latch(data.empty, 0, 5)", &mut dc, true, None).unwrap();
+    run_steps(&input, &mut dc, 1);
+}
+
+/// C22. Program guard: a program read twice in one step (order phase then
+/// flow phase, say) advances its stateful calls once.
+#[test]
+fn test_program_guard_no_double_advance() {
+    let mut dc = cache_with_x(&[1.0, 2.0, 3.0, 4.0]);
+    let input = DynamicInput::from_string("{ a = steps_since(0); a }", &mut dc, true, None).unwrap();
+    for k in 0..4 {
+        dc.set_current_step(k);
+        let first = input.get_value(&mut dc);
+        let second = input.get_value(&mut dc);
+        assert_eq!(first, k as f64, "step {}: one advance per step", k);
+        assert_eq!(second, first, "step {}: a second read must not advance", k);
+    }
+}
+
+/// C23. Each statement advances only its own stateful calls: a call in the
+/// first statement must not also advance with the statements after it.
+#[test]
+fn test_program_statement_advances_only_its_own_calls() {
+    let mut dc = cache_with_x(&[1.0, 2.0, 3.0, 4.0]);
+    let input = DynamicInput::from_string(
+        "{ a = steps_since(0); b = data.x; c = b; a + 0 * c }", &mut dc, true, None).unwrap();
+    let got = run_steps(&input, &mut dc, 4);
+    assert_series(&got, &[0.0, 1.0, 2.0, 3.0], "steps_since in first statement");
+}
+
+/// C24. A stateful call inside an assert advances exactly once per step:
+/// steps_since(0) must equal x - 1 (x = 1, 2, 3, 4), so a stalled or doubled
+/// count fails the assert. The statement after it exposes a leak of the
+/// assert's calls into later statements.
+#[test]
+fn test_stateful_call_in_assert_advances() {
+    let mut dc = cache_with_x(&[1.0, 2.0, 3.0, 4.0]);
+    let input = DynamicInput::from_string(
+        "{ assert(steps_since(0) == data.x - 1); b = data.x; b }", &mut dc, true, None).unwrap();
+    let got = run_steps(&input, &mut dc, 4);
+    assert_series(&got, &[1.0, 2.0, 3.0, 4.0], "assert over steps_since");
+}
+
+/// C24b. On an untaken inlined-if side, which runs silently, an assert's
+/// stateful calls still advance though the assert does not fire. Steps 0-1
+/// are untaken (x <= 2); at step 2 the count must already be 2.
+#[test]
+fn test_stateful_call_in_untaken_assert_still_advances() {
+    let mut dc = cache_with_x(&[1.0, 2.0, 3.0, 4.0]);
+    dc.fns.parse_and_insert("g(a)", "{ assert(steps_since(0) == a - 1); a * 10 }").unwrap();
+    let input = DynamicInput::from_string(
+        "{ r = if(data.x > 2, fn.g(data.x), 0); r }", &mut dc, true, None).unwrap();
+    let got = run_steps(&input, &mut dc, 4);
+    assert_series(&got, &[0.0, 0.0, 30.0, 40.0], "assert in untaken side");
+}
+
+/// C25. A stateful call in the condition of an inlined `if` (an OptStmt::Cond)
+/// advances once per step: not stalled, and not again with the statement
+/// after it (here the assignment to `a`). steps_since(0) < 2 holds on steps
+/// 0 and 1 only.
+#[test]
+fn test_stateful_call_in_inlined_if_condition_advances_once() {
+    let mut dc = cache_with_x(&[1.0, 2.0, 3.0, 4.0]);
+    dc.fns.parse_and_insert("tenfold(a)", "a * 10").unwrap();
+    let input = DynamicInput::from_string(
+        "{ a = if(steps_since(0) < 2, fn.tenfold(data.x), 0); a }", &mut dc, true, None).unwrap();
+    let got = run_steps(&input, &mut dc, 4);
+    assert_series(&got, &[10.0, 20.0, 0.0, 0.0], "steps_since in inlined if condition");
+}
+
+/// Helper for C26: a cache with data.x and an empty data.empty, lowering
+/// `expr` (with fn.tenfold available) and running one step, which must fail
+/// step-0 validation.
+fn run_one_step_with_empty_series(expr: &str) {
+    let mut dc = cache_with_x(&[1.0, 2.0]);
+    add_series(&mut dc, "data.empty", &[], true);
+    dc.fns.parse_and_insert("tenfold(a)", "a * 10").unwrap();
+    let input = DynamicInput::from_string(expr, &mut dc, true, None).unwrap();
+    run_steps(&input, &mut dc, 1);
+}
+
+/// C26. Step-0 validation covers stateful inputs that evaluation never reads
+/// (a held latch's value, an untaken branch of a reset) in every owner:
+/// program statement, program result, inlined-if condition, and a *_since
+/// reset.
+#[test]
+#[should_panic(expected = "has no value yet")]
+fn test_step0_validation_covers_program_statement() {
+    run_one_step_with_empty_series("{ s = latch(data.empty, 0, 5); s }");
+}
+
+#[test]
+#[should_panic(expected = "has no value yet")]
+fn test_step0_validation_covers_program_result() {
+    run_one_step_with_empty_series("{ latch(data.empty, 0, 5) }");
+}
+
+#[test]
+#[should_panic(expected = "has no value yet")]
+fn test_step0_validation_covers_inlined_if_condition() {
+    run_one_step_with_empty_series(
+        "{ a = if(latch(data.empty, 0, 1) > 0, fn.tenfold(data.x), 0); a }");
+}
+
+#[test]
+#[should_panic(expected = "has no value yet")]
+fn test_step0_validation_covers_since_reset() {
+    run_one_step_with_empty_series("sum_since(1, if(sim.step > 100, data.empty, 0))");
+}
+
+/// C26b. The same for a statement on an untaken inlined-if side, and for
+/// every other input of a stateful call: a *_since value, a latch
+/// condition, a moving window's value.
+#[test]
+fn test_step0_validation_covers_cond_sides_and_every_stateful_input() {
+    let untaken = "if(sim.step > 100, data.empty, 0)";
+    let cases = [
+        "{ r = if(data.x > 100, fn.held_empty(data.x), 0); r }".to_string(),
+        // `||` puts the right operand's statements on the else side.
+        "{ r = (data.x > 100) || (fn.held_empty(data.x) > 0); r }".to_string(),
+        format!("sum_since({}, 0)", untaken),
+        format!("latch(1, {}, 5)", untaken),
+        format!("moving_sum({}, 2, 0)", untaken),
+    ];
+    for expr in &cases {
+        let result = std::panic::catch_unwind(|| {
+            let mut dc = cache_with_x(&[1.0, 2.0]);
+            add_series(&mut dc, "data.empty", &[], true);
+            dc.fns.parse_and_insert("held_empty(a)", "{ b = latch(data.empty, 0, 5); a + b }").unwrap();
+            let input = DynamicInput::from_string(expr, &mut dc, true, None).unwrap();
+            run_steps(&input, &mut dc, 1);
+        });
+        let err = result.expect_err(&format!("{}: step-0 validation must fail", expr));
+        let msg = err.downcast_ref::<String>().cloned()
+            .or_else(|| err.downcast_ref::<&str>().map(|s| s.to_string()))
+            .unwrap_or_default();
+        assert!(msg.contains("has no value yet"), "{}: unexpected panic: {}", expr, msg);
+    }
+}
+
+/// C27. A calendar window anywhere in a program turns on the calendar flags:
+/// in a statement, in an inlined-if condition, and on either inlined side.
+/// Without them the window never sees a month boundary after step 0.
+#[test]
+fn test_calendar_window_in_program_sets_calendar_flags() {
+    for expr in ["{ s = moving_sum_months(data.x, 1); s }",
+                 "{ a = if(moving_sum_months(data.x, 1) > 0, fn.tenfold(data.x), 0); a }",
+                 "{ r = if(data.x > 100, fn.monthly(data.x), 0); r }",
+                 "{ r = (data.x > 100) || (fn.monthly(data.x) > 0); r }"] {
+        let mut dc = cache_with_x(&[1.0, 2.0]);
+        dc.fns.parse_and_insert("tenfold(a)", "a * 10").unwrap();
+        dc.fns.parse_and_insert("monthly(a)", "{ s = moving_sum_months(a, 1); s }").unwrap();
+        assert!(!dc.needs_calendar_flags, "{}: flags start off", expr);
+        DynamicInput::from_string(expr, &mut dc, true, None).unwrap();
+        assert!(dc.needs_calendar_flags, "{}: must turn the calendar flags on", expr);
+    }
+}
+
 // ============================================================================
 // D. End-to-end via a full model (mirrors test_programs.rs).
 // ============================================================================

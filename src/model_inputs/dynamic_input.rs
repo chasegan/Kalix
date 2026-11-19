@@ -273,12 +273,10 @@ pub enum OptimizedExpressionNode {
         slot: usize,
     },
 
-    /// Fixed-window statistic over the last n steps: moving_sum/mean/min/max.
-    /// State lives in the arena, allocated at lowering; reading the statistic
-    /// is one or two indexed loads. State advances once per step via
-    /// `advance_state`, unconditionally — even inside untaken `if` branches —
-    /// so the value is a property of the series, never of evaluation paths
-    /// (structured_expressions_design.md §5).
+    /// Read side of a moving window (moving_sum/mean/min/max and the
+    /// calendar windows); the sampled input and the advance live in the
+    /// owner's [`StatefulNode`] list. Reading the statistic is one or two
+    /// indexed loads.
     ///
     /// Arena layout (allocated per instance):
     /// - Sum/Mean: f region = [ring buffer; n] + [running sum] (n+1 slots);
@@ -296,34 +294,13 @@ pub enum OptimizedExpressionNode {
         /// a measured cache-pressure regression across all models. One extra
         /// deref per window instance per step is far cheaper.
         slots: Box<WindowSlots>,
-        arg: Box<OptimizedExpressionNode>,
     },
 
-    /// Event-windowed statistic since a reset condition last fired:
-    /// sum/min/max/count/steps_since. State is a single f64 accumulator.
-    /// Reset-then-accumulate: when the reset condition is truthy at step t,
-    /// the accumulator clears first and step t's contribution is then
-    /// included (design §6). Run start is an implicit reset, encoded in the
-    /// init template (sum/count 0, steps -1, min/max NaN — NaN-suppressing
-    /// min/max bootstrap to the first value).
-    Since {
-        op: SinceOp,
+    /// Read side of a single-slot stateful call (`*_since`, `latch`).
+    /// Reading it is one indexed load. The advance lives in the owner's
+    /// [`StatefulNode`] list.
+    StateSlot {
         f_off: usize,
-        /// Tracked quantity; None for steps_since (the step counter itself).
-        arg: Option<Box<OptimizedExpressionNode>>,
-        reset: Box<OptimizedExpressionNode>,
-    },
-
-    /// Sample-and-hold: samples `arg` on every step `condition` is truthy
-    /// and holds it otherwise. Single f64 of state, holding the caller's
-    /// `init` constant until the condition first fires. The run start is
-    /// deliberately NOT an implicit sample (contrast `*_since`, design §6):
-    /// the pre-first-fire value is the modeller's to state, exactly as a
-    /// moving window's element default is (design §6.5).
-    Latch {
-        f_off: usize,
-        arg: Box<OptimizedExpressionNode>,
-        condition: Box<OptimizedExpressionNode>,
     },
 
     /// Named 1D lookup table (`table.<name>(x)`): clamped linear interpolation.
@@ -515,10 +492,10 @@ impl OptimizedExpressionNode {
             OptimizedExpressionNode::Local { slot } => data_cache.expr_state.f[*slot],
 
             // Reading a window statistic never touches the input expression —
-            // sampling happened in advance_state. Sum/Mean read the running
+            // sampling happened in StatefulNode::advance. Sum/Mean read the running
             // sum; Min/Max read the deque front (NaN when the deque is empty,
             // i.e. every real value in the window was NaN).
-            OptimizedExpressionNode::MovingWindow { op, slots, .. } => match op {
+            OptimizedExpressionNode::MovingWindow { op, slots } => match op {
                 WindowOp::Sum => data_cache.expr_state.f[slots.f_off + slots.n],
                 WindowOp::Mean => data_cache.expr_state.f[slots.f_off + slots.n] / slots.n as f64,
                 WindowOp::Min | WindowOp::Max => {
@@ -539,9 +516,7 @@ impl OptimizedExpressionNode {
                 }
             },
 
-            OptimizedExpressionNode::Since { f_off, .. } => data_cache.expr_state.f[*f_off],
-
-            OptimizedExpressionNode::Latch { f_off, .. } => data_cache.expr_state.f[*f_off],
+            OptimizedExpressionNode::StateSlot { f_off } => data_cache.expr_state.f[*f_off],
 
             OptimizedExpressionNode::Lookup1D { table, arg } => {
                 table.lookup(arg.evaluate(data_cache))
@@ -578,6 +553,10 @@ impl OptimizedExpressionNode {
             | OptimizedExpressionNode::StaticPropertyReference { .. }
             | OptimizedExpressionNode::SimContext { .. }
             | OptimizedExpressionNode::Local { .. }
+            // Stateful reads have no children; their sampled inputs are
+            // validated through the owner's StatefulNode list.
+            | OptimizedExpressionNode::MovingWindow { .. }
+            | OptimizedExpressionNode::StateSlot { .. }
             | OptimizedExpressionNode::DataCacheReferenceWithOffset { .. } => {}
 
             OptimizedExpressionNode::DataCacheReference { cache_index } => {
@@ -618,210 +597,6 @@ impl OptimizedExpressionNode {
                 row_key.validate_reads(data_cache);
             }
             OptimizedExpressionNode::CalendarAt { arg, .. } => arg.validate_reads(data_cache),
-            // Stateful inputs are read unconditionally every step by
-            // advance_state, so they are validated like any other read.
-            OptimizedExpressionNode::MovingWindow { arg, .. } => arg.validate_reads(data_cache),
-            OptimizedExpressionNode::Since { arg, reset, .. } => {
-                if let Some(a) = arg {
-                    a.validate_reads(data_cache);
-                }
-                reset.validate_reads(data_cache);
-            }
-            OptimizedExpressionNode::Latch { arg, condition, .. } => {
-                arg.validate_reads(data_cache);
-                condition.validate_reads(data_cache);
-            }
-        }
-    }
-
-    /// Advance all stateful nodes in this subtree by one step, sampling their
-    /// input expressions. Called exactly once per timestep per owning input
-    /// (guarded by the owner — see DynamicInput::StatefulFunction and
-    /// OptimizedProgram::evaluate), and the walk is UNCONDITIONAL: `if`
-    /// branches and short-circuit operands are all visited, so window and
-    /// since state never depends on which branches past evaluations took
-    /// (structured_expressions_design.md §5).
-    ///
-    /// Children advance before their parent samples: for nested stateful
-    /// calls like moving_sum(moving_mean(x, 5, 0), 10, 0), the inner window
-    /// advances first and the outer then samples the advanced value.
-    pub fn advance_state(&self, data_cache: &mut DataCache) {
-        match self {
-            OptimizedExpressionNode::Constant { .. }
-            | OptimizedExpressionNode::ConstantReference { .. }
-            | OptimizedExpressionNode::StaticPropertyReference { .. }
-            | OptimizedExpressionNode::SimContext { .. }
-            | OptimizedExpressionNode::Local { .. }
-            | OptimizedExpressionNode::DataCacheReference { .. }
-            | OptimizedExpressionNode::DataCacheReferenceWithOffset { .. } => {}
-
-            OptimizedExpressionNode::BinaryOp { left, right, .. } => {
-                left.advance_state(data_cache);
-                right.advance_state(data_cache);
-            }
-            OptimizedExpressionNode::UnaryOp { operand, .. } => operand.advance_state(data_cache),
-            OptimizedExpressionNode::Func1 { arg, .. } => arg.advance_state(data_cache),
-            OptimizedExpressionNode::Func2 { a, b, .. } => {
-                a.advance_state(data_cache);
-                b.advance_state(data_cache);
-            }
-            OptimizedExpressionNode::If { cond, then_branch, else_branch } => {
-                cond.advance_state(data_cache);
-                then_branch.advance_state(data_cache);
-                else_branch.advance_state(data_cache);
-            }
-            OptimizedExpressionNode::Fold { args, .. } => {
-                for a in args {
-                    a.advance_state(data_cache);
-                }
-            }
-            OptimizedExpressionNode::Lookup1D { arg, .. } => arg.advance_state(data_cache),
-            OptimizedExpressionNode::Lookup2D { col_key, row_key, .. } => {
-                col_key.advance_state(data_cache);
-                row_key.advance_state(data_cache);
-            }
-            OptimizedExpressionNode::Lookup2DBilinear { col_key, row_key, .. } => {
-                col_key.advance_state(data_cache);
-                row_key.advance_state(data_cache);
-            }
-            OptimizedExpressionNode::CalendarAt { arg, .. } => arg.advance_state(data_cache),
-
-            OptimizedExpressionNode::MovingWindow { op, slots, arg } => {
-                arg.advance_state(data_cache);
-                let x = arg.evaluate(data_cache);
-                match op {
-                    // Fixed window family 
-                    WindowOp::Sum | WindowOp::Mean => {
-                        advance_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
-                    }
-                    WindowOp::Min => advance_deque(data_cache, slots.n, slots.f_off, slots.u_off, x, true),
-                    WindowOp::Max => advance_deque(data_cache, slots.n, slots.f_off, slots.u_off, x, false),
-                    // Window in whole water years
-                    // Precondition: wy_month in [1, 12] integral - enforce at parse time
-                    // (see `lower_stateful_call()`) instead of on hot path
-                    WindowOp::SumYears { wy_month } => {
-                        // New water year when new month and month equals wy_month
-                        if data_cache.is_new_month() && data_cache.get_timestamp_month() == *wy_month {
-                            advance_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
-                        } else {
-                            accumulate_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
-                        }
-                    }
-                    WindowOp::MinYears { wy_month } => {
-                        if data_cache.is_new_month() && data_cache.get_timestamp_month() == *wy_month {
-                            advance_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
-                        } else {
-                            accumulate_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
-                        }
-                    }
-                    WindowOp::MaxYears { wy_month } => {
-                        if data_cache.is_new_month() && data_cache.get_timestamp_month() == *wy_month {
-                            advance_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
-                        } else {
-                            accumulate_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
-                        }
-                    }
-                    // Window in whole calendar months
-                    WindowOp::SumMonths => {
-                        if data_cache.is_new_month() {
-                            advance_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
-                        } else {
-                            accumulate_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
-                        }
-                    }
-                    WindowOp::MinMonths => {
-                        if data_cache.is_new_month() {
-                            advance_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
-                        } else {
-                            accumulate_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
-                        }
-                    }
-                    WindowOp::MaxMonths => {
-                        if data_cache.is_new_month() {
-                            advance_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
-                        } else {
-                            accumulate_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
-                        }
-                    }
-                    // Window in whole calendar days
-                    WindowOp::SumDays => {
-                        if data_cache.is_new_day() {
-                            advance_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
-                        } else {
-                            accumulate_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
-                        }
-                    }
-                    WindowOp::MinDays => {
-                        if data_cache.is_new_day() {
-                            advance_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
-                        } else {
-                            accumulate_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
-                        }
-                    }
-                    WindowOp::MaxDays => {
-                        if data_cache.is_new_day() {
-                            advance_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
-                        } else {
-                            accumulate_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
-                        }
-                    }
-                }
-            }
-
-            OptimizedExpressionNode::Since { op, f_off, arg, reset } => {
-                if let Some(a) = arg {
-                    a.advance_state(data_cache);
-                }
-                reset.advance_state(data_cache);
-                // Truthiness matches the language everywhere: non-zero is
-                // true, including NaN (NaN != 0.0), same as if()/&&/||.
-                let reset_fired = reset.evaluate(data_cache) != 0.0;
-                let x = arg.as_ref().map(|a| a.evaluate(data_cache));
-                let acc_slot = *f_off;
-                let acc = data_cache.expr_state.f[acc_slot];
-                // Reset-then-accumulate: the reset step's own contribution is
-                // included (design §6 — 1 July's usage counts toward the new
-                // water year). Run start is handled by the init template:
-                // sum/count start at 0, steps at -1, min/max at NaN (which
-                // f64::min/max suppress, bootstrapping to the first value).
-                data_cache.expr_state.f[acc_slot] = match op {
-                    SinceOp::Sum => {
-                        let x = x.unwrap();
-                        if reset_fired { x } else { acc + x }
-                    }
-                    SinceOp::Min => {
-                        let x = x.unwrap();
-                        if reset_fired { x } else { acc.min(x) }
-                    }
-                    SinceOp::Max => {
-                        let x = x.unwrap();
-                        if reset_fired { x } else { acc.max(x) }
-                    }
-                    SinceOp::Count => {
-                        let hit = if x.unwrap() != 0.0 { 1.0 } else { 0.0 };
-                        if reset_fired { hit } else { acc + hit }
-                    }
-                    SinceOp::Steps => {
-                        if reset_fired { 0.0 } else { acc + 1.0 }
-                    }
-                };
-            }
-
-            OptimizedExpressionNode::Latch { f_off, arg, condition } => {
-                arg.advance_state(data_cache);
-                condition.advance_state(data_cache);
-                // Unlike the Since arm above, `arg` is EVALUATED only on
-                // sampling steps. Deliberate and load-bearing: a held latch
-                // skips its whole value subtree, which is the point of
-                // latch(<expensive>, is_startwy, ...) — one evaluation a year
-                // instead of 365. Sound because evaluate() is pure and every
-                // nested stateful child has already advanced on the two lines
-                // above. Do not hoist this evaluate out of the branch to
-                // match Since's shape.
-                if condition.evaluate(data_cache) != 0.0 {
-                    data_cache.expr_state.f[*f_off] = arg.evaluate(data_cache);
-                }
-            }
         }
     }
 
@@ -839,6 +614,7 @@ impl OptimizedExpressionNode {
         static_variable_map: &HashMap<String, usize>,
         locals: &HashMap<String, usize>,
         arena: &mut crate::data_management::data_cache::ExprStateArena,
+        stateful: &mut Vec<StatefulNode>,
         tables: &TableRegistry
     ) -> Result<Self, String> {
         match node {
@@ -933,8 +709,8 @@ impl OptimizedExpressionNode {
                 Err(format!("Variable '{}' not found in variable maps", name))
             }
             ExpressionNode::BinaryOp { left, op, right } => {
-                let left_opt  = Self::from_expression_node(left,  data_variable_map, constant_variable_map, static_variable_map, locals, arena, tables)?;
-                let right_opt = Self::from_expression_node(right, data_variable_map, constant_variable_map, static_variable_map, locals, arena, tables)?;
+                let left_opt  = Self::from_expression_node(left,  data_variable_map, constant_variable_map, static_variable_map, locals, arena, stateful, tables)?;
+                let right_opt = Self::from_expression_node(right, data_variable_map, constant_variable_map, static_variable_map, locals, arena, stateful, tables)?;
 
                 Ok(OptimizedExpressionNode::BinaryOp {
                     left: Box::new(left_opt),
@@ -943,7 +719,7 @@ impl OptimizedExpressionNode {
                 })
             }
             ExpressionNode::UnaryOp { op, operand } => {
-                let operand_opt = Self::from_expression_node(operand, data_variable_map, constant_variable_map, static_variable_map, locals, arena, tables)?;
+                let operand_opt = Self::from_expression_node(operand, data_variable_map, constant_variable_map, static_variable_map, locals, arena, stateful, tables)?;
 
                 Ok(OptimizedExpressionNode::UnaryOp {
                     op: *op,
@@ -953,12 +729,275 @@ impl OptimizedExpressionNode {
             ExpressionNode::FunctionCall { func, args } => {
                 let args_opt: Result<Vec<_>, String> = args
                     .iter()
-                    .map(|arg| Self::from_expression_node(arg, data_variable_map, constant_variable_map, static_variable_map, locals, arena, tables))
+                    .map(|arg| Self::from_expression_node(arg, data_variable_map, constant_variable_map, static_variable_map, locals, arena, stateful, tables))
                     .collect();
 
-                lower_function_call(func, args_opt?, arena, tables)
+                lower_function_call(func, args_opt?, arena, stateful, tables)
             }
         }
+    }
+}
+
+/// Advance side of one stateful call (moving_*, *_since, latch). It holds
+/// the sampled input expressions and the arena state they feed. Lowering
+/// collects these into a flat list per owner (a StatefulFunction, or one
+/// program statement) while the tree keeps only the read node
+/// (`MovingWindow` / `StateSlot`), so the once-per-step advance visits
+/// stateful calls only, never the stateless tree around them.
+///
+/// Invariants of each list, both fixed at lowering:
+/// - **Post-order.** A call's arguments are lowered before the call itself
+///   is pushed, so for moving_sum(moving_mean(x, 5, 0), 10, 0) the inner
+///   window advances first and the outer then samples the advanced value.
+/// - **Unconditional.** Every call is pushed, including those in `if`
+///   branches and short-circuit operands, so state never depends on which
+///   branches past evaluations took (structured_expressions_design.md §5).
+#[derive(Debug, Clone)]
+pub enum StatefulNode {
+    Window {
+        op: WindowOp,
+        slots: WindowSlots,
+        arg: OptimizedExpressionNode,
+    },
+    /// Event-windowed statistic since a reset condition last fired:
+    /// sum/min/max/count/steps_since. State is a single f64 accumulator.
+    /// The reset comes before the accumulation. When the reset condition is
+    /// truthy at step t, the accumulator clears first and step t's
+    /// contribution is then included (design §6). Run start is an implicit
+    /// reset, encoded in the init template (sum/count 0, steps -1, min/max
+    /// NaN). NaN-suppressing min/max bootstrap to the first value.
+    Since {
+        op: SinceOp,
+        f_off: usize,
+        /// Tracked quantity; None for steps_since (the step counter itself).
+        arg: Option<OptimizedExpressionNode>,
+        reset: OptimizedExpressionNode,
+    },
+    /// Sample-and-hold. Samples `arg` on every step `condition` is truthy
+    /// and holds it otherwise. State is a single f64, which holds the
+    /// caller's `init` constant until the condition first fires. The run
+    /// start is deliberately NOT an implicit sample (contrast `*_since`,
+    /// design §6). The pre-first-fire value is the modeller's to state, as a
+    /// moving window's element default is (design §6.5).
+    Latch {
+        f_off: usize,
+        arg: OptimizedExpressionNode,
+        condition: OptimizedExpressionNode,
+    },
+}
+
+impl StatefulNode {
+    /// The tree node that reads this call's current value.
+    fn read_node(&self) -> OptimizedExpressionNode {
+        match self {
+            StatefulNode::Window { op, slots, .. } => OptimizedExpressionNode::MovingWindow {
+                op: *op,
+                slots: Box::new(slots.clone()),
+            },
+            StatefulNode::Since { f_off, .. } | StatefulNode::Latch { f_off, .. } => {
+                OptimizedExpressionNode::StateSlot { f_off: *f_off }
+            }
+        }
+    }
+
+    /// Advance this call's state by one step, sampling its inputs. Called
+    /// exactly once per timestep per owning input (guarded by the owner), in
+    /// list order. Never recurses. Any stateful call nested in the inputs is
+    /// its own, earlier list entry and has already advanced.
+    pub fn advance(&self, data_cache: &mut DataCache) {
+        match self {
+            StatefulNode::Window { op, slots, arg } => {
+                let x = arg.evaluate(data_cache);
+                match op {
+                    // Fixed window family
+                    WindowOp::Sum | WindowOp::Mean => {
+                        advance_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
+                    }
+                    WindowOp::Min => advance_deque(data_cache, slots.n, slots.f_off, slots.u_off, x, true),
+                    WindowOp::Max => advance_deque(data_cache, slots.n, slots.f_off, slots.u_off, x, false),
+                    // Window in whole water years
+                    // Precondition: wy_month in [1, 12] integral - enforce at parse time
+                    // (see `lower_stateful_call()`) instead of on hot path
+                    WindowOp::SumYears { wy_month } => {
+                        // New water year when new month and month equals wy_month
+                        if data_cache.is_new_month() && data_cache.get_timestamp_month() == *wy_month {
+                            advance_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
+                        } else {
+                            accumulate_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
+                        }
+                    }
+                    WindowOp::MinYears { wy_month } => {
+                        if data_cache.is_new_month() && data_cache.get_timestamp_month() == *wy_month {
+                            advance_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
+                        } else {
+                            accumulate_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
+                        }
+                    }
+                    WindowOp::MaxYears { wy_month } => {
+                        if data_cache.is_new_month() && data_cache.get_timestamp_month() == *wy_month {
+                            advance_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
+                        } else {
+                            accumulate_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
+                        }
+                    }
+                    // Window in whole calendar months
+                    WindowOp::SumMonths => {
+                        if data_cache.is_new_month() {
+                            advance_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
+                        } else {
+                            accumulate_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
+                        }
+                    }
+                    WindowOp::MinMonths => {
+                        if data_cache.is_new_month() {
+                            advance_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
+                        } else {
+                            accumulate_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
+                        }
+                    }
+                    WindowOp::MaxMonths => {
+                        if data_cache.is_new_month() {
+                            advance_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
+                        } else {
+                            accumulate_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
+                        }
+                    }
+                    // Window in whole calendar days
+                    WindowOp::SumDays => {
+                        if data_cache.is_new_day() {
+                            advance_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
+                        } else {
+                            accumulate_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
+                        }
+                    }
+                    WindowOp::MinDays => {
+                        if data_cache.is_new_day() {
+                            advance_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
+                        } else {
+                            accumulate_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
+                        }
+                    }
+                    WindowOp::MaxDays => {
+                        if data_cache.is_new_day() {
+                            advance_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
+                        } else {
+                            accumulate_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
+                        }
+                    }
+                }
+            }
+
+            StatefulNode::Since { op, f_off, arg, reset } => {
+                // Truthiness matches the language everywhere: non-zero is
+                // true, including NaN (NaN != 0.0), same as if()/&&/||.
+                let reset_fired = reset.evaluate(data_cache) != 0.0;
+                let x = arg.as_ref().map(|a| a.evaluate(data_cache));
+                let acc_slot = *f_off;
+                let acc = data_cache.expr_state.f[acc_slot];
+                // Reset-then-accumulate: the reset step's own contribution is
+                // included (design §6 — 1 July's usage counts toward the new
+                // water year). Run start is handled by the init template:
+                // sum/count start at 0, steps at -1, min/max at NaN (which
+                // f64::min/max suppress, bootstrapping to the first value).
+                data_cache.expr_state.f[acc_slot] = match op {
+                    SinceOp::Sum => {
+                        let x = x.unwrap();
+                        if reset_fired { x } else { acc + x }
+                    }
+                    SinceOp::Min => {
+                        let x = x.unwrap();
+                        if reset_fired { x } else { acc.min(x) }
+                    }
+                    SinceOp::Max => {
+                        let x = x.unwrap();
+                        if reset_fired { x } else { acc.max(x) }
+                    }
+                    SinceOp::Count => {
+                        let hit = if x.unwrap() != 0.0 { 1.0 } else { 0.0 };
+                        if reset_fired { hit } else { acc + hit }
+                    }
+                    SinceOp::Steps => {
+                        if reset_fired { 0.0 } else { acc + 1.0 }
+                    }
+                };
+            }
+
+            StatefulNode::Latch { f_off, arg, condition } => {
+                // Unlike the Since arm above, `arg` is EVALUATED only on
+                // sampling steps. Deliberate and load-bearing: a held latch
+                // skips its whole lowered value subtree, which is the point of
+                // latch(<expensive>, is_startwy, ...) — one evaluation a year
+                // instead of 365. (Statements the [fn] inliner hoisted out of
+                // `arg` are not in that subtree and run every step.) Sound
+                // because evaluate() is pure and every
+                // stateful call nested in `arg` is an earlier list entry that
+                // advances whether or not this latch samples. Do not hoist
+                // this evaluate out of the branch to match Since's shape.
+                if condition.evaluate(data_cache) != 0.0 {
+                    data_cache.expr_state.f[*f_off] = arg.evaluate(data_cache);
+                }
+            }
+        }
+    }
+
+    /// Step-0 read validation of the sampled inputs. They are read every
+    /// step by `advance` (a latch's value on sampling steps), so they are
+    /// validated like any other read.
+    #[cold]
+    #[inline(never)]
+    pub fn validate_reads(&self, data_cache: &DataCache) {
+        match self {
+            StatefulNode::Window { arg, .. } => arg.validate_reads(data_cache),
+            StatefulNode::Since { arg, reset, .. } => {
+                if let Some(a) = arg {
+                    a.validate_reads(data_cache);
+                }
+                reset.validate_reads(data_cache);
+            }
+            StatefulNode::Latch { arg, condition, .. } => {
+                arg.validate_reads(data_cache);
+                condition.validate_reads(data_cache);
+            }
+        }
+    }
+
+    /// Does this call need the calendar flags? See [`uses_calendar_flags`].
+    fn uses_calendar_flags(&self) -> bool {
+        match self {
+            // Annual/monthly/daily-window ops read is_new_month()/is_new_day()/
+            // get_timestamp_month() directly in advance (not through a
+            // SimContext node in `arg`), so they need the calendar flags live
+            // even when the sampled argument doesn't reference sim.* itself.
+            StatefulNode::Window { op, arg, .. } => {
+                matches!(op,
+                    WindowOp::SumYears { .. }
+                    | WindowOp::MinYears { .. } | WindowOp::MaxYears { .. }
+                    | WindowOp::SumMonths | WindowOp::MinMonths | WindowOp::MaxMonths
+                    | WindowOp::SumDays | WindowOp::MinDays | WindowOp::MaxDays)
+                    || uses_calendar_flags(arg)
+            }
+            StatefulNode::Since { arg, reset, .. } => {
+                arg.as_ref().map(uses_calendar_flags).unwrap_or(false) || uses_calendar_flags(reset)
+            }
+            StatefulNode::Latch { arg, condition, .. } => {
+                uses_calendar_flags(arg) || uses_calendar_flags(condition)
+            }
+        }
+    }
+}
+
+/// Advance every call in an owner's list, in order (see [`StatefulNode`]).
+#[inline]
+fn advance_all(stateful: &[StatefulNode], data_cache: &mut DataCache) {
+    for s in stateful {
+        s.advance(data_cache);
+    }
+}
+
+/// Step-0 validation of every call in an owner's list.
+fn validate_all(stateful: &[StatefulNode], data_cache: &DataCache) {
+    for s in stateful {
+        s.validate_reads(data_cache);
     }
 }
 
@@ -1143,12 +1182,16 @@ pub enum OptStmt {
     Assign {
         slot: usize,
         expr: OptimizedExpressionNode,
+        /// Stateful calls in `expr`, advanced just before it evaluates.
+        stateful: Box<[StatefulNode]>,
     },
     /// Fail the run when the expression is 0 or NaN. `meta` indexes the
     /// owning program's assert_meta table (cold data, only touched on failure).
     Assert {
         expr: OptimizedExpressionNode,
         meta: u32,
+        /// Stateful calls in `expr`, advanced just before it evaluates.
+        stateful: Box<[StatefulNode]>,
     },
     /// Conditional statement group (produced only by the fn inliner, for
     /// calls inside `if` branches and short-circuit operands).
@@ -1166,6 +1209,8 @@ pub enum OptStmt {
     /// when its call's branch is taken.
     Cond {
         cond: OptimizedExpressionNode,
+        /// Stateful calls in `cond`, advanced just before it evaluates.
+        cond_stateful: Box<[StatefulNode]>,
         then_stmts: Vec<OptStmt>,
         else_stmts: Vec<OptStmt>,
         /// Does each side's lowered tree contain stateful nodes? Computed at
@@ -1182,11 +1227,15 @@ pub enum OptStmt {
 /// expression — the only difference is the statement loop and slot writes.
 #[derive(Debug, Clone)]
 pub struct OptimizedProgram {
-    stmts: Vec<OptStmt>,
+    /// A boxed slice rather than a Vec, as are the other lists here, keeps
+    /// DynamicInput at its pinned size.
+    stmts: Box<[OptStmt]>,
     result: OptimizedExpressionNode,
+    /// Stateful calls in `result`, advanced just before it evaluates.
+    result_stateful: Box<[StatefulNode]>,
     /// Source text for each assert, indexed by OptStmt::Assert.meta.
     /// Cold: read only when composing a failure message.
-    assert_meta: Vec<String>,
+    assert_meta: Box<[String]>,
     /// Arena u-slot guarding once-per-step state advance, present only when
     /// the program contains stateful calls (moving_*/*_since/latch). Stores
     /// last-advanced step + 1, so the init value 0 means "never" and the
@@ -1199,8 +1248,8 @@ impl OptimizedProgram {
     /// Execute the statements in order, then evaluate and return the result.
     ///
     /// On the first evaluation of each step (guarded), stateful nodes advance
-    /// *interleaved* with statement execution: each statement's subtree
-    /// advances immediately before that statement evaluates, so a stateful
+    /// *interleaved* with statement execution: each statement's stateful
+    /// calls advance immediately before that statement evaluates, so a stateful
     /// call sampling a program local sees the local as of its own statement's
     /// position — with every earlier assignment applied, exactly as the
     /// program reads.
@@ -1220,7 +1269,7 @@ impl OptimizedProgram {
 
         self.run_stmts(&self.stmts, data_cache, advance, true);
         if advance {
-            self.result.advance_state(data_cache);
+            advance_all(&self.result_stateful, data_cache);
         }
         self.result.evaluate(data_cache)
     }
@@ -1234,16 +1283,16 @@ impl OptimizedProgram {
     fn run_stmts(&self, stmts: &[OptStmt], data_cache: &mut DataCache, advance: bool, fire_asserts: bool) {
         for stmt in stmts {
             match stmt {
-                OptStmt::Assign { slot, expr } => {
+                OptStmt::Assign { slot, expr, stateful } => {
                     if advance {
-                        expr.advance_state(data_cache);
+                        advance_all(stateful, data_cache);
                     }
                     let v = expr.evaluate(data_cache);
                     data_cache.expr_state.f[*slot] = v;
                 }
-                OptStmt::Assert { expr, meta } => {
+                OptStmt::Assert { expr, meta, stateful } => {
                     if advance {
-                        expr.advance_state(data_cache);
+                        advance_all(stateful, data_cache);
                     }
                     if fire_asserts {
                         let v = expr.evaluate(data_cache);
@@ -1256,9 +1305,9 @@ impl OptimizedProgram {
                         }
                     }
                 }
-                OptStmt::Cond { cond, then_stmts, else_stmts, then_has_state, else_has_state } => {
+                OptStmt::Cond { cond, cond_stateful, then_stmts, else_stmts, then_has_state, else_has_state } => {
                     if advance {
-                        cond.advance_state(data_cache);
+                        advance_all(cond_stateful, data_cache);
                     }
                     let taken_then = cond.evaluate(data_cache) != 0.0;
                     let (taken, untaken, untaken_has_state) = if taken_then {
@@ -1289,10 +1338,13 @@ impl OptimizedProgram {
         fn walk(stmts: &[OptStmt], data_cache: &DataCache) {
             for stmt in stmts {
                 match stmt {
-                    OptStmt::Assign { expr, .. } => expr.validate_reads(data_cache),
-                    OptStmt::Assert { expr, .. } => expr.validate_reads(data_cache),
-                    OptStmt::Cond { cond, then_stmts, else_stmts, .. } => {
+                    OptStmt::Assign { expr, stateful, .. } | OptStmt::Assert { expr, stateful, .. } => {
+                        expr.validate_reads(data_cache);
+                        validate_all(stateful, data_cache);
+                    }
+                    OptStmt::Cond { cond, cond_stateful, then_stmts, else_stmts, .. } => {
                         cond.validate_reads(data_cache);
+                        validate_all(cond_stateful, data_cache);
                         walk(then_stmts, data_cache);
                         walk(else_stmts, data_cache);
                     }
@@ -1301,6 +1353,7 @@ impl OptimizedProgram {
         }
         walk(&self.stmts, data_cache);
         self.result.validate_reads(data_cache);
+        validate_all(&self.result_stateful, data_cache);
     }
 
     /// Cold assert-failure path: only reached on a run that is already dead,
@@ -1443,6 +1496,8 @@ pub enum DynamicInput {
     StatefulFunction {
         expression: String,
         optimised_ast: OptimizedExpressionNode,
+        /// The tree's stateful calls in advance order (see StatefulNode).
+        stateful: Box<[StatefulNode]>,
         guard: usize,
     },
 }
@@ -1802,10 +1857,9 @@ impl DynamicInput {
     }
 
     /// Lower a parsed plain expression to Function or StatefulFunction.
-    /// Statefulness is detected by arena growth during lowering — a tree that
-    /// allocated window/since state needs the once-per-step advance guard;
-    /// anything else stays a plain Function, byte-identical to before the
-    /// stateful builtins existed.
+    /// A tree whose lowering collected stateful calls needs the
+    /// once-per-step advance guard; anything else stays a plain Function,
+    /// with no guard and no list.
     fn function_from_parsed(
         trimmed: &str,
         parsed: &crate::functions::parser::ParsedFunction,
@@ -1816,19 +1870,21 @@ impl DynamicInput {
         self_map: Option<&HashMap<String, usize>>,
     ) -> Result<Self, String> {
         let DataCache { expr_state, tables, needs_calendar_flags, .. } = data_cache;
-        let f_mark = expr_state.f.len();
-        let u_mark = expr_state.u.len();
+        let mut stateful = Vec::new();
         let optimised_ast = transform_to_optimised_ast(
             parsed, data_variable_map, constant_variable_map, static_variable_map, 
-            expr_state, tables, self_map)?;
-        if !*needs_calendar_flags && uses_calendar_flags(&optimised_ast) {
+            expr_state, &mut stateful, tables, self_map)?;
+        if !*needs_calendar_flags
+            && (uses_calendar_flags(&optimised_ast) || stateful_use_calendar_flags(&stateful))
+        {
             *needs_calendar_flags = true;
         }
-        if expr_state.f.len() > f_mark || expr_state.u.len() > u_mark {
+        if !stateful.is_empty() {
             let guard = expr_state.alloc_u(&[0]);
             Ok(DynamicInput::StatefulFunction {
                 expression: trimmed.to_string(),
                 optimised_ast,
+                stateful: stateful.into_boxed_slice(),
                 guard,
             })
         } else {
@@ -1981,8 +2037,6 @@ impl DynamicInput {
         // the arena while table lookups resolve against the registry.
         let DataCache { expr_state, tables, needs_calendar_flags, .. } = data_cache;
         let frame_offset = expr_state.alloc_f(&vec![0.0; n_slots]);
-        let f_mark = expr_state.f.len();
-        let u_mark = expr_state.u.len();
 
         // Lower statements in order; `locals` grows as assignments bind.
         // Cond sides share the outer locals map: hidden names are hygienic
@@ -2003,43 +2057,51 @@ impl DynamicInput {
             tables: &TableRegistry,
         ) -> Result<Vec<OptStmt>, String> {
             let mut out: Vec<OptStmt> = Vec::with_capacity(in_stmts.len());
+            // Collector reused per expression; each statement takes its own
+            // list so the advance stays interleaved with execution.
+            let mut stateful = Vec::new();
             for stmt in in_stmts {
                 match stmt {
                     Stmt::Assign { name, expr } => {
                         let lowered = OptimizedExpressionNode::from_expression_node(
                             expr, ctx.data_variable_map, ctx.constant_variable_map, ctx.static_variable_map, 
-                            &ctx.locals, expr_state, tables)?;
+                            &ctx.locals, expr_state, &mut stateful, tables)?;
                         let next = &mut ctx.next_slot;
                         let slot = *ctx.locals.entry(name.to_lowercase()).or_insert_with(|| {
                             let s = *next;
                             *next += 1;
                             s
                         });
-                        out.push(OptStmt::Assign { slot, expr: lowered });
+                        out.push(OptStmt::Assign {
+                            slot,
+                            expr: lowered,
+                            stateful: std::mem::take(&mut stateful).into_boxed_slice(),
+                        });
                     }
                     Stmt::Assert { expr, source_text } => {
                         let lowered = OptimizedExpressionNode::from_expression_node(
                             expr, ctx.data_variable_map, ctx.constant_variable_map, ctx.static_variable_map, 
-                            &ctx.locals, expr_state, tables)?;
+                            &ctx.locals, expr_state, &mut stateful, tables)?;
                         let meta = ctx.assert_meta.len() as u32;
                         ctx.assert_meta.push(source_text.clone());
-                        out.push(OptStmt::Assert { expr: lowered, meta });
+                        out.push(OptStmt::Assert {
+                            expr: lowered,
+                            meta,
+                            stateful: std::mem::take(&mut stateful).into_boxed_slice(),
+                        });
                     }
                     Stmt::Cond { cond, then_stmts, else_stmts } => {
                         let cond = OptimizedExpressionNode::from_expression_node(
                             cond, ctx.data_variable_map, ctx.constant_variable_map, ctx.static_variable_map, 
-                            &ctx.locals, expr_state, tables)?;
-                        // Arena growth while lowering a side tells us whether
-                        // that side carries stateful nodes — the same
-                        // detection the Function/StatefulFunction split uses.
-                        let mark = (expr_state.f.len(), expr_state.u.len());
+                            &ctx.locals, expr_state, &mut stateful, tables)?;
+                        let cond_stateful = std::mem::take(&mut stateful).into_boxed_slice();
                         let then_stmts = lower_stmts(then_stmts, ctx, expr_state, tables)?;
-                        let then_has_state = (expr_state.f.len(), expr_state.u.len()) != mark;
-                        let mark = (expr_state.f.len(), expr_state.u.len());
                         let else_stmts = lower_stmts(else_stmts, ctx, expr_state, tables)?;
-                        let else_has_state = (expr_state.f.len(), expr_state.u.len()) != mark;
+                        let then_has_state = stmts_have_state(&then_stmts);
+                        let else_has_state = stmts_have_state(&else_stmts);
                         out.push(OptStmt::Cond {
                             cond,
+                            cond_stateful,
                             then_stmts,
                             else_stmts,
                             then_has_state,
@@ -2064,15 +2126,20 @@ impl DynamicInput {
         };
         let stmts = lower_stmts(&program.stmts, &mut ctx, expr_state, tables)?;
         let locals = ctx.locals;
-        let assert_meta = ctx.assert_meta;
+        let assert_meta = ctx.assert_meta.into_boxed_slice();
 
+        let mut result_stateful = Vec::new();
         let result = OptimizedExpressionNode::from_expression_node(
-            &program.result, &data_variable_map, &constant_variable_map, &static_variable_map, &locals, expr_state, tables)?;
+            &program.result, &data_variable_map, &constant_variable_map, &static_variable_map, &locals,
+            expr_state, &mut result_stateful, tables)?;
+        let result_stateful = result_stateful.into_boxed_slice();
 
-        let grew = expr_state.f.len() > f_mark || expr_state.u.len() > u_mark;
+        let has_state = stmts_have_state(&stmts) || !result_stateful.is_empty();
 
         if !*needs_calendar_flags
-            && (stmts_use_calendar_flags(&stmts) || uses_calendar_flags(&result))
+            && (stmts_use_calendar_flags(&stmts)
+                || uses_calendar_flags(&result)
+                || stateful_use_calendar_flags(&result_stateful))
         {
             *needs_calendar_flags = true;
         }
@@ -2082,11 +2149,12 @@ impl DynamicInput {
         // plain variants so such values cost exactly what the pasted
         // expression would.
         if unwrap_empty && stmts.is_empty() {
-            return Ok(if grew {
+            return Ok(if has_state {
                 let guard = expr_state.alloc_u(&[0]);
                 DynamicInput::StatefulFunction {
                     expression: original.to_string(),
                     optimised_ast: result,
+                    stateful: result_stateful,
                     guard,
                 }
             } else {
@@ -2097,9 +2165,7 @@ impl DynamicInput {
             });
         }
 
-        // Frame slots don't need the advance guard — only window/since state
-        // allocated during statement/result lowering does.
-        let advance_guard = if grew {
+        let advance_guard = if has_state {
             Some(expr_state.alloc_u(&[0]))
         } else {
             None
@@ -2107,7 +2173,7 @@ impl DynamicInput {
 
         Ok(DynamicInput::Program {
             expression: original.to_string(),
-            program: OptimizedProgram { stmts, result, assert_meta, advance_guard },
+            program: OptimizedProgram { stmts: stmts.into_boxed_slice(), result, result_stateful, assert_meta, advance_guard },
         })
     }
 
@@ -2177,8 +2243,8 @@ impl DynamicInput {
                 optimised_ast.evaluate(data_cache)
             }
             DynamicInput::Program { program, .. } => Self::get_value_program(program, data_cache),
-            DynamicInput::StatefulFunction { optimised_ast, guard, .. } => {
-                Self::get_value_stateful(optimised_ast, *guard, data_cache)
+            DynamicInput::StatefulFunction { optimised_ast, stateful, guard, .. } => {
+                Self::get_value_stateful(optimised_ast, stateful, *guard, data_cache)
             }
         }
     }
@@ -2198,23 +2264,30 @@ impl DynamicInput {
     #[inline(never)]
     fn get_value_stateful(
         optimised_ast: &OptimizedExpressionNode,
+        stateful: &[StatefulNode],
         guard: usize,
         data_cache: &mut DataCache,
     ) -> f64 {
         // Advance state exactly once per step, at this input's first
         // evaluation — a second call in the same step (e.g. order phase then
         // flow phase) sees identical state. The sampled input expressions are
-        // read every step by the advance walk, so step-0 validation covers
-        // them like any other read.
+        // read every step by the advance, so step-0 validation covers them
+        // like any other read.
         let tag = data_cache.current_step + 1;
         if data_cache.expr_state.u[guard] != tag {
             data_cache.expr_state.u[guard] = tag;
             if data_cache.current_step == 0 {
                 optimised_ast.validate_reads(data_cache);
+                validate_all(stateful, data_cache);
             }
-            optimised_ast.advance_state(data_cache);
+            advance_all(stateful, data_cache);
         }
-        optimised_ast.evaluate(data_cache)
+        // A bare stateful call (the common case) is read straight from its
+        // slot, skipping a second recursive dispatch.
+        match optimised_ast {
+            OptimizedExpressionNode::StateSlot { f_off } => data_cache.expr_state.f[*f_off],
+            _ => optimised_ast.evaluate(data_cache),
+        }
     }
 
     /// Get the expression string for serialization
@@ -2285,6 +2358,10 @@ fn uses_calendar_flags(node: &OptimizedExpressionNode) -> bool {
         | OptimizedExpressionNode::ConstantReference { .. }
         | OptimizedExpressionNode::StaticPropertyReference { .. }
         | OptimizedExpressionNode::Local { .. } => false,
+        // Stateful reads: the calendar dependence lives on the owner's
+        // StatefulNode list (see stateful_use_calendar_flags).
+        OptimizedExpressionNode::MovingWindow { .. }
+        | OptimizedExpressionNode::StateSlot { .. } => false,
         OptimizedExpressionNode::BinaryOp { left, right, .. } => {
             uses_calendar_flags(left) || uses_calendar_flags(right)
         }
@@ -2300,24 +2377,6 @@ fn uses_calendar_flags(node: &OptimizedExpressionNode) -> bool {
         }
         OptimizedExpressionNode::Fold { args, .. } => args.iter().any(uses_calendar_flags),
         OptimizedExpressionNode::CalendarAt { arg, .. } => uses_calendar_flags(arg),
-        // Annual/monthly/daily-window ops read is_new_month()/is_new_day()/
-        // get_timestamp_month() directly in advance_state (not through a
-        // SimContext node in `arg`), so they need the calendar flags live
-        // even when the sampled argument doesn't reference sim.* itself.
-        OptimizedExpressionNode::MovingWindow { op, arg, .. } => {
-            matches!(op,
-                WindowOp::SumYears { .. }
-                | WindowOp::MinYears { .. } | WindowOp::MaxYears { .. }
-                | WindowOp::SumMonths | WindowOp::MinMonths | WindowOp::MaxMonths
-                | WindowOp::SumDays | WindowOp::MinDays | WindowOp::MaxDays)
-                || uses_calendar_flags(arg)
-        }
-        OptimizedExpressionNode::Since { arg, reset, .. } => {
-            arg.as_deref().map(uses_calendar_flags).unwrap_or(false) || uses_calendar_flags(reset)
-        }
-        OptimizedExpressionNode::Latch { arg, condition, .. } => {
-            uses_calendar_flags(arg) || uses_calendar_flags(condition)
-        }
         OptimizedExpressionNode::Lookup1D { arg, .. } => uses_calendar_flags(arg),
         OptimizedExpressionNode::Lookup2D { col_key, row_key, .. } => {
             uses_calendar_flags(col_key) || uses_calendar_flags(row_key)
@@ -2328,12 +2387,32 @@ fn uses_calendar_flags(node: &OptimizedExpressionNode) -> bool {
     }
 }
 
+/// Does any statement (including nested Cond sides) carry stateful calls?
+/// It uses the same test as the Function/StatefulFunction split, a
+/// non-empty list.
+fn stmts_have_state(stmts: &[OptStmt]) -> bool {
+    stmts.iter().any(|s| match s {
+        OptStmt::Assign { stateful, .. } | OptStmt::Assert { stateful, .. } => !stateful.is_empty(),
+        OptStmt::Cond { cond_stateful, then_stmts, else_stmts, .. } => {
+            !cond_stateful.is_empty() || stmts_have_state(then_stmts) || stmts_have_state(else_stmts)
+        }
+    })
+}
+
+/// StatefulNode-list form of [`uses_calendar_flags`].
+fn stateful_use_calendar_flags(stateful: &[StatefulNode]) -> bool {
+    stateful.iter().any(StatefulNode::uses_calendar_flags)
+}
+
 /// Statement-list form of [`uses_calendar_flags`].
 fn stmts_use_calendar_flags(stmts: &[OptStmt]) -> bool {
     stmts.iter().any(|s| match s {
-        OptStmt::Assign { expr, .. } | OptStmt::Assert { expr, .. } => uses_calendar_flags(expr),
-        OptStmt::Cond { cond, then_stmts, else_stmts, .. } => {
+        OptStmt::Assign { expr, stateful, .. } | OptStmt::Assert { expr, stateful, .. } => {
+            uses_calendar_flags(expr) || stateful_use_calendar_flags(stateful)
+        }
+        OptStmt::Cond { cond, cond_stateful, then_stmts, else_stmts, .. } => {
             uses_calendar_flags(cond)
+                || stateful_use_calendar_flags(cond_stateful)
                 || stmts_use_calendar_flags(then_stmts)
                 || stmts_use_calendar_flags(else_stmts)
         }
@@ -2347,6 +2426,7 @@ fn transform_to_optimised_ast(
     constant_variable_map: &HashMap<String, usize>,
     static_variable_map: &HashMap<String, usize>,
     arena: &mut crate::data_management::data_cache::ExprStateArena,
+    stateful: &mut Vec<StatefulNode>,
     tables: &TableRegistry,
     self_map: Option<&HashMap<String, usize>>,
 ) -> Result<OptimizedExpressionNode, String> {
@@ -2356,7 +2436,7 @@ fn transform_to_optimised_ast(
         Some(map) => map.clone(),
         None => HashMap::new(),
     };
-    OptimizedExpressionNode::from_expression_node(parsed.get_ast(), data_variable_map, constant_variable_map, static_variable_map, &locals, arena, tables)
+    OptimizedExpressionNode::from_expression_node(parsed.get_ast(), data_variable_map, constant_variable_map, static_variable_map, &locals, arena, stateful, tables)
 }
 
 /// Lower a parsed function call into its specialised hot-path form, validating
@@ -2374,6 +2454,7 @@ fn lower_function_call(
     func: &FunctionRef,
     mut args: Vec<OptimizedExpressionNode>,
     arena: &mut crate::data_management::data_cache::ExprStateArena,
+    stateful: &mut Vec<StatefulNode>,
     tables: &TableRegistry,
 ) -> Result<OptimizedExpressionNode, String> {
     use BuiltinFunction as B;
@@ -2387,7 +2468,7 @@ fn lower_function_call(
             if let Some(node) = lower_calendar_call(name, &mut args)? {
                 return Ok(node);
             }
-            if let Some(node) = lower_stateful_call(name, args, arena)? {
+            if let Some(node) = lower_stateful_call(name, args, arena, stateful)? {
                 return Ok(node);
             }
             return Err(format!(
@@ -2565,7 +2646,16 @@ fn lower_stateful_call(
     name: &str,
     mut args: Vec<OptimizedExpressionNode>,
     arena: &mut crate::data_management::data_cache::ExprStateArena,
+    stateful: &mut Vec<StatefulNode>,
 ) -> Result<Option<OptimizedExpressionNode>, String> {
+    // Push the advance side onto the owner's list and hand back the read
+    // node. The args were lowered before this call, so any stateful call
+    // nested in them is already on the list: post-order (see StatefulNode).
+    let mut emit = |node: StatefulNode| {
+        let read = node.read_node();
+        stateful.push(node);
+        Ok(Some(read))
+    };
     // Fixed-window family: moving_*(x, n, default)
     let window_op = match name {
         "moving_sum" => Some(WindowOp::Sum),
@@ -2590,7 +2680,7 @@ fn lower_stateful_call(
         }
         let n = n_val as usize;
         let default = constant_arg(&args, 2, name, "element default (3rd argument)")?;
-        let arg = Box::new(args.swap_remove(0));
+        let arg = args.swap_remove(0);
 
         let (f_off, u_off) = match op {
             WindowOp::Sum | WindowOp::Mean => {
@@ -2619,11 +2709,7 @@ fn lower_stateful_call(
             | WindowOp::SumMonths | WindowOp::MinMonths | WindowOp::MaxMonths
             | WindowOp::SumDays | WindowOp::MinDays | WindowOp::MaxDays => unreachable!(),
         };
-        return Ok(Some(OptimizedExpressionNode::MovingWindow {
-            op,
-            slots: Box::new(WindowSlots { n, f_off, u_off }),
-            arg,
-        }));
+        return emit(StatefulNode::Window { op, slots: WindowSlots { n, f_off, u_off }, arg });
     }
 
     // Calendar-window families: the same statistic as the fixed windows
@@ -2660,16 +2746,14 @@ fn lower_stateful_call(
             ));
         }
         let (n, wy_month) = (n_years as usize, wy_month as u32);
-        let arg = Box::new(args.swap_remove(0));
+        let arg = args.swap_remove(0);
         let op = match which {
             0 => WindowOp::SumYears { wy_month },
             1 => WindowOp::MinYears { wy_month },
             _ => WindowOp::MaxYears { wy_month },
         };
         let (f_off, u_off) = alloc_bucket_state(arena, n, which != 0);
-        return Ok(Some(OptimizedExpressionNode::MovingWindow {
-            op, slots: Box::new(WindowSlots { n, f_off, u_off }), arg,
-        }));
+        return emit(StatefulNode::Window { op, slots: WindowSlots { n, f_off, u_off }, arg });
     }
 
     // Months and days: same shape, no anchor to carry, so just (x, n).
@@ -2697,11 +2781,9 @@ fn lower_stateful_call(
             ));
         }
         let n = n_val as usize;
-        let arg = Box::new(args.swap_remove(0));
+        let arg = args.swap_remove(0);
         let (f_off, u_off) = alloc_bucket_state(arena, n, is_extreme);
-        return Ok(Some(OptimizedExpressionNode::MovingWindow {
-            op, slots: Box::new(WindowSlots { n, f_off, u_off }), arg,
-        }));
+        return emit(StatefulNode::Window { op, slots: WindowSlots { n, f_off, u_off }, arg });
     }
 
     // Event-window family: last argument is always the reset condition.
@@ -2721,9 +2803,9 @@ fn lower_stateful_call(
             ));
         }
         let f_off = arena.alloc_f(&[acc_init]);
-        let reset = Box::new(args.pop().unwrap());
-        let arg = args.pop().map(Box::new);
-        return Ok(Some(OptimizedExpressionNode::Since { op: since_op, f_off, arg, reset }));
+        let reset = args.pop().unwrap();
+        let arg = args.pop();
+        return emit(StatefulNode::Since { op: since_op, f_off, arg, reset });
     }
 
     // Sample-and-hold: latch(x, condition, init).
@@ -2736,10 +2818,10 @@ fn lower_stateful_call(
         }
         let init = constant_arg(&args, 2, name, "initial value (3rd argument)")?;
         args.pop();
-        let condition = Box::new(args.pop().unwrap());
-        let arg = Box::new(args.pop().unwrap());
+        let condition = args.pop().unwrap();
+        let arg = args.pop().unwrap();
         let f_off = arena.alloc_f(&[init]);
-        return Ok(Some(OptimizedExpressionNode::Latch { f_off, arg, condition }));
+        return emit(StatefulNode::Latch { f_off, arg, condition });
     }
     // No stateful builtin matched
     Ok(None)
@@ -2807,5 +2889,15 @@ mod size_tests {
         assert!(std::mem::size_of::<super::OptimizedExpressionNode>() <= 32,
             "OptimizedExpressionNode grew past 32 bytes ({}). Box the new variant's payload.",
             std::mem::size_of::<super::OptimizedExpressionNode>());
+    }
+
+    /// Every node input holds a DynamicInput inline, so its size is pinned
+    /// too. Program, the largest variant, stores its lists as boxed slices
+    /// for this reason.
+    #[test]
+    fn dynamic_input_stays_128_bytes() {
+        assert!(std::mem::size_of::<super::DynamicInput>() <= 128,
+            "DynamicInput grew past 128 bytes ({}). Box or slim the largest variant.",
+            std::mem::size_of::<super::DynamicInput>());
     }
 }

@@ -41,7 +41,7 @@ pub fn get_value(&self, data_cache: &mut DataCache) -> f64
 locals are written between expression evaluations, never during them, so
 `OptimizedExpressionNode::evaluate` keeps its immutable `&DataCache`
 signature and the entire existing expression hot path is untouched. Phase 2
-should follow the same shape: the unconditional state-advance walk (§5) is a
+should follow the same shape: the unconditional state advance (§5) is a
 separate `&mut` pass before immutable evaluation, not `&mut` threaded
 through `evaluate` itself.
 
@@ -113,26 +113,36 @@ exactly as today).
 
 ```rust
 struct OptimizedProgram {
-    stmts: Vec<OptStmt>,                 // flat, in order — not a tree
+    stmts: Box<[OptStmt]>,               // flat, in order — not a tree
     result: OptimizedExpressionNode,
-    frame: ArenaRange,                   // this program's locals slots
-    step_guard: usize,                   // arena.u index (see §5)
+    result_stateful: Box<[StatefulNode]>, // stateful calls in `result` (§5)
+    assert_meta: Box<[String]>,
+    advance_guard: Option<usize>,        // arena.u index (see §5)
 }
 enum OptStmt {
-    Assign { slot: usize, expr: OptimizedExpressionNode },
-    Assert { expr: OptimizedExpressionNode, meta: u32 },
+    Assign { slot: usize, expr: OptimizedExpressionNode, stateful: Box<[StatefulNode]> },
+    Assert { expr: OptimizedExpressionNode, meta: u32, stateful: Box<[StatefulNode]> },
+    Cond { cond, cond_stateful, then_stmts, else_stmts, then_has_state, else_has_state },
 }
 ```
+
+(`Cond` is emitted only by the `[fn]` inliner, §6. The lists are boxed
+slices so `DynamicInput` stays at 128 bytes.)
 
 New `OptimizedExpressionNode` variants:
 
 - `Local { slot: usize }` — one indexed arena read, same cost class as
   `ConstantReference`.
-- `MovingWindow { op, range: ArenaRange, arg: Box<...> }` — op ∈
-  {Sum, Mean, Min, Max}.
-- `Since { op, range: ArenaRange, arg: Box<...>, reset: Box<...> }` — op ∈
-  {Sum, Min, Max, Count, Steps} (`Steps` has no `arg`).
-- `SimFlag { field }` — NewDay / NewMonth / NewYear.
+- `MovingWindow { op, slots }` — the read side of every `moving_*` call;
+  op ∈ {Sum, Mean, Min, Max} and the calendar ops of §4.
+- `StateSlot { f_off }` — the read side of `*_since` and `latch`. Reading
+  it is one load.
+
+A stateful call's sampled inputs are not in the tree. Lowering moves them
+into a `StatefulNode` (`Window`, `Since` or `Latch`) on the owner's list,
+which §5 advances; the tree keeps only the read node.
+
+The `sim.new_*` flags are `SimContext` fields (§8).
 
 Locals are resolved to slots **at lowering**, names discarded — the same
 resolve-once move as `data_variable_map`. Name resolution order inside a
@@ -166,25 +176,26 @@ test it.
   forever — on evicting a NaN, recompute the running sum from the buffer;
   this is a cold event, gate it with `evicted.is_nan()`). Add a regression
   test for a NaN transient.
-- **Ring-of-buckets** (`moving_*_years`/`moving_*_months`/`moving_*_days`,
-  `WindowOp::{Sum,Mean,Min,Max}{Annual,Monthly,Daily}` in
-  `dynamic_input.rs`): same two-region shape as the plain ring above —
-  `f[f_off..f_off+n]` one slot per bucket (water year/month/day) +
-  `f[f_off+n]` running statistic; `u[u_off]` head index — but advanced by
-  two different functions depending on whether the current step is a period
-  boundary:
-  - **Non-boundary step** (`accumulate_ring`/`accumulate_extreme`): fold
-    into the *current* bucket (`f[f_off+head]`) and update the running
-    statistic in place — sum/mean add, min/max take `f64::min`/`f64::max`
-    (NaN-suppressing, so an untouched NaN-initialised bucket contributes
-    nothing).
-  - **Boundary step** (`advance_ring`/`advance_ring_extreme`, shared with
-    the plain ring for sum/mean): evict the oldest bucket, start a new one
-    at the incoming value, advance the head. Sum/mean correct the running
-    total incrementally (`sum += x - evicted`); min/max has no inverse for
-    an evicted extremum, so it rescans all `n` buckets on every
-    boundary — O(n), but boundaries fire once per water year/month/day, not
-    once per step, so this is cheap.
+- **Calendar windows** (`moving_{sum,min,max}_{years,months,days}`,
+  `WindowOp::{Sum,Min,Max}{Years,Months,Days}` in `dynamic_input.rs`):
+  the same statistics over whole water years, calendar months or days
+  ("buckets") instead of steps, advanced by one of two functions depending
+  on whether the current step is a period boundary.
+  - **Sum** keeps a ring of bucket totals plus a running total
+    (`f[f_off..f_off+n]` + `f[f_off+n]`, head at `u[u_off]`). A
+    non-boundary step (`accumulate_ring`) adds into the current bucket and
+    the total; a boundary step (`advance_ring`, shared with the plain ring)
+    evicts the oldest bucket, starts a new one at the incoming value and
+    corrects the total (`sum += x - evicted`).
+  - **Min/max** keep the plain windows' monotonic deque over *closed*
+    buckets, keyed on bucket index, plus the extremum of the bucket in
+    progress (layout documented on `publish_bucket_extreme`). A
+    non-boundary step (`accumulate_bucket_extreme`) folds into the bucket
+    in progress with `f64::min`/`f64::max` (NaN-suppressing); a boundary
+    (`advance_bucket_extreme`) closes it into the deque. Both publish the
+    combined result to one slot that the read node loads. Eviction is
+    amortised O(1), which matters because at a daily timestep every step
+    is a `moving_*_days` boundary.
   - **Correctness trap already hit once**: `advance_ring` must evict and
     write against the **post-increment** head (`new_head`), not the
     pre-increment one — otherwise the slot `advance_ring` just initialised
@@ -198,13 +209,13 @@ test it.
     `is_new_day()` alone. At a daily timestep `is_new_day()` is true every
     step, so `moving_*_days` degenerates to exactly the plain ring/deque
     above with no element default — this is deliberately used as a
-    regression test (`test_moving_sum_days_mean_equal_plain_moving_at_daily_timestep`
+    regression test (`test_moving_sum_days_equals_plain_moving_sum_at_daily_timestep`
     in `test_stateful_functions.rs`), cross-checking the new machinery
     against the already-trusted one on identical input.
-  - `uses_calendar_flags` must report `true` for every `*Annual`/`*Monthly`/
-    `*Daily` op directly (not by walking into `arg`), since these read
+  - `StatefulNode::uses_calendar_flags` must report `true` for every
+    calendar op directly (not by walking into `arg`), since these read
     `is_new_month()`/`is_new_day()`/`get_timestamp_month()` in
-    `advance_state` without going through a `SimContext` node — otherwise
+    `StatefulNode::advance` without going through a `SimContext` node — otherwise
     `DataCache.needs_calendar_flags` never gets set and the boundary flags
     silently stay false past step 0.
 
@@ -221,19 +232,25 @@ e.g. `storage_node` reads `target_level` in `run_order_phase` and flow
 logic can read it again). The guard is the existing idiom:
 
 ```rust
-if arena.u[self.step_guard] != data_cache.current_step {
-    arena.u[self.step_guard] = data_cache.current_step;
-    self.advance_state(data_cache);      // walks ALL stateful nodes in this
-                                         // program, taken branches or not
+if arena.u[guard] != data_cache.current_step + 1 {
+    arena.u[guard] = data_cache.current_step + 1;
+    advance_all(stateful, data_cache);   // every stateful call in this
+                                         // input, taken branches or not
 }
 ```
 
-`advance_state` is a full-tree walk in the exact shape of the existing
-`validate_reads` (which stays, unchanged, as the step-0 read validator).
-One predicted compare per evaluation thereafter — the same cost class as
-the `current_step == 0` check already on this path. Statement expressions
-and untaken `if` branches advance identically (design §5): the walk visits
-every `MovingWindow`/`Since` node unconditionally.
+What is advanced is a flat list, not the tree. Lowering splits each
+stateful call in two: a read node that stays in the tree
+(`MovingWindow`, or `StateSlot` for `*_since`/`latch`) and a
+`StatefulNode` holding the sampled inputs, pushed onto the owner's list.
+A call's arguments are lowered before the call is pushed, so the list is
+in post-order. Nested calls advance before the calls that sample them.
+Every call is pushed, so untaken `if` branches advance like any other
+(design §5), and the stateless tree around a call costs nothing at
+advance time. A program keeps one list per statement, advanced just
+before that statement evaluates. After the first evaluation in a step,
+the guard costs one predicted compare, the same cost class as the
+`current_step == 0` check already on this path.
 
 ## 6. `[fn]`: inline at parse level, before lowering
 
@@ -328,7 +345,7 @@ compute flags per-expression; they are per-step facts.
 1. **Grammar core** — §3 parse+lowered shapes on the clean enum baseline
    (§2, already landed), locals via arena (§1 signature change lands
    here), `assert` (§3.2), `clamp`. No stateful anything.
-2. **Stateful builtins** — §4 layouts, §5 guard+advance walk, §8 flags,
+2. **Stateful builtins** — §4 layouts, §5 guard + advance list, §8 flags,
    arena init templates and reset.
 3. **`[fn]`** — §6 in full.
 4. **`[var.*]`** — §7 in full.
