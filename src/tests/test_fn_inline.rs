@@ -362,7 +362,7 @@ fn test_fn_inside_untaken_if_branch_still_advances() {
 }
 
 /// C17b. The same rule for a latch: the statement-level (`OptStmt::Cond`)
-/// untaken-side advance is gated on arena growth during lowering, not on a
+/// untaken-side advance is gated on the side carrying stateful calls, not on a
 /// list of function names, so a latch inside an inlined branch is covered by
 /// construction. `if(sim.step >= 3, fn.held(data.x), -1)` with
 /// `held(a) = latch(a, sim.step == 1, -99)`: the sampling step is 1, while the
