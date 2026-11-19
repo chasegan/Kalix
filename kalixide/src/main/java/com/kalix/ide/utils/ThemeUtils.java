@@ -45,6 +45,11 @@ public final class ThemeUtils {
         return isDark(background) ? Color.LIGHT_GRAY : Color.DARK_GRAY;
     }
 
+    /** {@link #iconColor} for a toolbar button, read from the current theme on each call. */
+    public static Color toolBarIconColor() {
+        return iconColor(UIManager.getColor("ToolBar.background"));
+    }
+
     /**
      * The current theme's accent colour, for the one coloured mark among grey icons (the
      * tab insertion line, the error-log button). Resolved on each call so it tracks theme

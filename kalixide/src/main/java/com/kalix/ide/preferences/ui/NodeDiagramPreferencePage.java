@@ -1,10 +1,18 @@
 package com.kalix.ide.preferences.ui;
 
 import com.kalix.ide.preferences.PreferenceKeys;
+import com.kalix.ide.rendering.NodeLabelMode;
 
+import javax.swing.BorderFactory;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
+import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JPanel;
 import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
 import java.awt.Insets;
 import java.util.function.Consumer;
@@ -14,26 +22,18 @@ import java.util.function.Consumer;
  */
 public class NodeDiagramPreferencePage extends AbstractPreferencePage {
 
-    private final Runnable onMapPreferencesChanged;
-    private final Consumer<Boolean> onGridlinesChanged;
     private final Consumer<Boolean> onScrollPansMapChanged;
 
     private JCheckBox gridlinesCheckBox;
+    private JComboBox<NodeLabelMode> labelModeComboBox;
     private JCheckBox scrollPansMapCheckBox;
 
     /**
-     * @param onMapPreferencesChanged notified after a map preference changes, so
-     *                                the map display can be updated
-     * @param onGridlinesChanged      notified with the new value after the gridlines
-     *                                preference changes, so the toolbar toggle can sync
-     * @param onScrollPansMapChanged  given the new value of the scroll setting; it
-     *                                applies the value to the open maps and saves it
+     * @param onScrollPansMapChanged given the new value of the scroll setting; it
+     *                               applies the value to the open maps and saves it
      */
-    public NodeDiagramPreferencePage(Runnable onMapPreferencesChanged, Consumer<Boolean> onGridlinesChanged,
-                                     Consumer<Boolean> onScrollPansMapChanged) {
+    public NodeDiagramPreferencePage(Consumer<Boolean> onScrollPansMapChanged) {
         super("Node Diagram");
-        this.onMapPreferencesChanged = onMapPreferencesChanged;
-        this.onGridlinesChanged = onGridlinesChanged;
         this.onScrollPansMapChanged = onScrollPansMapChanged;
         initializePanel();
     }
@@ -56,20 +56,34 @@ public class NodeDiagramPreferencePage extends AbstractPreferencePage {
 
         // Map gridlines setting
         gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-        gridlinesCheckBox = new JCheckBox("Show gridlines on map");
+        gridlinesCheckBox = new JCheckBox("Show gridlines on new maps");
         gridlinesCheckBox.setSelected(PreferenceKeys.MAP_SHOW_GRIDLINES.get());
-        gridlinesCheckBox.addActionListener(e -> {
-            boolean enabled = gridlinesCheckBox.isSelected();
-            PreferenceKeys.MAP_SHOW_GRIDLINES.set(enabled);
-
-            // Notify callbacks to update map display and toolbar button
-            onMapPreferencesChanged.run();
-            onGridlinesChanged.accept(enabled);
-        });
+        // Open maps keep their own gridlines; only new maps take this.
+        gridlinesCheckBox.addActionListener(
+            e -> PreferenceKeys.MAP_SHOW_GRIDLINES.set(gridlinesCheckBox.isSelected()));
         formPanel.add(gridlinesCheckBox, gbc);
 
-        // The same setting as View > Scroll Pans Map.
+        // Like gridlines: open maps keep their own labels; only new maps take this.
         gbc.gridy = 1;
+        labelModeComboBox = new JComboBox<>(NodeLabelMode.values());
+        labelModeComboBox.setRenderer(labelModeRenderer());
+        labelModeComboBox.setSelectedItem(NodeLabelMode.saved());
+        labelModeComboBox.addActionListener(e -> {
+            NodeLabelMode mode = (NodeLabelMode) labelModeComboBox.getSelectedItem();
+            if (mode != null) {
+                mode.save();
+            }
+        });
+        JLabel labelModeLabel = new JLabel("Node labels on new maps:");
+        labelModeLabel.setLabelFor(labelModeComboBox);
+        labelModeLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 5));
+        JPanel labelModeRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        labelModeRow.add(labelModeLabel);
+        labelModeRow.add(labelModeComboBox);
+        formPanel.add(labelModeRow, gbc);
+
+        // The same setting as View > Scroll Pans Map.
+        gbc.gridy = 2;
         scrollPansMapCheckBox = new JCheckBox("Scroll pans the map (hold Ctrl or Cmd to zoom)");
         scrollPansMapCheckBox.setSelected(PreferenceKeys.MAP_TRACKPAD_NAVIGATION.get());
         scrollPansMapCheckBox.addActionListener(
@@ -77,5 +91,19 @@ public class NodeDiagramPreferencePage extends AbstractPreferencePage {
         formPanel.add(scrollPansMapCheckBox, gbc);
 
         add(formPanel, BorderLayout.NORTH);
+    }
+
+    private static DefaultListCellRenderer labelModeRenderer() {
+        return new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index,
+                                                          boolean isSelected, boolean cellHasFocus) {
+                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                if (value instanceof NodeLabelMode mode) {
+                    setText(mode.displayName());
+                }
+                return this;
+            }
+        };
     }
 }

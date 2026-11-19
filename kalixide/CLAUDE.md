@@ -191,11 +191,11 @@ the engine never does. `IniSyntax.annotation()` is the only lexer for it, and to
 other `IniSyntax` rule the line is still a comment, so parsers that strip comments are
 untouched. `ModelParser` attaches an `aka` above a `[node.*]` header to that node
 (`ModelNode.getAka()`); a code line in between orphans it. `NodeLabelMode` owns what
-the map draws per node (names / aka only / hidden, with the hover rule) and the one
-toolbar button cycles it; `MapRenderer` draws the lines it is given. The editor
-tokenises annotation lines as `Token.ANNOTATION`.
+the map draws per node (names / aka only / hidden, with the hover rule) and the label
+button on the map's toolbar (`MapToolBar`) cycles it; `MapRenderer` draws the lines it
+is given. The editor tokenises annotation lines as `Token.ANNOTATION`.
 
-Key files: `IniSyntax.java`, `ModelParser.java`, `NodeLabelMode.java`, `ToolBarBuilder.java`
+Key files: `IniSyntax.java`, `ModelParser.java`, `NodeLabelMode.java`, `MapToolBar.java`
 
 ### Folding (#494)
 `KalixIniFoldParser` is the one fold grammar, registered for the Kalix INI style beside
