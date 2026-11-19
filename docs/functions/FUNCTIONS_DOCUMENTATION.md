@@ -350,11 +350,19 @@ part ways. And the two differ inside an untaken `if` branch: `latch` samples
 regardless, per the unconditional-advance rule above, where the spelled-out
 `if` short-circuits and does not.
 
-A held latch does not evaluate `x` at all, so
-`latch(fn.expensive(), is_startwy, 0)` costs one evaluation a year rather than
-365. That is an evaluation optimisation only: stateful functions nested inside
-`x` still advance on every step, so what the latch holds never depends on when
-it happened to fire.
+A held latch does not evaluate `x`, so `latch(fn.expensive(), is_startwy, 0)`
+costs one evaluation a year rather than 365 when `fn.expensive` has no
+parameters and an expression body. That is an evaluation optimisation only.
+Stateful functions nested inside `x` still advance on every step, so what the
+latch holds does not depend on when it happened to fire.
+
+The saving covers only what stays inside `x` after `[fn]` calls are inlined.
+A call's arguments are bound in statements placed before the latch, and so
+are the statements of a `{ ... }` body, asserts included. Those run every
+step, whether or not the latch holds. Only the function's result expression is skipped while
+the latch holds. Where the call sits inside an `if` branch or an `&&`/`||`
+operand within `x`, the whole conditional is placed before the latch, result
+included, so none of the function is skipped.
 
 ### Calendar boundary flags
 
