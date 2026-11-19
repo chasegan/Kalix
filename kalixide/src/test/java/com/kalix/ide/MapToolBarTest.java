@@ -8,7 +8,9 @@ import org.kordamp.ikonli.swing.FontIcon;
 
 import javax.swing.Icon;
 import javax.swing.JToggleButton;
+import javax.swing.SwingUtilities;
 import java.awt.Dimension;
+import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
@@ -62,16 +64,49 @@ class MapToolBarTest {
     }
 
     @Test
-    void wheelOverTheToolBarReachesTheMap() {
+    void wheelOverTheToolBarReachesTheMapInMapCoordinates() {
         ModelDocument doc = new ModelDocument();
+        MapView view = view(doc);
+        view.setSize(600, 400);
+        view.doLayout();
         List<MouseWheelEvent> received = new ArrayList<>();
         doc.getMapPanel().addMouseWheelListener(received::add);
         MapToolBar bar = toolBar(doc);
 
-        bar.dispatchEvent(new MouseWheelEvent(bar, MouseEvent.MOUSE_WHEEL, 0L, 0, 5, 5, 0, false,
+        bar.dispatchEvent(new MouseWheelEvent(bar, MouseEvent.MOUSE_WHEEL, 0L, 0, 5, 7, 0, false,
             MouseWheelEvent.WHEEL_UNIT_SCROLL, 1, 1));
 
         assertEquals(1, received.size());
+        assertEquals(new Point(bar.getX() + 5, bar.getY() + 7), received.get(0).getPoint());
+        assertSame(doc.getMapPanel(), received.get(0).getComponent());
+    }
+
+    @Test
+    void toolBarPaddingFallsThroughToTheMap() {
+        ModelDocument doc = new ModelDocument();
+        MapView view = view(doc);
+        view.setSize(600, 400);
+        view.doLayout();
+        toolBar(doc).doLayout();
+        MapToolBar bar = toolBar(doc);
+
+        assertFalse(bar.contains(1, 1), "the padding is not the toolbar's");
+        assertSame(doc.getMapPanel(), SwingUtilities.getDeepestComponentAt(view, bar.getX() + 1, bar.getY() + 1));
+    }
+
+    @Test
+    void buttonsStillTakeTheMouse() {
+        ModelDocument doc = new ModelDocument();
+        MapView view = view(doc);
+        view.setSize(600, 400);
+        view.doLayout();
+        toolBar(doc).doLayout();
+        MapToolBar bar = toolBar(doc);
+        JToggleButton button = labelsButton(doc);
+        Point centre = new Point(button.getX() + button.getWidth() / 2, button.getY() + button.getHeight() / 2);
+
+        assertTrue(bar.contains(centre.x, centre.y));
+        assertSame(button, SwingUtilities.getDeepestComponentAt(view, bar.getX() + centre.x, bar.getY() + centre.y));
     }
 
     @Test

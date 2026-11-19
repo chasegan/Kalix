@@ -20,7 +20,7 @@ public final class MapView extends JLayeredPane {
     public MapView(MapPanel map) {
         this.map = map;
         this.toolBar = new MapToolBar(map);
-        // The wheel over the toolbar still zooms or pans the map beneath it.
+        // The wheel over a button still zooms or pans the map beneath it.
         toolBar.addMouseWheelListener(e -> map.dispatchEvent(SwingUtilities.convertMouseEvent(toolBar, e, map)));
         add(map, DEFAULT_LAYER);
         add(toolBar, PALETTE_LAYER);

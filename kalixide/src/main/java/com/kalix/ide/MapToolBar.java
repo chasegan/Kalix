@@ -13,6 +13,7 @@ import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
 import javax.swing.UIManager;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
@@ -61,6 +62,20 @@ public final class MapToolBar extends JToolBar {
         if (map != null) { // null while JToolBar's constructor runs
             refreshIcons();
         }
+    }
+
+    /**
+     * True only over a button, so presses, drags and moves in the padding fall through to
+     * the map beneath; Swing picks mouse targets by this.
+     */
+    @Override
+    public boolean contains(int x, int y) {
+        for (Component button : getComponents()) {
+            if (button.isVisible() && button.contains(x - button.getX(), y - button.getY())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** The group's rounded background and outline, in the current theme's toolbar colours. */
