@@ -137,11 +137,10 @@ net_demand(pop, doy) = {
 ## Model Variables
 
 `[var.*]` sections hold published calculations. Unlike tables and functions
-(passive — defined anywhere), var blocks are **active**: they execute at
-their file position among the nodes, by default in the flow phase, reading
-anything computed above them. The file reads downstream, calculations
-included (an order-phase block reads the nodes below it instead; see
-`phase` below).
+(passive — defined anywhere), var blocks are **active**: they execute at their
+file position within their phase (by default the flow phase, among the
+nodes). In the ras and flow phases the file reads downstream, top to bottom;
+in the order phase it reads upstream, bottom to top. See `phase` below.
 
 ```ini
 [var.accounting]
@@ -159,15 +158,18 @@ prev_headroom = var.accounting.headroom[-1, -999]
   readable in any expression, offset-addressable, and recordable in
   `[outputs]` like any node output.
 - Keys evaluate top to bottom; later keys see this step's earlier keys.
-- In the flow phase, reading a value computed *below* the block's position
-  (this-timestep) is caught at run start by the same validation as node
-  references; in the order phase the error is for a node *above* it. Use
-  `[-1, default]` for the previous step's value.
-- `phase = flow` (default) runs at file position in the flow pass;
-  `phase = ras` in the ras slot at the top of the step; `phase = order` at
-  file position in the order phase, which walks the file bottom-up (blocks
-  in reverse file order, keys top to bottom).
-- This replaces the dummy-gauge / `reference_flow` scratch-node workaround.
+- Reading a value computed *later* in the step — by a section below, in the
+  flow and ras phases; above, in the order phase; or in a later phase — is
+  caught on the first timestep, by the same check as an out-of-order node
+  reference. Use the offset syntax `[-1, default]` for the previous step's
+  value.
+- The `phase` key selects when the block runs, in evaluation order:
+  - `phase = ras` runs in the ras slot at the top of the step, in file order
+    with the `[ras.*]` sections; the block must precede the first node
+    section.
+  - `phase = order` runs at file position in the order phase (blocks in
+    reverse file order, keys top to bottom).
+  - `phase = flow` (default) runs at file position in the flow phase.
 
 ## Temporal (Stateful) Functions
 

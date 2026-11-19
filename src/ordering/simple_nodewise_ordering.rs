@@ -43,7 +43,7 @@ struct IncomingRegulatedLink {
 }
 
 /// Entry in the regulated node list, pointing into the flat incoming-links vec.
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 struct RegulatedNodeEntry {
     node_idx: usize,
     links_start: usize,  // start index into flat_incoming_links
@@ -54,8 +54,8 @@ struct RegulatedNodeEntry {
 /// `ExecItem` in model.rs, walked bottom-up instead of top-down.
 #[derive(Clone, Copy, Debug)]
 enum OrderVisit {
-    /// Index into regulated_nodes
-    Node(usize),
+    /// A regulated node, carried so the walk does not index regulated_nodes
+    Node(RegulatedNodeEntry),
     /// Index into the model's var_blocks
     VarBlock(usize),
 }
@@ -399,12 +399,12 @@ impl SimpleNodewiseOrderingSystem {
         // A block sits below a visited node when more nodes are defined above it than the
         // node's index; it runs before that node, after every visited node below it.
         let mut remaining = positions.len();
-        for (entry_idx, entry) in self.regulated_nodes.iter().enumerate() {
+        for entry in &self.regulated_nodes {
             while remaining > 0 && positions[remaining - 1].0 > entry.node_idx {
                 remaining -= 1;
                 self.visit_items.push(OrderVisit::VarBlock(positions[remaining].1));
             }
-            self.visit_items.push(OrderVisit::Node(entry_idx));
+            self.visit_items.push(OrderVisit::Node(*entry));
         }
         // The rest sit above every visited node
         while remaining > 0 {
@@ -419,9 +419,10 @@ impl SimpleNodewiseOrderingSystem {
     }
 
     /// The order phase with order-phase var blocks: the visit list with each block in its
-    /// place, at its file position bottom-up (ADR-0005 §1), keys top to bottom. Blocks run
-    /// even when the model has no ordering; the list then holds only blocks. The ordering
-    /// system knows only where a block runs: `run_var_block` (the model's) evaluates it.
+    /// place, at its file position bottom-up (ADR-0005 §1 extended to the order phase), keys
+    /// top to bottom. Blocks run even when the model has no ordering; the list then holds only
+    /// blocks. The ordering system knows only where a block runs: `run_var_block` (the model's)
+    /// evaluates it.
     // Out of line: inlined into run_timestep, regulated models that never call it timed 4-6%
     // slower than with it out of line (ADR-0004 §4)
     #[inline(never)]
@@ -435,15 +436,15 @@ impl SimpleNodewiseOrderingSystem {
         }
         for &item in &self.visit_items {
             match item {
-                OrderVisit::Node(entry_idx) => {
-                    self.visit_node(&self.regulated_nodes[entry_idx], nodes, data_cache, account_manager);
-                }
+                OrderVisit::Node(entry) => self.visit_node(&entry, nodes, data_cache, account_manager),
                 OrderVisit::VarBlock(vb_idx) => run_var_block(vb_idx, data_cache),
             }
         }
     }
 
     /// One node's order phase and the order it sends upstream; both entry points visit through it.
+    // Inlined into both loops: left to the compiler, regulated models timed 1-5% slower
+    // (ADR-0004 §4)
     #[inline(always)]
     fn visit_node(&self, entry: &RegulatedNodeEntry, nodes: &mut Vec<NodeEnum>, data_cache: &mut DataCache,
                   account_manager: &mut AccountManager) {

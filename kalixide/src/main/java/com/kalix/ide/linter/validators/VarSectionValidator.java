@@ -97,19 +97,15 @@ public class VarSectionValidator implements ValidationStrategy {
 
     private void validatePhase(String value, String sectionName, int line, ValidationResult result) {
         String phase = value == null ? "" : value.trim().toLowerCase();
+        // 'ras' runs in the assessment slot at the top of the step; the engine also requires
+        // such blocks to precede the first node section (placement is validated at load).
+        // 'flow' runs at file position in the flow pass; 'order' at file position in the
+        // bottom-up order phase.
         switch (phase) {
-            case "flow":
-            // 'order' runs at file position in the bottom-up order phase.
-            case "order":
-            // 'ras' runs in the assessment slot at the top of the step;
-            // the engine additionally requires such blocks to precede the
-            // first node section (placement is validated at load).
-            case "ras":
-                return;
-            default:
-                result.addIssue(line,
-                        "invalid phase '" + value + "' for [" + sectionName + "] (expected 'ras', 'flow' or 'order')",
-                        ValidationRule.Severity.ERROR, "invalid_var_phase");
+            case "ras", "flow", "order" -> { }
+            default -> result.addIssue(line,
+                    "invalid phase '" + value + "' for [" + sectionName + "] (expected 'ras', 'flow' or 'order')",
+                    ValidationRule.Severity.ERROR, "invalid_var_phase");
         }
     }
 }

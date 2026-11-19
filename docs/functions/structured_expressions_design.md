@@ -355,7 +355,7 @@ new_wy() = sim.new_month && sim.month == 7
 
 ```ini
 [var.accounting]
-phase = flow                 # 'order' | 'flow' (default)
+phase = flow                 # 'ras' | 'order' | 'flow' (default)
 used_wy = sum_since(node.township.diversion, fn.new_wy())
 headroom = {
     cap = const.annual_cap;
@@ -384,8 +384,9 @@ timestep, so its position relative to the nodes is part of its meaning.
 
 Therefore `[var.*]` blocks interleave with `[node.*]` sections and execute
 in **file position within their phase** (`ADR-0005 §1` extended
-to calculations). `phase` selects which of the engine's two per-timestep
-passes evaluates the block: `order` or `flow` (default `flow`).
+to calculations). `phase` selects which part of the timestep evaluates the
+block: `ras` (the ras slot at the top of the step), `order` or `flow`
+(default `flow`).
 
 Reading a value that does not exist yet (e.g. a downstream node's
 this-timestep output) is caught by the existing step-0 validation walk —
@@ -399,7 +400,7 @@ first step, every run, deterministically. No additional phase rules needed.
 - `steps_since`, not `days_since` — timestep-agnostic, matches `sim.step`.
 - `latch`, not `sample_hold` or `hold` — one short verb for the electronics
   idiom the behaviour is named after; `hold` alone loses the sampling half.
-- `phase` with noun values `order` / `flow`.
+- `phase` with noun values `ras` / `order` / `flow`.
 - `clamp(x, lo, hi)` joins the pure builtins (the clearer spelling of
   `min(max(x, lo), hi)`).
 - One spelling each, no aliases, lowercase; rejected spellings get
