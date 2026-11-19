@@ -133,6 +133,22 @@ accounts = name, size, initial,
 "#);
     let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error").to_string();
     assert!(err.contains("outside [0, size"), "unexpected error: {}", err);
+
+    // NaN parses as a number but is refused as one, in either column
+    let ini = model_with_acc(
+        r#"[acc.g1]
+accounts = name, size, initial,
+           a1, 42, nan,
+"#);
+    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error").to_string();
+    assert!(err.contains("Invalid initial balance 'nan' for account 'a1': must be a number"), "unexpected error: {}", err);
+    let ini = model_with_acc(
+        r#"[acc.g1]
+accounts = name, size, initial,
+           a1, NaN, 0,
+"#);
+    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error").to_string();
+    assert!(err.contains("Invalid size 'NaN' for account 'a1': must be a number"), "unexpected error: {}", err);
 }
 
 #[test]

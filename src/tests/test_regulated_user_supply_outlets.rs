@@ -189,6 +189,91 @@ fn test_account_cap_applies_to_the_whole_order_outlets_first() {
 }
 
 #[test]
+fn test_account_cap_is_in_water_under_a_debit_factor() {
+    // 12 in the account at factor 2 is 6 of water: the same cut as above, and the 6 charges 12
+    let head = "[acc.licences]\naccounts = name, size, initial, debit_factor,\n           licence, 1000, 12, 2,";
+    let mut model = run(&rig(head, 0, 0, "order = 3\naccounts = licence", "5")
+        .replace("[outputs]", "[outputs]\nacc.licence.closing_balance\nacc.licence.debits"));
+    assert_eq!(series(&mut model, "node.dam.ds_1_order")[0], 6.0, "the order is capped in water");
+    assert_eq!(series(&mut model, "node.pump.ds_2")[0], 5.0, "the outlet first");
+    assert_eq!(series(&mut model, "node.pump.diversion")[0], 6.0);
+    assert_eq!(series(&mut model, "acc.licence.debits")[0], 12.0, "the whole take, at the factor");
+    assert_eq!(series(&mut model, "acc.licence.closing_balance")[0], 0.0);
+    assert_eq!(series(&mut model, "node.dam.ds_1_order")[1], 0.0);
+}
+
+#[test]
+fn test_account_combination_is_in_water_under_a_debit_factor() {
+    // licence & cap: the licence's 12 at factor 2 is 6 of water and binds; the cap is charged
+    // the same 6 at its factor of 1
+    let head = "[acc.licences]\naccounts = name, size, initial, debit_factor,\n           licence, 1000, 12, 2,\n           cap, 1000, 100, 1,";
+    let mut model = run(&rig(head, 0, 0, "order = 3\naccounts = licence & cap", "5")
+        .replace("[outputs]", "[outputs]\nacc.licence.debits\nacc.cap.debits"));
+    assert_eq!(series(&mut model, "node.dam.ds_1_order")[0], 6.0, "the order is capped in water");
+    assert_eq!(series(&mut model, "node.pump.ds_2")[0], 5.0, "the outlet first");
+    assert_eq!(series(&mut model, "node.pump.diversion")[0], 6.0);
+    assert_eq!(series(&mut model, "acc.licence.debits")[0], 12.0);
+    assert_eq!(series(&mut model, "acc.cap.debits")[0], 6.0);
+    assert_eq!(series(&mut model, "node.dam.ds_1_order")[1], 0.0);
+}
+
+/// The delivery is capped in water too, on the day it arrives. The licence holds 16 at
+/// factor 2, and a rule takes 4 a step. On day 1 the 12 left covers an order of 6, which
+/// arrives on day 3, when the 4 left covers 2 of it. The outlet gets the 2.
+#[test]
+fn test_the_delivery_is_capped_in_water_on_the_day_under_a_debit_factor() {
+    let head = "[acc.licences]\naccounts = name, size, initial, debit_factor,\n           licence, 1000, 16, 2,\n\n[ras.cut]\ntargets = acc.licences\ntrigger = every_step\naction = debit(4)";
+    let mut model = run(&rig(head, 2, 0, "order = 3\naccounts = licence", "5")
+        .replace("[outputs]", "[outputs]\nacc.licence.debits"));
+    assert_eq!(series(&mut model, "node.dam.ds_1_order")[..3], [6.0, 0.0, 0.0], "the 5 and 1 of the 3");
+    assert_eq!(series(&mut model, "node.pump.usflow")[2], 6.0);
+    assert_eq!(series(&mut model, "node.pump.ds_2")[2], 2.0, "the outlet first, to what is left");
+    assert_eq!(series(&mut model, "node.pump.diversion_regulated")[2], 2.0, "none left for the user's own");
+    assert_eq!(series(&mut model, "node.pump.diversion")[2], 2.0);
+    assert_eq!(series(&mut model, "acc.licence.debits")[2], 4.0);
+}
+
+/// The licence covers 6 of the 8 the outlet and the user order together, and the bridge
+/// authorises the other 2. The excess is measured on the whole order, the outlet's included.
+#[test]
+fn test_order_accounts_pay_the_excess_of_the_whole_order() {
+    let head = "[acc.licences]\naccounts = name, size, initial,\n           licence, 1000, 6,\n           bridge, 1000, 100,";
+    let mut model = run(&rig(head, 0, 0, "order = 3\naccounts = licence\norder_accounts = bridge", "5")
+        .replace("[outputs]", "[outputs]\nacc.bridge.closing_balance"));
+    assert_eq!(series(&mut model, "node.dam.ds_1_order")[0], 8.0);
+    assert_eq!(series(&mut model, "acc.bridge.closing_balance")[0], 98.0);
+}
+
+/// A combination is committed the whole order, the outlet's included, which is 5 + 3 on each side.
+#[test]
+fn test_a_combination_is_committed_the_whole_order() {
+    let head = "[acc.licences]\naccounts = name, size, initial,\n           licence, 1000, 100,\n           cap, 1000, 100,";
+    let mut model = run(&rig(head, 2, 0, "order = 3\naccounts = licence & cap", "5")
+        .replace("[outputs]", "[outputs]\nacc.licence.committed\nacc.cap.committed"));
+    assert_eq!(series(&mut model, "acc.licence.committed")[1], 8.0);
+    assert_eq!(series(&mut model, "acc.cap.committed")[1], 8.0);
+}
+
+/// Two outlets on a delivery day the account has been cut on. The account holds 20, and a rule
+/// takes 4 a step. On day 1 the 16 left covers both fields' 5. On day 3, 8 is left, so ds_2
+/// gets its 5 and ds_3 the 3 left after it.
+#[test]
+fn test_each_outlet_gets_what_the_outlets_before_it_left() {
+    let head = "[acc.licences]\naccounts = name, size, initial,\n           licence, 1000, 20,\n\n[ras.cut]\ntargets = acc.licences\ntrigger = every_step\naction = debit(4)";
+    let second_field = "ds_3 = channel2\n\n[node.channel2]\ntype = routing\nloc = 20, 40\nlag = 0\nds_1 = paddock2\n\n\
+        [node.paddock2]\ntype = field\narea = 1\navailable_water = 1000\ntew = 20\nrew = 8\ninitial_depletion = 1000\n\
+        fallow = bare\ncrop_1 = thirsty\ncrop_1_plant = 1\ncrop_1_viable_area = this.area\nloc = 20, 50\n\
+        crop_1_order = 5\nds_1 = outlet\n";
+    let mut model = run(&rig(head, 2, 0, "order = 0\naccounts = licence", "5")
+        .replace("ds_2 = channel\n", &format!("ds_2 = channel\n{second_field}"))
+        .replace("[outputs]", "[outputs]\nnode.pump.ds_3"));
+    assert_eq!(series(&mut model, "node.dam.ds_1_order")[0], 10.0);
+    assert_eq!(series(&mut model, "node.pump.ds_2")[2], 5.0);
+    assert_eq!(series(&mut model, "node.pump.ds_3")[2], 3.0);
+    assert_eq!(series(&mut model, "node.pump.diversion")[2], 8.0);
+}
+
+#[test]
 fn test_supply_outlet_round_trips() {
     let ini = rig("", 0, 0, "order = 3", "5");
     let model = IniModelIO::read_model_string(&ini).expect("model should load");

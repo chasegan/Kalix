@@ -1,0 +1,13 @@
+---
+version: "0.4.12"
+date: TBD
+prerelease: false
+assets:
+  Windows: "https://github.com/chasegan/Kalix/releases/download/v0.4.12/KalixIDE-Windows-0.4.12-Portable.zip"
+  macOS: "https://github.com/chasegan/Kalix/releases/download/v0.4.12/KalixIDE-macOS-0.4.12-Portable.zip"
+  Linux: "https://github.com/chasegan/Kalix/releases/download/v0.4.12/KalixIDE-Linux-0.4.12-Portable.zip"
+pip: "pip install kalix==0.4.12"
+---
+
+- An account table refuses `nan` as an initial balance; it used to load and give the account a NaN balance for the whole run. A `nan` size is now reported as not a number rather than as a negative size. See [accounts](https://kalix.org/docs/accounts/).
+- A `debit_factor` must now be at least about 2.2e-308. Smaller (subnormal) factors used to load.

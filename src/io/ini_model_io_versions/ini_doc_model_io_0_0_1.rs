@@ -1,17 +1,20 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 use crate::hydrology::accounts::account::Account;
-use crate::hydrology::accounts::account_manager::{AccountGroup, ACCOUNT_SERIES_FIELDS, GROUP_SERIES_FIELDS};
+use crate::hydrology::accounts::account_manager::{AccountGroup, AccountManager, ACCOUNT_SERIES_FIELDS, GROUP_SERIES_FIELDS};
 use crate::hydrology::accounts::account_tree::{duplicate_account_message, is_combination, parse_combination, unknown_account_message, AccountsProperty};
-use crate::hydrology::allocation_systems::ras::RasSystem;
+use crate::hydrology::allocation_systems::ras::{DistributeBy, RasAction, RasSystem, RasTrigger};
+use crate::hydrology::crop::{Crop, KcCurve};
 use crate::io::csv_io::{csv_string_to_f64_vec, csv_to_string_vec};
 use crate::io::error::KalixIoError;
 use crate::io::custom_ini_parser::{IniDocument, IniSection};
 use crate::misc::configuration::SaveMethod;
 use crate::misc::location::Location;
 use crate::model_inputs::DynamicInput;
+use crate::model_inputs::dynamic_input;
 use crate::numerical::lookup_table::LookupTable;
 use crate::numerical::table::Table;
-use crate::model::{Model, VarPhase};
+use crate::model::{ExecItem, Model, RasSlotItem, VarBlock, VarDef, VarPhase};
 use crate::misc::link_helper::LinkHelper;
 use crate::tid::utils::{date_string_to_u64_flexible, u64_to_date_string_for_step_size};
 use crate::misc::misc_functions::{is_valid_variable_name, is_valid_bare_name, is_valid_name_segment, parse_csv_to_bool_option_u8, true_or_false, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty, set_property_unless_default, format_f64};
@@ -29,13 +32,6 @@ const DS_4_OUTLET: u8 = 3; //ds_4 is outlet 3
 
 
 
-/// Converts INI-doc to Model struct.
-/// Returns Model on success, error message on failure.
-///
-/// # Arguments
-/// * `ini_doc` - The parsed INI document
-/// * `working_directory` - Optional working directory for resolving relative paths.
-///   If None, uses the current working directory.
 /// The (node type, property) pairs whose declared value is registered into
 /// `DataCache::static_properties` at load, making them readable from any
 /// expression as `node.<name>.<property>`. Single source of truth: the load
@@ -65,7 +61,14 @@ pub(crate) const NODE_STATIC_F64_PROPERTIES: &[(&str, &str)] = &[
     ("field", "efficiency"),
 ];
 
-pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<std::path::PathBuf>) -> Result<Model, KalixIoError> {
+/// Converts INI-doc to Model struct.
+/// Returns Model on success, error message on failure.
+///
+/// # Arguments
+/// * `ini_doc` - The parsed INI document
+/// * `working_directory` - Optional working directory for resolving relative paths.
+///   If None, uses the current working directory.
+pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<PathBuf>) -> Result<Model, KalixIoError> {
 
     // Create a new model
     let mut model = Model::new();
@@ -139,7 +142,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
         let mut root_depth: Option<f64> = None;
         let mut initial_root_depth: Option<f64> = None;
         let mut p: f64 = 0.5;
-        let mut kcb: Option<crate::hydrology::crop::KcCurve> = None;
+        let mut kcb: Option<KcCurve> = None;
         let mut season_len: Option<u32> = None;
         for (key, ini_property) in &ini_section.properties {
             let v = require_non_empty(&ini_property.value, key, ini_property.line_number).map_err(KalixIoError::Validate)?;
@@ -153,7 +156,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 "kc" => return Err(KalixIoError::Validate(format!("Error on line {}: Crop '{}' has 'kc', a single coefficient; a crop declares its basal coefficient 'kcb' (FAO-56 Table 17). From a Kc table: 0.15 for the initial stage, 0.05 off the mid-season value, 0.05 to 0.10 off the end. See the field docs, 'Coming from a single coefficient'", ini_property.line_number, crop_name))),
                 key_lower @ "kcb" => {
                     let curve = if let Ok(constant) = v.parse::<f64>() {
-                        crate::hydrology::crop::KcCurve::Constant(constant)
+                        KcCurve::Constant(constant)
                     } else {
                         // A table's header, if any, is two labels: a label beside a number would
                         // otherwise be read as a header and the number lost with it
@@ -161,7 +164,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         if cells.len() >= 2 && cells[0].parse::<f64>().is_err() && cells[1].parse::<f64>().is_ok() {
                             return Err(KalixIoError::Parse(format!("Error on line {}: {} for crop '{}' starts with one label, '{}'; a table's header is two labels (days, {}) or none", ini_property.line_number, key_lower, crop_name, cells[0], key_lower)));
                         }
-                        crate::hydrology::crop::KcCurve::ByDay(Table::from_csv_string(v, 2, false)
+                        KcCurve::ByDay(Table::from_csv_string(v, 2, false)
                             .map_err(|e| KalixIoError::Parse(format!("Error on line {}: Could not parse {} for crop '{}' as a number or a two-column table: {}", ini_property.line_number, key_lower, crop_name, e)))?)
                     };
                     kcb = Some(curve);
@@ -174,7 +177,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
         let Some(kcb) = kcb else {
             return Err(KalixIoError::Validate(format!("Error on line {}: Crop '{}' has no 'kcb'", ini_section.line_number, crop_name)));
         };
-        let crop = crate::hydrology::crop::Crop {
+        let crop = Crop {
             name: crop_name.to_string(),
             root_depth: root_depth.ok_or_else(|| KalixIoError::Validate(format!("Error on line {}: Crop '{}' has no 'root_depth'", ini_section.line_number, crop_name)))?,
             initial_root_depth,
@@ -255,15 +258,15 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
 
             let mut member_ids = Vec::with_capacity(table.names.len());
             for (row, name) in table.names.iter().enumerate() {
-                let account = Account::new_with_size(
+                let account = Account::new(
                     name.clone(),
                     group_name.to_string(), // account_type carries the group name
                     table.sizes[row],
                     table.initials[row],
+                    table.debit_factors[row],
                 );
                 let account_idx = model.account_manager.add_account(account)
                     .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", accounts_prop.line_number, e)))?;
-                model.account_manager.set_account_debit_factor(account_idx, table.debit_factors[row]);
                 if let Some(pairs) = &table.pairs {
                     pending_pairs.push((account_idx, pairs[row].clone(), accounts_prop.line_number));
                 }
@@ -381,7 +384,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     // slot — assessments and [ras.*] sections — so the slot executes in file
     // order, interleaved exactly as written.
     let mut seen_node_section = false;
-    let mut ras_slot_items: Vec<(usize, crate::model::RasSlotItem)> = Vec::new();
+    let mut ras_slot_items: Vec<(usize, RasSlotItem)> = Vec::new();
     for (section_name, ini_section) in ini_doc.sections {
 
         if section_name == "kalix" {
@@ -1419,7 +1422,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             }
 
             // Register the var definitions in this block.
-            let mut defs: Vec<crate::model::VarDef> = Vec::new();
+            let mut defs: Vec<VarDef> = Vec::new();
             for (key, ini_property) in &ini_section.properties {
                 if key.as_str() == "phase" {
                     continue;
@@ -1443,7 +1446,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 // §2.8): expanded textually in the definition's own text, so
                 // the state idiom survives a rename without editing its
                 // internal self-references.
-                let expanded = crate::model_inputs::dynamic_input::expand_var_this(
+                let expanded = dynamic_input::expand_var_this(
                     &ini_property.value, &series_name)
                     .map_err(|e| KalixIoError::Parse(format!("Error on line {}: in '{}': {}",
                                          ini_property.line_number, key, e)))?;
@@ -1453,7 +1456,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     .map_err(|e| KalixIoError::Parse(format!("Error on line {}: in '{}': {}",
                                          ini_property.line_number, key, e)))?;
 
-                defs.push(crate::model::VarDef {
+                defs.push(VarDef {
                     key: key.clone(),
                     series_idx,
                     input,
@@ -1461,14 +1464,14 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 });
             }
 
-            let vb_idx = model.add_var_block(crate::model::VarBlock {
+            let vb_idx = model.add_var_block(VarBlock {
                 name: block_name.to_string(),
                 defs,
                 phase,
                 phase_explicit,
             });
             if phase == VarPhase::Ras {
-                ras_slot_items.push((ini_section.line_number, crate::model::RasSlotItem::VarBlock(vb_idx)));
+                ras_slot_items.push((ini_section.line_number, RasSlotItem::VarBlock(vb_idx)));
             }
         } else if section_name.starts_with("table.") {
             // -------------------------------------------------------------------------------------
@@ -1564,10 +1567,10 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
         }
         // Scratch for a distribute action, sized here so a firing never allocates.
         let distribute_weights = match parsed_action.action {
-            crate::hydrology::allocation_systems::ras::RasAction::Distribute(..) => vec![0.0; target_account_ids.len()],
+            RasAction::Distribute(..) => vec![0.0; target_account_ids.len()],
             _ => Vec::new(),
         };
-        ras_slot_items.push((line, crate::model::RasSlotItem::Ras(model.ras_systems.len())));
+        ras_slot_items.push((line, RasSlotItem::Ras(model.ras_systems.len())));
         model.ras_systems.push(RasSystem {
             name: ras_name,
             target_account_ids,
@@ -1753,7 +1756,7 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
     // keep it where the modeller put it.
     for exec_item in &model.exec_items {
         let node_enum = match exec_item {
-            crate::model::ExecItem::VarBlock(i) => {
+            ExecItem::VarBlock(i) => {
                 let vb = &model.var_blocks[*i];
                 let section_name = format!("var.{}", vb.name);
                 // The phase as written while it still names the block's phase; otherwise the
@@ -1776,7 +1779,7 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 }
                 continue;
             }
-            crate::model::ExecItem::Node(idx) => &model.nodes[*idx],
+            ExecItem::Node(idx) => &model.nodes[*idx],
         };
         match node_enum {
             NodeEnum::BlackholeNode(n) => {
@@ -2076,8 +2079,8 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
         }
         set_property_unless_default(&mut ini_doc, section_name.as_str(), "p", &format_f64(crop.p), "0.5");
         let kcb = match &crop.kcb {
-            crate::hydrology::crop::KcCurve::Constant(kcb) => format_f64(*kcb),
-            crate::hydrology::crop::KcCurve::ByDay(table) => format_vec_as_multiline_table(&table.get_values_as_vec(), 2, 4),
+            KcCurve::Constant(kcb) => format_f64(*kcb),
+            KcCurve::ByDay(table) => format_vec_as_multiline_table(&table.get_values_as_vec(), 2, 4),
         };
         ini_doc.set_property(section_name.as_str(), "kcb", kcb.as_str());
         if let Some(days) = crop.season_len {
@@ -2280,19 +2283,19 @@ fn parse_account_table(flat: &str, model: &mut Model) -> Result<AccountTableData
                     }
                 }
                 "size" => {
-                    size = cell.parse::<f64>()
-                        .map_err(|_| format!("Invalid size '{}' for account '{}': must be a number",
+                    // NaN parses as an f64 but is not a number, and would pass the comparisons below
+                    size = cell.parse::<f64>().ok().filter(|v| !v.is_nan())
+                        .ok_or_else(|| format!("Invalid size '{}' for account '{}': must be a number",
                             cell, table_name))?;
-                    // Written as !(size >= 0.0), not size < 0.0, so NaN (which parses fine as f64
-                    // but fails every comparison) is caught here too instead of slipping through.
-                    if !(size >= 0.0) {
+                    if size < 0.0 {
                         return Err(format!("Account '{}' has negative size {}",
                             table_name, size));
                     }
                 }
                 "initial" => {
-                    initial = cell.parse::<f64>()
-                        .map_err(|_| format!("Invalid initial balance '{}' for account '{}': must be a number",
+                    // As for size: the range check below would let NaN through
+                    initial = cell.parse::<f64>().ok().filter(|v| !v.is_nan())
+                        .ok_or_else(|| format!("Invalid initial balance '{}' for account '{}': must be a number",
                             cell, table_name))?;
                 }
                 "pair" => {
@@ -2308,10 +2311,11 @@ fn parse_account_table(flat: &str, model: &mut Model) -> Result<AccountTableData
                         .map_err(|_| format!("Invalid debit factor '{}' for account '{}': must be a number",
                             cell, table_name))?;
                     // A factor of zero would make any take available from the account, and a
-                    // negative one would credit it. NaN fails the comparison and is refused
-                    // with them.
-                    if !(debit_factor > 0.0 && debit_factor.is_finite()) {
-                        return Err(format!("Account '{}' has debit factor {}: it must be a finite number greater than 0",
+                    // negative one would credit it. A subnormal one is no real factor: it is
+                    // refused as a policy, not to protect the arithmetic. NaN fails the
+                    // comparison and is refused with them.
+                    if !(debit_factor > 0.0 && debit_factor.is_normal()) {
+                        return Err(format!("Account '{}' has debit factor {}: it must be a finite number greater than 0, and not below about 2.2e-308",
                             table_name, cell));
                     }
                 }
@@ -2344,8 +2348,7 @@ fn parse_account_table(flat: &str, model: &mut Model) -> Result<AccountTableData
 /// bare identifiers are never valid Kalix expressions, so there is no
 /// ambiguity. `start_water_year(m)` takes its month explicitly: a literal or a
 /// const.* reference (shared months live in [const]).
-fn parse_ras_trigger(s: &str, model: &mut Model, line: usize) -> Result<crate::hydrology::allocation_systems::ras::RasTrigger, String> {
-    use crate::hydrology::allocation_systems::ras::RasTrigger;
+fn parse_ras_trigger(s: &str, model: &mut Model, line: usize) -> Result<RasTrigger, String> {
     let trimmed = s.trim();
     match trimmed {
         "every_step" => return Ok(RasTrigger::EveryStep),
@@ -2392,7 +2395,7 @@ credit_fraction(x), debit(x), roll_cap(n), scale(x), reduce_to(x), allocate(pct)
 /// reads self.*, and whether it reads self.pair.* (which obliges every
 /// target account to be paired — checked by the RAS builder).
 struct ParsedRasAction {
-    action: crate::hydrology::allocation_systems::ras::RasAction,
+    action: RasAction,
     self_slots: Option<usize>,
     uses_pair: bool,
 }
@@ -2401,7 +2404,6 @@ struct ParsedRasAction {
 /// argument, plus for `distribute` the weight keyword after the last
 /// top-level comma.
 fn parse_ras_action(s: &str, model: &mut Model, line: usize) -> Result<ParsedRasAction, String> {
-    use crate::hydrology::allocation_systems::ras::{DistributeBy, RasAction};
     let no_self = |action: RasAction| ParsedRasAction { action, self_slots: None, uses_pair: false };
     let trimmed = s.trim();
     match trimmed {
@@ -2493,7 +2495,7 @@ fn last_top_level_comma(s: &str) -> Option<usize> {
 
 /// Read a node's `accounts` property: the plain list, or a combination with
 /// `|`, `&` and parentheses (account_tree.rs). Errors name the node.
-fn read_accounts_property(v: &str, node_name: &str, manager: &crate::hydrology::accounts::account_manager::AccountManager) -> Result<AccountsProperty, String> {
+fn read_accounts_property(v: &str, node_name: &str, manager: &AccountManager) -> Result<AccountsProperty, String> {
     if is_combination(v) {
         parse_combination(v, manager)
             .map_err(|e| format!("Node '{}': in 'accounts = {}': {}", node_name, v.trim(), e))
@@ -2507,7 +2509,7 @@ fn read_accounts_property(v: &str, node_name: &str, manager: &crate::hydrology::
 /// Resolve a node's `accounts` property — a comma-separated, *ordered* list of
 /// account names (order-of-use) — to account indices. Reference-only: names
 /// must already be declared in [acc.*] sections.
-fn resolve_account_references(v: &str, manager: &crate::hydrology::accounts::account_manager::AccountManager) -> Result<Vec<usize>, String> {
+fn resolve_account_references(v: &str, manager: &AccountManager) -> Result<Vec<usize>, String> {
     let names = csv_to_string_vec(v);
     if names.is_empty() {
         return Err("'accounts' list is empty".to_string());
@@ -2527,7 +2529,7 @@ fn resolve_account_references(v: &str, manager: &crate::hydrology::accounts::acc
 /// Render an account group's headed table for saving, in the same multi-line
 /// continuation style as the loss node's table (one row per line, trailing
 /// commas, 4-space continuation indent).
-fn format_account_group_table(manager: &crate::hydrology::accounts::account_manager::AccountManager, group: &AccountGroup) -> String {
+fn format_account_group_table(manager: &AccountManager, group: &AccountGroup) -> String {
     let indent = " ".repeat(4);
     // Pairings are symmetric but the `pair` column is emitted only on the
     // side that declared it (pair_declared), so a saved file re-loads without

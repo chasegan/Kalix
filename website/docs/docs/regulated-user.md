@@ -118,15 +118,18 @@ what is committed:
 With a [debit factor](accounts.md#debit-factor), each term is divided by the
 account's factor.
 
-The commitment is a forecast of the diversion to come, never a debit. On the
-step an order falls due the whole order leaves the commitment, delivered or not;
-what is then diverted is debited, and what is not is still in the balance and
-free to be ordered again from that step. So in a shortfall the user loses
-nothing; it loses only the days the water was en route. The commitment lives on
-the account, not on the user, so two users drawing on one account each see the
-other's orders en route (`acc.<name>.committed`). A RAS action that lowers the
-balance leaves the commitment as it is: the ordered water is still coming and
-will be debited when it arrives, so new orders wait until it does.
+The commitment is a forecast of the diversion to come; the corresponding debit
+is the volume diverted on the step the order falls due. At the start of the
+next timestep the whole order leaves the commitment, whether or not it was
+delivered, and water that was not diverted is still in the balance to be
+ordered again. In a shortfall, the user is not debited for water it could not
+divert, and it loses only the time spent waiting for that water.
+
+Commitments live with the accounts, so two users drawing on the same account
+see each other's orders. `acc.<name>.committed` records every order still
+outstanding as the step's ordering begins. A RAS action that lowers the balance
+does not change the committed volume, so new orders wait until the committed
+orders are released, on the step after each falls due.
 
 The forecast limits what the user *orders*, not what it *takes*. The user plans
 to divert its whole demand when the water arrives, not just the part it could
@@ -140,18 +143,20 @@ is the part the user could order. One consequence: when users share an account,
 the one upstream diverts first and may take water released for an order placed
 downstream.
 
-Where an account has a [debit factor](accounts.md#debit-factor), an accepted
-order is committed as the order times the factor. The delivery available from
-the account is its balance over the factor.
+Where an account has a [debit factor](accounts.md#debit-factor), the factor
+applies at each of three moments:
 
-```
-delivery available = balance / debit_factor
-```
+- **Order:** the cap counts each account's uncommitted balance over its
+  factor, as above. That is the water the user can order, not the volume in
+  the balance.
+- **Commit:** an accepted order is committed as the order times the factor,
+  so `committed` is in the units of the account balance.
+- **Delivery:** the delivery is capped by what the account can supply, and is
+  debited from the account balance as the delivery times the factor.
 
-A delivery is debited as the delivery times the factor. An account in
-`order_accounts` authorises an order up to the same volume. When the order is
-placed, that account is debited the part of the order it authorises, times the
-factor.
+    ```
+    delivery available = balance / debit_factor
+    ```
 
 When `accounts` is a [combination](accounts.md#combining-accounts), the same
 three moments follow it. The order cap is what the combination makes available
@@ -171,7 +176,9 @@ balance is still positive.
 `order_accounts` lists additional accounts that authorise ordering without
 supplying water — debit-on-order semantics. The contract:
 
-- The order cap becomes `min(order, Σaccounts + Σorder_accounts)`.
+- The order cap becomes `min(order, Σaccounts + Σorder_accounts)`. Each term
+  in the sums is the water that account makes available, after its debit
+  factor (i.e. divided by it).
 - Only the **excess** of the approved order over what the regular `accounts`
   can still cover (balance less orders en route) is debited from the
   `order_accounts`, walked in list order, at order time. Orders within the
@@ -180,21 +187,24 @@ supplying water — debit-on-order semantics. The contract:
   cap, are never debited by takes, and are not refunded when an
   authorised order goes undelivered.
 
-Two intended uses. First, an *order bridge*: at an accounting boundary
-(e.g. the last days of a water year) orders for delivery after the reset
-are otherwise capped by the dying period's drained balance. Crediting a
-small shared bridge account just before the boundary — and `set_empty`-ing
-it at the reset, before deliveries arrive — lets users keep ordering
-against the balance they are about to receive, without ever taking water
-against it. The bridge is self-limiting: it cannot authorise more total
-ordering than its size. Note a shared pool is drawn in node execution
-order (order phase runs downstream-to-upstream), so size it for the sum of
-its users' needs.
+Order accounts have two intended uses. The first is an *order bridge*. At an
+accounting boundary (e.g. the last days of a water year), orders for delivery
+after the reset are otherwise capped by the dying period's drained balance.
+Crediting a small shared bridge account just before the boundary, and
+`set_empty`-ing it at the reset before deliveries arrive, lets users keep
+ordering against the balance they are about to receive. They never take water
+against it. The bridge limits itself, because it cannot authorise more ordering
+in total than its size over its debit factor. A shared pool is drawn in node
+execution order (the order phase runs downstream to upstream), so size it for
+the sum of its users' needs.
 
-Second, a *pure order-debit scheme*: with `accounts` empty and only
-`order_accounts` listed, the user is debited when it orders and never at
-take — the "you ordered it, you own it" accounting some supply schemes
-use.
+The second is a *pure order-debit scheme*. With `accounts` empty and only
+`order_accounts` listed, the user is debited when it orders and never when it
+takes. Some supply schemes use this "you ordered it, you own it" accounting.
+
+With a [debit factor](accounts.md#debit-factor), an order account can authorise
+up to its balance over its factor, in water. The part of the excess it
+authorises is debited from its balance as that part times the factor.
 
 #### Supply outlets
 
