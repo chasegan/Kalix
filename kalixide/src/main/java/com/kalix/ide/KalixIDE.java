@@ -1683,7 +1683,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     public void showPreferences() {
         // Narrow callbacks for the preference pages; each page receives only what it uses.
         Runnable onMapPreferencesChanged = () -> {
-            // Gridlines are only the default for new maps: open maps keep their own.
             // Update node theme (follow mode resolves to the application theme's)
             setNodeTheme(ThemePreferences.effectiveNodeTheme());
 
@@ -1699,8 +1698,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         };
 
         LinterPreferencesPanel linterPage = new LinterPreferencesPanel(schemaManager, textEditor.getLinterManager());
-        // Sync the toolbar button state when linting is enabled/disabled
-        linterPage.setLintingChangeCallback(enabled -> syncToggleButtonStates());
 
         ThemePreferencePage themePage = new ThemePreferencePage(themeManager, onMapPreferencesChanged);
 
@@ -1720,8 +1717,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             themePage,
             new FontPreferencePage(ThemeManager::notifyFontSizeChanged),
             linterPage,
-            new NodeDiagramPreferencePage(onMapPreferencesChanged, visible -> syncToggleButtonStates(),
-                this::setTrackpadNavigation),
+            new NodeDiagramPreferencePage(this::setTrackpadNavigation),
             new DataVisualizationPreferencePage(onFlowVizPreferencesChanged),
             new KalixCliPreferencePage(),
             new IntegrationsPreferencePage()
