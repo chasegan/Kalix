@@ -418,9 +418,9 @@ first step, every run, deterministically. No additional phase rules needed.
   per stateful call instance (post-inlining), allocated at load and reset at
   run start. The hot-path signature grows a `&mut` state argument (or the
   arena rides in the DataCache alongside `current_step`).
-- **Unconditional state advance** (§5, §6, §6.5): a per-step update walk over all
-  stateful instances, independent of which branches evaluation takes —
-  structurally similar to the existing `validate_reads` full-tree walk.
+- **Unconditional state advance** (§5, §6, §6.5): a per-step update of every
+  stateful instance, independent of which branches evaluation takes, run
+  from a flat list built at lowering.
 - **`[fn]`**: parse signatures (same tokenizer), build call-graph, DAG
   check, inline at lowering with args bound to hidden slots; `this.`
   expansion happens per call site, before lowering.
@@ -540,7 +540,7 @@ var.accounting.headroom
 1. **Grammar core** — `;`, blocks, locals, `assert`, `clamp`; parser + AST +
    lowering + locals frame. No new state. (Everything after this phase is
    usable modeller-facing.)
-2. **Stateful builtins** — state arena, unconditional-advance walk,
+2. **Stateful builtins** — state arena, unconditional advance,
    `moving_*` then `*_since`; `sim.new_month`/`new_year`/`new_day`.
 3. **`[fn]`** — signature parsing, DAG check, inline lowering, `this.`
    rebinding.
