@@ -1,0 +1,12 @@
+---
+version: "0.4.12"
+date: TBD
+prerelease: false
+assets:
+  Windows: "https://github.com/chasegan/Kalix/releases/download/v0.4.12/KalixIDE-Windows-0.4.12-Portable.zip"
+  macOS: "https://github.com/chasegan/Kalix/releases/download/v0.4.12/KalixIDE-macOS-0.4.12-Portable.zip"
+  Linux: "https://github.com/chasegan/Kalix/releases/download/v0.4.12/KalixIDE-Linux-0.4.12-Portable.zip"
+pip: "pip install kalix==0.4.12"
+---
+
+- Performance! `latch` and the `*_since` functions are up to 4x faster. They now run about as fast as the same logic written by hand. Results are unchanged.
