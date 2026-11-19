@@ -1171,16 +1171,37 @@ fn order_blocks_survive_a_second_run() {
     assert_series(&series(&model, "node.ctrl.set_order"), &[8.0; 5], "ctrl after a second run");
 }
 
-/// Rebuilding the ordering system's visit list keeps the order blocks
-/// merged into it, without placing them again.
+/// Re-initialising the ordering system rebuilds its visit list with the order
+/// blocks merged back in, without placing them again. The system is built for
+/// the rig, then re-initialised on the rig with its gauge turned into a second
+/// user, which adds a node to the visit list. The steps are driven here because
+/// `run()` places the blocks itself.
 #[test]
 fn order_blocks_survive_reinitialising_the_ordering_system() {
-    let mid = "[var.o]\nphase = order\nx = node.user.order * 2";
-    let mut model = run_model(&order_rig("set_order = var.o.x", mid, ""));
+    let built_for = run_model(&order_rig("set_order = var.o.x", "[var.o]\nphase = order\nx = 1", ""))
+        .simple_ordering_system.clone();
+
+    let mid = "[var.o]\nphase = order\nx = node.user.order + node.gauge.order";
+    let rig = order_rig("set_order = var.o.x", mid, "").replace("type = gauge", "type = regulated_user\norder = 3");
+    let mut model = IniModelIO::read_model_string(&rig)
+        .unwrap_or_else(|e| panic!("model should load: {e}"));
+    model.configure().unwrap_or_else(|e| panic!("configure should succeed: {e}"));
+    model.initialize_network().unwrap_or_else(|e| panic!("initialise should succeed: {e}"));
+    model.simple_ordering_system = built_for;
     model.simple_ordering_system
         .initialize(&mut model.nodes, &model.links, &model.incoming_links, &mut model.account_manager)
         .unwrap_or_else(|e| panic!("re-initialise should succeed: {e}"));
-    assert!(model.simple_ordering_system.has_order_var_blocks(), "blocks dropped on re-initialise");
+
+    // What run() does after initialize_network, for a model with no [ras.*] sections
+    model.account_manager.initialize(&mut model.data_cache);
+    model.data_cache.expr_state.reset();
+    model.data_cache.set_current_step(0);
+    while model.data_cache.current_timestamp <= model.configuration.sim_end_timestamp {
+        model.run_timestep(model.data_cache.current_timestamp);
+        model.data_cache.increment_current_step();
+    }
+    assert_series(&series(&model, "var.o.x"), &[8.0; 5], "both users' orders");
+    assert_series(&series(&model, "node.ctrl.set_order"), &[8.0; 5], "ctrl reads var bare");
 }
 
 /// A node below an order block runs before it in the order phase, so reading
