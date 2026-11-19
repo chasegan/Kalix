@@ -1,5 +1,6 @@
 package com.kalix.ide.filedialog;
 
+import com.kalix.ide.components.PopupTriggerListener;
 import com.kalix.ide.io.FileVisuals;
 
 import javax.swing.BorderFactory;
@@ -55,24 +56,12 @@ final class ColumnsFileView {
         aligner.add(trail, java.awt.BorderLayout.WEST);
         // The open area right of the last column belongs to the deepest folder on the
         // trail (ADR-0002 §4: empty space acts on the containing folder).
-        aligner.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mousePressed(MouseEvent e) {
-                maybeShowPopup(e);
+        aligner.addMouseListener(new PopupTriggerListener(e -> {
+            Path deepest = deepestDirectory();
+            if (deepest != null) {
+                host.showContainerContextMenu(deepest, aligner, e.getX(), e.getY());
             }
-
-            @Override
-            public void mouseReleased(MouseEvent e) {
-                maybeShowPopup(e);
-            }
-
-            private void maybeShowPopup(MouseEvent e) {
-                Path deepest = deepestDirectory();
-                if (e.isPopupTrigger() && deepest != null) {
-                    host.showContainerContextMenu(deepest, aligner, e.getX(), e.getY());
-                }
-            }
-        });
+        }));
         scroll = new JScrollPane(aligner,
             JScrollPane.VERTICAL_SCROLLBAR_NEVER, JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         scroll.getHorizontalScrollBar().setUnitIncrement(COLUMN_WIDTH / 4);
@@ -265,36 +254,22 @@ final class ColumnsFileView {
                         }
                     }
                 }
-
-                @Override
-                public void mousePressed(MouseEvent e) {
-                    maybeShowPopup(e);
-                }
-
-                @Override
-                public void mouseReleased(MouseEvent e) {
-                    maybeShowPopup(e);
-                }
-
-                private void maybeShowPopup(MouseEvent e) {
-                    if (!e.isPopupTrigger()) {
-                        return;
-                    }
-                    int index = list.locationToIndex(e.getPoint());
-                    if (index < 0 || !list.getCellBounds(index, index).contains(e.getPoint())) {
-                        // Empty space in a column acts on that column's own folder
-                        // (ADR-0002 §4) — each column knows its subject.
-                        host.showContainerContextMenu(directory, list, e.getX(), e.getY());
-                        return;
-                    }
-                    // Right-click selects, as in the project tree — but never collapses an
-                    // existing multi-selection just to act on one of its members.
-                    if (!list.isSelectedIndex(index)) {
-                        list.setSelectedIndex(index);
-                    }
-                    host.showEntryContextMenu(model.get(index), list, e.getX(), e.getY());
-                }
             });
+            list.addMouseListener(new PopupTriggerListener(e -> {
+                int index = list.locationToIndex(e.getPoint());
+                if (index < 0 || !list.getCellBounds(index, index).contains(e.getPoint())) {
+                    // Empty space in a column acts on that column's own folder
+                    // (ADR-0002 §4) — each column knows its subject.
+                    host.showContainerContextMenu(directory, list, e.getX(), e.getY());
+                    return;
+                }
+                // Right-click selects, as in the project tree — but never collapses an
+                // existing multi-selection just to act on one of its members.
+                if (!list.isSelectedIndex(index)) {
+                    list.setSelectedIndex(index);
+                }
+                host.showEntryContextMenu(model.get(index), list, e.getX(), e.getY());
+            }));
             list.addKeyListener(new KeyAdapter() {
                 @Override
                 public void keyPressed(KeyEvent e) {

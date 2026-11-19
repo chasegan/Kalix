@@ -1,5 +1,6 @@
 package com.kalix.ide.dialogs;
 
+import com.kalix.ide.components.TreeHoverHighlight;
 import com.kalix.ide.preferences.ui.PreferencePage;
 
 import javax.swing.AbstractAction;
@@ -104,7 +105,7 @@ public class PreferencesDialog extends JDialog {
 
         // Create main split pane
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        splitPane.setLeftComponent(treeScrollPane);
+        splitPane.setLeftComponent(TreeHoverHighlight.layerAround(treeScrollPane));
         splitPane.setRightComponent(contentPanel);
         splitPane.setDividerLocation(200);
         splitPane.setDividerSize(6);

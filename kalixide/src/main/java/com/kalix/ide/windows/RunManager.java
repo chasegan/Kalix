@@ -1,6 +1,7 @@
 package com.kalix.ide.windows;
 
 import com.kalix.ide.components.JCheckboxTree;
+import com.kalix.ide.components.TreeHoverHighlight;
 import com.kalix.ide.flowviz.VisualizationTabManager;
 import com.kalix.ide.flowviz.VizHost;
 import com.kalix.ide.flowviz.data.DerivedSeriesLabel;
@@ -34,6 +35,7 @@ import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.renderers.OutputsTreeCellRenderer;
 import com.kalix.ide.renderers.RunTreeCellRenderer;
 import com.kalix.ide.utils.StatusReporter;
+import com.kalix.ide.utils.TreeRows;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -339,10 +341,7 @@ public class RunManager extends JFrame {
         timeseriesSourceTree = new JCheckboxTree(treeModel) {
             @Override
             public String getToolTipText(MouseEvent evt) {
-                if (getRowForLocation(evt.getX(), evt.getY()) == -1) {
-                    return null;
-                }
-                TreePath curPath = getPathForLocation(evt.getX(), evt.getY());
+                TreePath curPath = TreeRows.fullWidthPathAt(this, evt.getY());
                 if (curPath == null) {
                     return null;
                 }
@@ -476,13 +475,13 @@ public class RunManager extends JFrame {
         JPanel runsPanel = new JPanel(new BorderLayout());
         runsPanel.setBorder(BorderFactory.createTitledBorder("Kalix"));
         JScrollPane treeScrollPane = new JScrollPane(timeseriesSourceTree);
-        runsPanel.add(treeScrollPane, BorderLayout.CENTER);
+        runsPanel.add(TreeHoverHighlight.layerAround(treeScrollPane), BorderLayout.CENTER);
 
         // Bottom of left side: timeseries tree with filter
         JPanel timeseriesPanel = new JPanel(new BorderLayout());
         timeseriesPanel.setBorder(BorderFactory.createTitledBorder("Timeseries"));
         timeseriesPanel.add(treeFilterManager.getFilterPanel(), BorderLayout.NORTH);
-        timeseriesPanel.add(timeseriesScrollPane, BorderLayout.CENTER);
+        timeseriesPanel.add(TreeHoverHighlight.layerAround(timeseriesScrollPane), BorderLayout.CENTER);
 
         leftSplitPane.setTopComponent(runsPanel);
         leftSplitPane.setBottomComponent(timeseriesPanel);

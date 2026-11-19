@@ -1,5 +1,6 @@
 package com.kalix.ide.flowviz;
 
+import com.kalix.ide.components.PopupTriggerListener;
 import com.kalix.ide.components.TabDragReorderer;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.LabelResolver;
@@ -607,25 +608,8 @@ public class VisualizationTabManager {
 
         // Add popup listener to show the menu. "Remove" needs no guard: closing the
         // final tab repopulates the strip with a default tab rather than emptying it.
-        MouseAdapter popupListener = new MouseAdapter() {
-            @Override
-            public void mousePressed(MouseEvent e) {
-                if (e.isPopupTrigger()) {
-                    showContextMenu(e);
-                }
-            }
-
-            @Override
-            public void mouseReleased(MouseEvent e) {
-                if (e.isPopupTrigger()) {
-                    showContextMenu(e);
-                }
-            }
-
-            private void showContextMenu(MouseEvent e) {
-                contextMenu.show(e.getComponent(), e.getX(), e.getY());
-            }
-        };
+        PopupTriggerListener popupListener = new PopupTriggerListener(
+            e -> contextMenu.show(e.getComponent(), e.getX(), e.getY()));
 
         for (Component labelComponent : labelComponents) {
             labelComponent.addMouseListener(popupListener);

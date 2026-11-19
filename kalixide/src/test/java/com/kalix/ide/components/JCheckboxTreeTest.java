@@ -3,9 +3,15 @@ package com.kalix.ide.components;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import javax.swing.plaf.basic.BasicTreeUI;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
+import java.awt.Rectangle;
+import java.awt.event.InputEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -15,8 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Unit tests for {@link JCheckboxTree}'s checked-state model. The mouse hit-testing is
- * exercised manually (it needs a laid-out tree), but the state logic — recursive
+ * Unit tests for {@link JCheckboxTree}'s checked-state model and its double-click toggle.
+ * The single-click glyph hit-test is exercised manually, but the state logic — recursive
  * tick/untick, tri-state ancestor roll-up, check-order preservation, and change-only
  * event firing — is where regressions hide, so it's pinned down here.
  *
@@ -186,5 +192,75 @@ class JCheckboxTreeTest {
 
         assertEquals(0, tree.getCheckedPaths().length);
         assertEquals(JCheckboxTree.CheckState.UNCHECKED, tree.getCheckState(path(leafA)));
+    }
+
+    // ---- double-click toggling ----
+
+    /**
+     * Expands every row and gives the tree room to the right of its labels. The look and
+     * feel's own mouse handling is left out, because its selection on a row press asks for
+     * the menu shortcut key, which throws without a display.
+     */
+    private void layOutTree() {
+        tree.setUI(new BasicTreeUI() {
+            @Override
+            protected MouseListener createMouseListener() {
+                return new MouseAdapter() { };
+            }
+        });
+        tree.expandPath(path(parent1));
+        tree.expandPath(path(parent2));
+        tree.setSize(300, tree.getPreferredSize().height);
+    }
+
+    /**
+     * Dispatches a double-click to the tree, as two press, release and click runs with click
+     * counts 1 and 2.
+     */
+    private void doubleClick(int x, DefaultMutableTreeNode node) {
+        Rectangle bounds = tree.getPathBounds(path(node));
+        int y = bounds.y + bounds.height / 2;
+        for (int count = 1; count <= 2; count++) {
+            mouse(MouseEvent.MOUSE_PRESSED, InputEvent.BUTTON1_DOWN_MASK, x, y, count);
+            mouse(MouseEvent.MOUSE_RELEASED, 0, x, y, count);
+            mouse(MouseEvent.MOUSE_CLICKED, 0, x, y, count);
+        }
+    }
+
+    private void mouse(int id, int modifiers, int x, int y, int clickCount) {
+        tree.dispatchEvent(new MouseEvent(
+            tree, id, 0L, modifiers, x, y, clickCount, false, MouseEvent.BUTTON1));
+    }
+
+    private int farRight() {
+        return tree.getWidth() - 5;
+    }
+
+    @Test
+    void doubleClickBesideALeafsLabelTogglesIt() {
+        layOutTree();
+
+        doubleClick(farRight(), leafA);
+
+        assertTrue(tree.isPathChecked(path(leafA)));
+    }
+
+    @Test
+    void doubleClickOnTheCheckboxGlyphDoesNotToggleAThirdTime() {
+        layOutTree();
+
+        // Each press on the glyph toggles; the double-click must not add a third.
+        doubleClick(tree.getPathBounds(path(leafA)).x + 2, leafA);
+
+        assertFalse(tree.isPathChecked(path(leafA)));
+    }
+
+    @Test
+    void doubleClickOnAParentRowDoesNotToggleIt() {
+        layOutTree();
+
+        doubleClick(farRight(), parent1);
+
+        assertEquals(JCheckboxTree.CheckState.UNCHECKED, tree.getCheckState(path(parent1)));
     }
 }

@@ -1,7 +1,9 @@
 package com.kalix.ide.workspace.tree;
 
+import com.kalix.ide.components.PopupTriggerListener;
 import com.kalix.ide.io.FsWatcher;
 import com.kalix.ide.io.CsvZipFormat;
+import com.kalix.ide.utils.TreeRows;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -10,17 +12,12 @@ import javax.swing.JPopupMenu;
 import javax.swing.JTree;
 import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
-import javax.swing.UIManager;
 import javax.swing.event.TreeExpansionEvent;
 import javax.swing.event.TreeWillExpandListener;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
-import java.awt.Color;
 import java.awt.Component;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
-import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
@@ -37,10 +34,11 @@ import java.util.Set;
  * The project file tree: a {@link JTree} over a lazily-loaded filesystem model, kept live by
  * a native directory watcher (FSEvents on macOS via {@code io.methvin:directory-watcher}).
  *
- * <p>Provides full-width row hover, path tooltips, a right-click context menu (Open, Reveal,
- * New File/Folder, Rename, Delete, Refresh), and open-on-double-click / Enter (zip archives
- * are unzipped instead of opened). Files are opened through the supplied consumer (which adds
- * them as editor tabs).
+ * <p>Provides path tooltips, a right-click context menu (Open, Reveal, New File/Folder,
+ * Rename, Delete, Refresh), and open-on-double-click / Enter (zip archives are unzipped
+ * instead of opened). Files are opened through the supplied consumer (which adds them as
+ * editor tabs). The full-width row hover is added by {@code ProjectTreePanel}, which shows
+ * the tree's scroll pane through a {@code TreeHoverHighlight} layer.
  *
  * <p>All model mutations happen on the EDT; watcher callbacks marshal onto it.
  */
@@ -57,7 +55,6 @@ public class ProjectTree extends JTree {
 
     private DefaultTreeModel model;
     private final FsWatcher fsWatcher = new FsWatcher(this::applyFsEvent);
-    private int hoveredRow = -1;
     // Whether dotfiles/folders are shown. Read live by every FileTreeNode at (re)load time via the
     // supplier handed to it, so toggling re-filters on the next directory sync (see setShowHidden).
     private boolean showHidden = true;
@@ -205,68 +202,23 @@ public class ProjectTree extends JTree {
         }
     }
 
-    // --- Hover (full-width overlay) ---
-
-    @Override
-    protected void paintComponent(Graphics g) {
-        super.paintComponent(g);
-        if (hoveredRow >= 0 && hoveredRow < getRowCount() && !isRowSelected(hoveredRow)) {
-            Rectangle bounds = getRowBounds(hoveredRow);
-            if (bounds != null) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setColor(hoverColor());
-                g2.fillRect(0, bounds.y, getWidth(), bounds.height);
-                g2.dispose();
-            }
-        }
-    }
-
-    private static Color hoverColor() {
-        Color base = UIManager.getColor("Tree.selectionBackground");
-        if (base == null) {
-            base = Color.GRAY;
-        }
-        // Subtle translucent wash so the row text remains legible.
-        return new Color(base.getRed(), base.getGreen(), base.getBlue(), 40);
-    }
-
     // --- Tooltips ---
 
     @Override
     public String getToolTipText(MouseEvent event) {
-        FileTreeNode node = nodeAt(event.getX(), event.getY());
+        FileTreeNode node = nodeAt(event.getY());
         return node != null ? node.getFile().getAbsolutePath() : null;
     }
 
     // --- Mouse / keyboard ---
 
     private void installMouseAndKeyHandlers() {
-        addMouseMotionListener(new MouseAdapter() {
-            @Override
-            public void mouseMoved(MouseEvent e) {
-                setHoveredRow(fullWidthRowAt(e.getY()));
-            }
-        });
+        addMouseListener(new PopupTriggerListener(this::showPopup));
         addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseExited(MouseEvent e) {
-                setHoveredRow(-1);
-            }
-
-            @Override
-            public void mousePressed(MouseEvent e) {
-                maybeShowPopup(e);
-            }
-
-            @Override
-            public void mouseReleased(MouseEvent e) {
-                maybeShowPopup(e);
-            }
-
             @Override
             public void mouseClicked(MouseEvent e) {
                 if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 2) {
-                    FileTreeNode node = nodeAt(e.getX(), e.getY());
+                    FileTreeNode node = nodeAt(e.getY());
                     if (node != null && node.getFile().isFile()) {
                         openOrUnzip(node.getFile());
                     }
@@ -336,34 +288,14 @@ public class ProjectTree extends JTree {
         return model != null && node == model.getRoot();
     }
 
-    private void setHoveredRow(int row) {
-        if (row != hoveredRow) {
-            hoveredRow = row;
-            repaint();
-        }
-    }
-
-    private void maybeShowPopup(MouseEvent e) {
-        if (!e.isPopupTrigger()) {
-            return;
-        }
-        int row = fullWidthRowAt(e.getY());
-        List<FileTreeNode> subject;
+    private void showPopup(MouseEvent e) {
         JPopupMenu menu;
-        if (row < 0) {
+        if (TreeRows.selectForPopup(this, e.getY()) == null) {
             // Empty space is not subject-less: the click acts on the open folder itself
             // (ADR-0002 §4) — so New file…/New folder… etc. work at the root.
-            clearSelection();
             menu = model == null ? null : contextMenu.buildFromRoot((FileTreeNode) model.getRoot());
         } else {
-            if (!isRowSelected(row)) {
-                // Right-clicking a row outside the current selection acts on that row alone;
-                // right-clicking within a multi-selection keeps it, so the menu acts on all of
-                // it.
-                setSelectionRow(row);
-            }
-            subject = selectedNodes();
-            menu = contextMenu.build(subject);
+            menu = contextMenu.build(selectedNodes());
         }
         if (menu != null) {
             menu.show(this, e.getX(), e.getY());
@@ -631,32 +563,12 @@ public class ProjectTree extends JTree {
     }
 
     /**
-     * The node at {@code (x, y)}, treating rows as full-width (matching the full-width
-     * hover/selection painting) rather than {@link #getPathForLocation}, which only hits the
-     * renderer's actual (label-width) bounds. {@code x} is otherwise unused, kept only so call
-     * sites reporting a mouse position read naturally.
+     * Returns the node at {@code y}, treating rows as full-width, as the hover and selection
+     * paint them.
      */
-    private FileTreeNode nodeAt(int x, int y) {
-        int row = fullWidthRowAt(y);
-        if (row < 0) {
-            return null;
-        }
-        TreePath path = getPathForRow(row);
+    private FileTreeNode nodeAt(int y) {
+        TreePath path = TreeRows.fullWidthPathAt(this, y);
         return path != null && path.getLastPathComponent() instanceof FileTreeNode node ? node : null;
-    }
-
-    /**
-     * The row at {@code y}, treating rows as full-width (matching the full-width hover/selection
-     * painting) rather than {@link #getRowForLocation} which only hits the renderer's actual
-     * (label-width) bounds. Returns -1 below the last row.
-     */
-    private int fullWidthRowAt(int y) {
-        int row = getClosestRowForLocation(0, y);
-        if (row < 0) {
-            return -1;
-        }
-        Rectangle bounds = getRowBounds(row);
-        return (bounds != null && y >= bounds.y && y < bounds.y + bounds.height) ? row : -1;
     }
 
     /**

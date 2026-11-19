@@ -22,6 +22,7 @@ import com.kalix.ide.managers.optimisation.OptimisationInfo;
 import com.kalix.ide.managers.optimisation.OptimisationStatus;
 import com.kalix.ide.windows.optimisation.ParametersConfigPanel;
 import com.kalix.ide.components.StatusProgressBar;
+import com.kalix.ide.components.TreeHoverHighlight;
 import com.kalix.ide.components.KalixIniTextArea;
 import com.kalix.ide.windows.optimisation.ModelSelectorPanel;
 import com.kalix.ide.windows.optimisation.OptimisationGuiBuilder;
@@ -403,7 +404,7 @@ public class OptimisationWindow extends JFrame {
         leftPanel.add(buttonPanel, BorderLayout.NORTH);
 
         JScrollPane treeScrollPane = new JScrollPane(optTree);
-        leftPanel.add(treeScrollPane, BorderLayout.CENTER);
+        leftPanel.add(TreeHoverHighlight.layerAround(treeScrollPane), BorderLayout.CENTER);
 
         leftPanel.setPreferredSize(new Dimension(OptimisationUIConstants.TREE_PANEL_WIDTH, 0));
 

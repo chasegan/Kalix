@@ -5,6 +5,7 @@ import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.constants.UIConstants;
 import com.kalix.ide.icons.MenuIcons;
 import com.kalix.ide.utils.DialogUtils;
+import com.kalix.ide.utils.TableCells;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
@@ -33,8 +34,6 @@ import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 
 /**
  * Dialog window for editing table-based property values.
@@ -231,29 +230,8 @@ public class TableViewWindow extends JDialog {
             popupMenu.add(deleteRowsItem);
         }
 
-        // Select row under mouse before showing popup
-        table.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mousePressed(MouseEvent e) {
-                if (e.isPopupTrigger()) {
-                    selectRowAtPoint(e);
-                }
-            }
-
-            @Override
-            public void mouseReleased(MouseEvent e) {
-                if (e.isPopupTrigger()) {
-                    selectRowAtPoint(e);
-                }
-            }
-
-            private void selectRowAtPoint(MouseEvent e) {
-                int row = table.rowAtPoint(e.getPoint());
-                if (row >= 0 && !table.isRowSelected(row)) {
-                    table.setRowSelectionInterval(row, row);
-                }
-            }
-        });
+        // Select the right-clicked cell as the menu opens
+        TableCells.selectOnPopup(table, popupMenu);
 
         table.setComponentPopupMenu(popupMenu);
     }

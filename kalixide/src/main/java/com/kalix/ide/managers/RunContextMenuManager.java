@@ -2,6 +2,7 @@ package com.kalix.ide.managers;
 
 import com.kalix.ide.cli.RunModelProgram;
 import com.kalix.ide.components.JCheckboxTree;
+import com.kalix.ide.components.PopupTriggerListener;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.diff.DiffWindow;
 import com.kalix.ide.filedialog.FileDialogFilter;
@@ -9,6 +10,7 @@ import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.io.CompressedCsvFormat;
 import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.utils.StatusReporter;
+import com.kalix.ide.utils.TreeRows;
 import com.kalix.ide.windows.MinimalEditorWindow;
 import com.kalix.ide.windows.SessionManagerWindow;
 
@@ -25,9 +27,6 @@ import javax.swing.event.PopupMenuListener;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
-import java.awt.Rectangle;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -205,49 +204,30 @@ public class RunContextMenuManager {
         removeAllItem.addActionListener(e -> removeAllInSelectedCategory());
         categoryMenu.add(removeAllItem);
 
-        // Add mouse listener for right-click
-        runTree.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mousePressed(MouseEvent e) {
-                if (e.isPopupTrigger()) {
-                    showContextMenu(e);
-                }
+        runTree.addMouseListener(new PopupTriggerListener(e -> {
+            // The menu's actions read the single selected run.
+            TreePath path = TreeRows.selectOnlyForPopup(runTree, e.getY());
+            if (path == null) {
+                return;
             }
 
-            @Override
-            public void mouseReleased(MouseEvent e) {
-                if (e.isPopupTrigger()) {
-                    showContextMenu(e);
-                }
+            // Pick the menu by node type — runs and loaded datasets share the tree
+            // but get different actions.
+            DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+            Object userObject = node.getUserObject();
+            if (userObject instanceof RunInfo runInfo) {
+                stopItem.setEnabled(runInfo.getSession().getState()
+                    == SessionManager.SessionState.RUNNING);
+                contextMenu.show(runTree, e.getX(), e.getY());
+            } else if (userObject instanceof DatasetLoaderManager.LoadedDatasetInfo) {
+                datasetMenu.show(runTree, e.getX(), e.getY());
+            } else if (nodeMenuProvider.apply(userObject) instanceof JPopupMenu menu) {
+                menu.show(runTree, e.getX(), e.getY());
+            } else if (removableCategories.contains(node)) {
+                removeAllItem.setEnabled(countRemovableChildren(node) > 0);
+                categoryMenu.show(runTree, e.getX(), e.getY());
             }
-
-            private void showContextMenu(MouseEvent e) {
-                // Get the path at the mouse location
-                TreePath path = runTree.getPathForLocation(e.getX(), e.getY());
-                if (path == null) {
-                    return;
-                }
-                // Select the node that was right-clicked
-                runTree.setSelectionPath(path);
-
-                // Pick the menu by node type — runs and loaded datasets share the tree
-                // but get different actions.
-                DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
-                Object userObject = node.getUserObject();
-                if (userObject instanceof RunInfo runInfo) {
-                    stopItem.setEnabled(runInfo.getSession().getState()
-                        == SessionManager.SessionState.RUNNING);
-                    contextMenu.show(runTree, e.getX(), e.getY());
-                } else if (userObject instanceof DatasetLoaderManager.LoadedDatasetInfo) {
-                    datasetMenu.show(runTree, e.getX(), e.getY());
-                } else if (nodeMenuProvider.apply(userObject) instanceof JPopupMenu menu) {
-                    menu.show(runTree, e.getX(), e.getY());
-                } else if (removableCategories.contains(node)) {
-                    removeAllItem.setEnabled(countRemovableChildren(node) > 0);
-                    categoryMenu.show(runTree, e.getX(), e.getY());
-                }
-            }
-        });
+        }));
     }
 
     /** A menu item enabled only while {@code enabledWhen} holds; it stays visible, greyed, so the user learns it exists (ADR-0002 §4). */
@@ -350,43 +330,17 @@ public class RunContextMenuManager {
         showSelectedItem.addActionListener(e -> showSelectedCallback.run());
         contextMenu.add(showSelectedItem);
 
-        // Add mouse listener for right-click
-        outputsTree.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mousePressed(MouseEvent e) {
-                if (e.isPopupTrigger()) {
-                    showContextMenu(e, contextMenu);
-                }
-            }
+        outputsTree.addMouseListener(new PopupTriggerListener(e -> {
+            // Empty space below the last row clears the selection: the menu acts on the root.
+            boolean onRow = TreeRows.selectForPopup(outputsTree, e.getY()) != null;
+            // Enable/disable and hide/show menu items based on context (ADR-0002 §4).
+            // "Show selected" cannot apply to an empty-space click, which just cleared the selection
+            showSelectedItem.setVisible(onRow);
+            // "Show checked" stays visible but greyed, so the user learns it exists.
+            showCheckedItem.setEnabled(outputsTree.getCheckedPaths().length > 0);
 
-            @Override
-            public void mouseReleased(MouseEvent e) {
-                if (e.isPopupTrigger()) {
-                    showContextMenu(e, contextMenu);
-                }
-            }
-
-            private void showContextMenu(MouseEvent e, JPopupMenu menu) {
-                // Get the path at the mouse location (full-width hit test)
-                int row = outputsTree.getClosestRowForLocation(0, e.getY());
-                Rectangle bounds = row < 0 ? null : outputsTree.getRowBounds(row);
-                boolean onRow = bounds != null
-                    && e.getY() >= bounds.y && e.getY() < bounds.y + bounds.height;
-                if (!onRow) {
-                    // Empty space below the last row: the menu acts on the root.
-                    outputsTree.clearSelection();
-                } else if (!outputsTree.isRowSelected(row)) {
-                    outputsTree.setSelectionRow(row);
-                }
-                // Enable/disable and hide/show menu items based on context (ADR-0002 §4).
-                // "Show selected" cannot apply to an empty-space click, which just cleared the selection
-                showSelectedItem.setVisible(onRow);
-                // "Show checked" stays visible but greyed, so the user learns it exists.
-                showCheckedItem.setEnabled(outputsTree.getCheckedPaths().length > 0);
-
-                menu.show(outputsTree, e.getX(), e.getY());
-            }
-        });
+            contextMenu.show(outputsTree, e.getX(), e.getY());
+        }));
     }
 
     // ========== Context Menu Actions ==========

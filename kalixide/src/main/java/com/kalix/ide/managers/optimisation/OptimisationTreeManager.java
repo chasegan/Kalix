@@ -1,7 +1,9 @@
 package com.kalix.ide.managers.optimisation;
 
+import com.kalix.ide.components.PopupTriggerListener;
 import com.kalix.ide.managers.SessionTreeBookkeeping;
 import com.kalix.ide.renderers.OptimisationTreeCellRenderer;
+import com.kalix.ide.utils.TreeRows;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -12,8 +14,6 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import javax.swing.event.TreeSelectionEvent;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.util.function.Consumer;
 
 /**
@@ -267,42 +267,26 @@ public class OptimisationTreeManager {
         });
         contextMenu.add(removeItem);
 
-        // Add mouse listener for right-click
-        tree.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mousePressed(MouseEvent e) {
-                if (e.isPopupTrigger()) {
-                    showContextMenu(e, contextMenu);
-                }
+        tree.addMouseListener(new PopupTriggerListener(e -> {
+            // The menu's actions read the single selected optimisation.
+            TreePath path = TreeRows.selectOnlyForPopup(tree, e.getY());
+            if (path == null) {
+                return;
             }
+            DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
 
-            @Override
-            public void mouseReleased(MouseEvent e) {
-                if (e.isPopupTrigger()) {
-                    showContextMenu(e, contextMenu);
-                }
+            if (node.getUserObject() instanceof OptimisationInfo info) {
+                OptimisationStatus status = info.getStatus();
+
+                // Enable/disable menu items based on status
+                showOptimisedItem.setEnabled(status == OptimisationStatus.DONE);
+                compareItem.setEnabled(status == OptimisationStatus.DONE);
+                saveResultsItem.setEnabled(status == OptimisationStatus.DONE);
+                stopItem.setEnabled(info.isRunning());
+
+                contextMenu.show(tree, e.getX(), e.getY());
             }
-
-            private void showContextMenu(MouseEvent e, JPopupMenu menu) {
-                TreePath path = tree.getPathForLocation(e.getX(), e.getY());
-                if (path != null) {
-                    tree.setSelectionPath(path);
-                    DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
-
-                    if (node.getUserObject() instanceof OptimisationInfo info) {
-                        OptimisationStatus status = info.getStatus();
-
-                        // Enable/disable menu items based on status
-                        showOptimisedItem.setEnabled(status == OptimisationStatus.DONE);
-                        compareItem.setEnabled(status == OptimisationStatus.DONE);
-                        saveResultsItem.setEnabled(status == OptimisationStatus.DONE);
-                        stopItem.setEnabled(info.isRunning());
-
-                        menu.show(tree, e.getX(), e.getY());
-                    }
-                }
-            }
-        });
+        }));
     }
 
     // Setters for context menu actions

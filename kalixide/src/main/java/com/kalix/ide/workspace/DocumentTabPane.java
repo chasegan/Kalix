@@ -1,5 +1,6 @@
 package com.kalix.ide.workspace;
 
+import com.kalix.ide.components.PopupTriggerListener;
 import com.kalix.ide.components.TabDragReorderer;
 import com.kalix.ide.document.DocumentLabels;
 import com.kalix.ide.document.DocumentManager;
@@ -135,47 +136,28 @@ public class DocumentTabPane extends JPanel {
             }
         });
 
-        // Add context menu support
-        tabbedPane.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mousePressed(MouseEvent e) {
-                if (e.isPopupTrigger()) {
-                    showTabContextMenu(e);
+        // Context menu for the tab under the pointer, targeting its file directly.
+        // Right-clicking a background tab shows a menu for it without switching the
+        // editor to it or moving the tab strip's highlight.
+        tabbedPane.addMouseListener(new PopupTriggerListener(e -> {
+            int tabIndex = tabbedPane.indexAtLocation(e.getX(), e.getY());
+
+            // Check if click is actually on the tab header area, not just in content area
+            Rectangle tabBounds = tabIndex >= 0 ? tabbedPane.getBoundsAt(tabIndex) : null;
+            boolean clickOnTabHeader = tabBounds != null && tabBounds.contains(e.getX(), e.getY());
+
+            if (clickOnTabHeader) {
+                KalixDocument document = documentAt(tabIndex);
+                if (document == null) {
+                    return;
+                }
+                File file = document.getFile();
+                // Show context menu
+                if (file != null) { // unsaved documents have no tree entry to show a menu for
+                    contextMenuRequestHandler.showContextMenu(file, tabbedPane, e.getX(), e.getY());
                 }
             }
-
-            @Override
-            public void mouseReleased(MouseEvent e) {
-                if (e.isPopupTrigger()) {
-                    showTabContextMenu(e);
-                }
-            }
-
-            /**
-             * Shows the right-click context menu for the tab under {@code e}, targeting
-             * its file directly. Right-clicking a background tab shows a menu for it
-             * without switching the editor to it or moving the tab strip's highlight.
-             */
-            private void showTabContextMenu(MouseEvent e) {
-                int tabIndex = tabbedPane.indexAtLocation(e.getX(), e.getY());
-
-                // Check if click is actually on the tab header area, not just in content area
-                Rectangle tabBounds = tabIndex >= 0 ? tabbedPane.getBoundsAt(tabIndex) : null;
-                boolean clickOnTabHeader = tabBounds != null && tabBounds.contains(e.getX(), e.getY());
-
-                if (clickOnTabHeader) {
-                    KalixDocument document = documentAt(tabIndex);
-                    if (document == null) {
-                        return;
-                    }
-                    File file = document.getFile();
-                    // Show context menu
-                    if (file != null) { // unsaved documents have no tree entry to show a menu for
-                        contextMenuRequestHandler.showContextMenu(file, tabbedPane, e.getX(), e.getY());
-                    }
-                }
-            }
-        });
+        }));
 
         // Add tab drag-and-drop support
         addTabDragAndDrop();

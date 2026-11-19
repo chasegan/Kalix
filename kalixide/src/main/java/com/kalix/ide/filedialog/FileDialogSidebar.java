@@ -1,5 +1,6 @@
 package com.kalix.ide.filedialog;
 
+import com.kalix.ide.components.PopupTriggerListener;
 import com.kalix.ide.preferences.PreferenceKeys;
 import com.kalix.ide.utils.ThemeUtils;
 import org.kordamp.ikonli.Ikon;
@@ -21,7 +22,6 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
-import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
 import java.nio.file.Files;
@@ -82,17 +82,7 @@ final class FileDialogSidebar {
                 onNavigate.accept(item.path());
             }
         });
-        list.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mousePressed(MouseEvent e) {
-                maybeShowPopup(e);
-            }
-
-            @Override
-            public void mouseReleased(MouseEvent e) {
-                maybeShowPopup(e);
-            }
-        });
+        list.addMouseListener(new PopupTriggerListener(this::showPopup));
 
         scroll = new JScrollPane(list,
             JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
@@ -203,10 +193,7 @@ final class FileDialogSidebar {
         PreferenceKeys.FILE_DIALOG_PINNED.set(pins);
     }
 
-    private void maybeShowPopup(MouseEvent e) {
-        if (!e.isPopupTrigger()) {
-            return;
-        }
+    private void showPopup(MouseEvent e) {
         int index = list.locationToIndex(e.getPoint());
         if (index < 0) {
             return;

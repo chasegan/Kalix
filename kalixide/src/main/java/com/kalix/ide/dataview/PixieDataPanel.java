@@ -3,6 +3,7 @@ package com.kalix.ide.dataview;
 import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.constants.UIConstants;
 import com.kalix.ide.linter.ui.HoverTipSupplier;
+import com.kalix.ide.utils.TableCells;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
@@ -84,6 +85,10 @@ public final class PixieDataPanel extends JPanel {
         });
         menu.add(copy);
         table.setComponentPopupMenu(menu);
+
+        // Right-clicking outside the selection moves it there first, so the menu
+        // acts on the cell under the cursor (matching platform convention).
+        TableCells.selectOnPopup(table, menu);
 
         table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
             .put(KeyStroke.getKeyStroke(KeyEvent.VK_F, AppShortcut.menuMask()), "data-find");

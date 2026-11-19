@@ -1,0 +1,18 @@
+---
+version: "0.4.12"
+date: TBD
+prerelease: false
+assets:
+  Windows: "https://github.com/chasegan/Kalix/releases/download/v0.4.12/KalixIDE-Windows-0.4.12-Portable.zip"
+  macOS: "https://github.com/chasegan/Kalix/releases/download/v0.4.12/KalixIDE-macOS-0.4.12-Portable.zip"
+  Linux: "https://github.com/chasegan/Kalix/releases/download/v0.4.12/KalixIDE-Linux-0.4.12-Portable.zip"
+pip: "pip install kalix==0.4.12"
+---
+
+- IDE:
+    - Right-clicking a row in the Run Manager's source tree or the Optimiser's tree works anywhere along the row, not only on its name.
+    - The Run Manager, Optimiser, CLI Session Manager and Preferences trees highlight the row under the pointer, as the file tree does.
+    - Double-clicking anywhere along a leaf row in either Run Manager tree ticks or unticks it. Tooltips in the source tree show anywhere along the row.
+    - These were tried on Windows, not yet on macOS or Linux.
+- Fixes:
+    - Right-clicking a cell in a data table (CSV, Pixie, a plot's Data view or Table View) selects it unless it is already selected, so `Copy`, `Paste` and `Delete selected rows` act on the clicked cell. Before, the menu acted on the old selection. To delete several rows in Table View, right-click inside the selection.
