@@ -1,15 +1,19 @@
 package com.kalix.ide.builders;
 
+import com.kalix.ide.MapPanel;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.editor.EnhancedTextEditor;
+import com.kalix.ide.rendering.NodeLabelMode;
 import com.kalix.ide.themes.NodeTheme;
 
 import javax.swing.Action;
+import javax.swing.ButtonGroup;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
+import javax.swing.JRadioButtonMenuItem;
 import javax.swing.event.MenuEvent;
 import javax.swing.event.MenuListener;
 import javax.swing.text.DefaultEditorKit;
@@ -17,7 +21,9 @@ import org.fife.ui.rsyntaxtextarea.RSyntaxTextAreaEditorKit;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
 import java.io.File;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -59,6 +65,8 @@ public class MenuBarBuilder {
         void toggleShowHiddenFiles(boolean show);
         boolean isShowHiddenFiles();
         void toggleMap();
+        /** The active document's map, or {@code null} if it has none. */
+        MapPanel getActiveMapPanel();
         void setNodeTheme(NodeTheme.Theme theme);
         void flowViz();
         void showAbout();
@@ -319,12 +327,48 @@ public class MenuBarBuilder {
         trackpadItem.setToolTipText("Scrolling pans the map; hold Ctrl or Cmd to zoom");
         trackpadItem.addActionListener(e -> callbacks.setTrackpadNavigation(trackpadItem.isSelected()));
         viewMenu.add(trackpadItem);
+        viewMenu.addSeparator();
+
+        // The active map's display, as its toolbar shows it; view state, never saved.
+        JCheckBoxMenuItem gridlinesItem = new JCheckBoxMenuItem("Show Gridlines");
+        gridlinesItem.addActionListener(e -> {
+            MapPanel map = callbacks.getActiveMapPanel();
+            if (map != null) {
+                map.setShowGridlines(gridlinesItem.isSelected());
+            }
+        });
+        viewMenu.add(gridlinesItem);
+
+        JMenu labelsMenu = new JMenu("Node Labels");
+        ButtonGroup labelsGroup = new ButtonGroup();
+        Map<NodeLabelMode, JRadioButtonMenuItem> labelItems = new EnumMap<>(NodeLabelMode.class);
+        for (NodeLabelMode mode : NodeLabelMode.values()) {
+            JRadioButtonMenuItem item = new JRadioButtonMenuItem(mode.displayName());
+            item.addActionListener(e -> {
+                MapPanel map = callbacks.getActiveMapPanel();
+                if (map != null) {
+                    map.setLabelMode(mode);
+                }
+            });
+            labelsGroup.add(item);
+            labelsMenu.add(item);
+            labelItems.put(mode, item);
+        }
+        viewMenu.add(labelsMenu);
 
         viewMenu.addMenuListener(new MenuListener() {
             @Override
             public void menuSelected(MenuEvent e) {
                 showHiddenItem.setSelected(callbacks.isShowHiddenFiles());
                 trackpadItem.setSelected(callbacks.isTrackpadNavigation());
+
+                MapPanel map = callbacks.getActiveMapPanel();
+                gridlinesItem.setEnabled(map != null);
+                labelsMenu.setEnabled(map != null);
+                if (map != null) {
+                    gridlinesItem.setSelected(map.isShowGridlines());
+                    labelItems.get(map.getLabelMode()).setSelected(true);
+                }
             }
 
             @Override

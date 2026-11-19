@@ -67,6 +67,15 @@ public enum NodeLabelMode {
         PreferenceKeys.MAP_LABEL_MODE.set(key);
     }
 
+    /** The mode's name in menus and settings. */
+    public String displayName() {
+        return switch (this) {
+            case NAMES -> "Names";
+            case AKA -> "Akas only";
+            case HIDDEN -> "Hidden";
+        };
+    }
+
     /** The next mode in the cycle: names, aka, hidden, names. */
     public NodeLabelMode next() {
         return switch (this) {

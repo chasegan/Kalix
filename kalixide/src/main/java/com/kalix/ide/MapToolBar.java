@@ -1,5 +1,6 @@
 package com.kalix.ide;
 
+import com.formdev.flatlaf.FlatClientProperties;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.icons.HollowIcon;
 import com.kalix.ide.rendering.NodeLabelMode;
@@ -38,6 +39,9 @@ public final class MapToolBar extends JToolBar {
         setRollover(true);
         setOpaque(false); // paintComponent draws the rounded group; the corners show the map
         setBorder(BorderFactory.createEmptyBorder(PADDING, PADDING, PADDING, PADDING));
+        // FlatLaf makes toolbar buttons unfocusable unless asked. Tab stops on each button:
+        // a toggle button consumes the arrow keys, so FlatLaf's arrow navigation never runs.
+        putClientProperty(FlatClientProperties.STYLE, "focusableButtons: true; arrowKeysOnlyNavigation: false");
 
         configure(gridlinesButton, "Toggle Gridlines");
         gridlinesButton.addActionListener(e -> map.setShowGridlines(!map.isShowGridlines()));
@@ -96,8 +100,7 @@ public final class MapToolBar extends JToolBar {
     }
 
     private static void configure(JToggleButton button, String accessibleName) {
-        button.setFocusPainted(false);
-        button.setFocusable(false); // keep keyboard focus on the map
+        button.setRequestFocusEnabled(false); // reachable by Tab; a click leaves focus on the map
         button.getAccessibleContext().setAccessibleName(accessibleName);
     }
 

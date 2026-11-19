@@ -1543,6 +1543,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     @Override
+    public MapPanel getActiveMapPanel() {
+        return mapPanel;
+    }
+
+    @Override
     public void setTrackpadNavigation(boolean enabled) {
         // Apply to every open document's map so background tabs stay consistent.
         for (KalixDocument document : documentManager.getDocuments()) {

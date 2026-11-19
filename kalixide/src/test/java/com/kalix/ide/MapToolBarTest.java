@@ -1,5 +1,6 @@
 package com.kalix.ide;
 
+import com.formdev.flatlaf.ui.FlatToolBarUI;
 import com.kalix.ide.document.ModelDocument;
 import com.kalix.ide.icons.HollowIcon;
 import com.kalix.ide.rendering.NodeLabelMode;
@@ -9,6 +10,7 @@ import org.kordamp.ikonli.swing.FontIcon;
 import javax.swing.Icon;
 import javax.swing.JToggleButton;
 import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
 import java.awt.Dimension;
 import java.awt.Point;
 import java.awt.Rectangle;
@@ -107,6 +109,38 @@ class MapToolBarTest {
 
         assertTrue(bar.contains(centre.x, centre.y));
         assertSame(button, SwingUtilities.getDeepestComponentAt(view, bar.getX() + centre.x, bar.getY() + centre.y));
+    }
+
+    @Test
+    void buttonsAreReachableByKeyboardButAClickLeavesFocusOnTheMap() {
+        ModelDocument doc = new ModelDocument();
+        for (JToggleButton button : List.of(gridlinesButton(doc), labelsButton(doc))) {
+            assertTrue(button.isFocusable());
+            assertFalse(button.isRequestFocusEnabled());
+            assertTrue(button.isFocusPainted(), "the focus ring is drawn");
+        }
+    }
+
+    @Test
+    void buttonsStayFocusableUnderFlatLafToolBar() {
+        ModelDocument doc = new ModelDocument();
+        toolBar(doc).setUI(new FlatToolBarUI()); // by default it makes toolbar buttons unfocusable
+        assertTrue(gridlinesButton(doc).isFocusable());
+        assertTrue(labelsButton(doc).isFocusable());
+    }
+
+    @Test
+    void tabStopsOnEachButtonUnderFlatLafToolBar() {
+        ModelDocument doc = new ModelDocument();
+        // FlatLaf's default: Tab stops once and the arrows move within.
+        Object old = UIManager.put("ToolBar.arrowKeysOnlyNavigation", Boolean.TRUE);
+        try {
+            toolBar(doc).setUI(new FlatToolBarUI());
+            assertFalse(toolBar(doc).isFocusTraversalPolicyProvider(),
+                "no arrows-only policy: Tab reaches both buttons");
+        } finally {
+            UIManager.put("ToolBar.arrowKeysOnlyNavigation", old);
+        }
     }
 
     @Test
