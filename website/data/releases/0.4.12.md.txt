@@ -1,0 +1,15 @@
+---
+version: "0.4.12"
+date: TBD
+prerelease: false
+assets:
+  Windows: "https://github.com/chasegan/Kalix/releases/download/v0.4.12/KalixIDE-Windows-0.4.12-Portable.zip"
+  macOS: "https://github.com/chasegan/Kalix/releases/download/v0.4.12/KalixIDE-macOS-0.4.12-Portable.zip"
+  Linux: "https://github.com/chasegan/Kalix/releases/download/v0.4.12/KalixIDE-Linux-0.4.12-Portable.zip"
+pip: "pip install kalix==0.4.12"
+---
+
+- IDE:
+    - The gridlines and node-label buttons move from the main toolbar to a small toolbar over the top-right corner of each map. Each changes only its own map, and `View → Show Gridlines` and `View → Node Labels` do the same for the active map. Before, a click changed every open map and was saved. See [Annotations](https://kalix.org/docs/conventions/#annotations) for the label modes.
+    - `File → Preferences → Node Diagram` sets what new maps start with, in `Show gridlines on new maps` and `Node labels on new maps`.
+    - The linting button leaves the main toolbar. Linting is still switched in `File → Preferences`.
