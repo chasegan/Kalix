@@ -209,10 +209,11 @@ tokenises annotation lines as `Token.ANNOTATION`.
 
 The map draws clusters from pure functions, tested without a display: `MapLayers` (the
 order of node layers), `ClusterBox`, `ClusterIcon` and `MapLinks`. Which clusters are
-collapsed is session view state in `ClusterCollapse`, one per `MapPanel`; the design is
-`docs/clusters.md`, Architecture.
+collapsed is session view state in `ClusterCollapse`, one per `MapPanel`, written only
+through `ClusterCollapseManager`, whose commands deselect what they hide and repaint the
+map; the design is `docs/clusters.md`, Architecture.
 
-Key files: `IniSyntax.java`, `AnnotationKey.java`, `ModelParser.java`, `ClusterIndex.java`, `ClusterKey.java`, `NodeLabelMode.java`, `ToolBarBuilder.java`, `MapLayers.java`, `ClusterBox.java`, `ClusterIcon.java`, `MapLinks.java`, `ClusterCollapse.java`
+Key files: `IniSyntax.java`, `AnnotationKey.java`, `ModelParser.java`, `ClusterIndex.java`, `ClusterKey.java`, `NodeLabelMode.java`, `ToolBarBuilder.java`, `MapLayers.java`, `ClusterBox.java`, `ClusterIcon.java`, `MapLinks.java`, `ClusterCollapse.java`, `ClusterCollapseManager.java`
 
 ### Folding (#494)
 `KalixIniFoldParser` is the one fold grammar, registered for the Kalix INI style beside

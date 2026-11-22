@@ -67,7 +67,8 @@ class MapContextMenuClusterItemsTest {
 
     /** The labels from {@code Insert node} to {@code Delete}, a submenu as {@code title[children]}. */
     private static String block(HydrologicalModel model) {
-        JPopupMenu menu = new MapContextMenuManager(null, null, model, expanded(model)).buildMenu();
+        JPopupMenu menu = new MapContextMenuManager(null, null, model,
+                new ClusterCollapseManager(model, expanded(model))).buildMenu();
         List<String> labels = new ArrayList<>();
         boolean in = false;
         for (Component component : menu.getComponents()) {

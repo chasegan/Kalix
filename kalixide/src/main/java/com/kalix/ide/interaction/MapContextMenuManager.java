@@ -1,9 +1,7 @@
 package com.kalix.ide.interaction;
 
 import com.kalix.ide.constants.AppShortcut;
-import com.kalix.ide.model.ClusterCollapse;
 import com.kalix.ide.model.ClusterIndex;
-import com.kalix.ide.model.ModelLink;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelNode;
 import com.kalix.ide.MapPanel;
@@ -51,16 +49,16 @@ public class MapContextMenuManager {
     // Track where the context menu was invoked for potential future use (e.g., paste location)
     private Point lastContextMenuLocation;
 
-    // Which clusters are collapsed: the map panel's, given here so the menu can be built
-    // without a panel
-    private final ClusterCollapse clusterCollapse;
+    // The owner of which clusters are collapsed: the map panel's, given here so the menu can
+    // be built without a panel. The menu only issues it commands.
+    private final ClusterCollapseManager collapseManager;
 
     public MapContextMenuManager(MapPanel mapPanel, MapInteractionManager interactionManager,
-                                  HydrologicalModel model, ClusterCollapse clusterCollapse) {
+                                  HydrologicalModel model, ClusterCollapseManager collapseManager) {
         this.mapPanel = mapPanel;
         this.interactionManager = interactionManager;
         this.model = model;
-        this.clusterCollapse = clusterCollapse;
+        this.collapseManager = collapseManager;
     }
 
     /**
@@ -135,7 +133,7 @@ public class MapContextMenuManager {
         // selected link never changes them.
         List<String> selectedNodes = List.copyOf(model.getSelectedNodes());
         ClusterMenuRules clusterRules = ClusterMenuRules.of(selectedNodes, model.getClusters(),
-            clusterCollapse.collapsedKeys(model.getClusters()));
+            collapseManager.collapsedKeys(model.getClusters()));
         ClusterLabels clusterLabels = new ClusterLabels(
             model.getAllNodes().stream().map(ModelNode::getName).toList());
 
@@ -242,8 +240,7 @@ public class MapContextMenuManager {
                 if (name == null) {
                     return false;
                 }
-                clusterCollapse.created(before, name);
-                deselectIfHidden(selectedNodes, name);
+                collapseManager.created(before, name, selectedNodes);
                 return true;
             }));
         }
@@ -290,8 +287,7 @@ public class MapContextMenuManager {
                 if (name == null) {
                     return false;
                 }
-                clusterCollapse.renamed(before, renameCluster, name);
-                deselectIfHidden(before.members(renameCluster), name);
+                collapseManager.renamed(before, renameCluster, name);
                 return true;
             }));
         }
@@ -351,80 +347,33 @@ public class MapContextMenuManager {
         // (ADR-0002 §1, block 8). Expand cluster(s) needs a selected icon, which is V1c.
         List<String> collapseTargets = clusterRules.collapseTargets();
         if (!collapseTargets.isEmpty()) {
-            menu.add(viewItem(ClusterLabels.collapse(collapseTargets.size()), () -> collapse(collapseTargets)));
+            menu.add(viewItem(ClusterLabels.collapse(collapseTargets.size()),
+                () -> collapseManager.collapse(collapseTargets)));
         }
         if (clusterRules.offersCollapseAll()) {
-            menu.add(viewItem("Collapse all clusters", () -> collapse(model.getClusters().names())));
+            menu.add(viewItem("Collapse all clusters", () -> collapseManager.collapse(model.getClusters().names())));
         }
         if (clusterRules.offersExpandAll()) {
-            menu.add(viewItem("Expand all clusters",
-                () -> clusterCollapse.setCollapsed(model.getClusters().names(), false)));
+            menu.add(viewItem("Expand all clusters", collapseManager::expandAll));
         }
     }
 
-    /**
-     * Collapses the clusters and deselects everything they hide: nodes and links. Until a
-     * selected icon can be drawn as selected (V1c), a selection out of sight would be acted
-     * on by Delete or Cut unseen, so even a wholly selected cluster isn't kept selected
-     * (clusters.md rule 10, "In V1b").
-     */
-    private void collapse(List<String> clusters) {
-        clusterCollapse.setCollapsed(clusters, true);
-        ClusterIndex index = model.getClusters();
-        for (String node : model.getSelectedNodes()) {
-            if (clusterCollapse.isHidden(node, index)) {
-                model.deselectNode(node);
-            }
-        }
-        for (ModelLink link : model.getAllLinks()) {
-            if (model.isLinkSelected(link)
-                    && (clusterCollapse.isHidden(link.getUpstreamTerminus(), index)
-                        || clusterCollapse.isHidden(link.getDownstreamTerminus(), index))) {
-                model.deselectLink(link);
-            }
-        }
-    }
-
-    /** Puts the nodes in the cluster ({@code Add to}), deselecting them if it's collapsed. */
+    /** Puts the nodes in the cluster ({@code Add to}); the owner deselects them if it's collapsed. */
     private boolean addTo(Collection<String> nodes, String cluster) {
         if (!textEditor.addToCluster(nodes, cluster)) {
             return false;
         }
-        deselectIfHidden(nodes, cluster);
+        collapseManager.added(nodes, cluster);
         return true;
     }
 
     /**
-     * After an edit that puts {@code nodes} in {@code cluster} (Create, Add, a Rename that
-     * merges): if the cluster is collapsed, they are now hidden, so they and the links that
-     * end at them are deselected (clusters.md rule 10, "In V1b"; rule 15). Decided here,
-     * from the names, because the model is reparsed only later, on the event thread.
+     * A collapse or expand: a command to the owner of the collapse state, which deselects
+     * what it hides and repaints the map through its listeners, so nothing is done here.
      */
-    void deselectIfHidden(Collection<String> nodes, String cluster) {
-        if (!clusterCollapse.isCollapsed(cluster)) {
-            return;
-        }
-        for (String node : nodes) {
-            model.deselectNode(node);
-        }
-        for (ModelLink link : model.getAllLinks()) {
-            if (model.isLinkSelected(link)
-                    && (nodes.contains(link.getUpstreamTerminus())
-                        || nodes.contains(link.getDownstreamTerminus()))) {
-                model.deselectLink(link);
-            }
-        }
-    }
-
-    /** A collapse or expand: not a model event, so the map is repainted here. */
-    private JMenuItem viewItem(String label, Runnable change) {
+    private static JMenuItem viewItem(String label, Runnable command) {
         JMenuItem item = new JMenuItem(label);
-        item.addActionListener(e -> {
-            change.run();
-            if (mapPanel != null) {    // null only where a test builds the menu alone
-                mapPanel.repaint();
-            }
-        });
+        item.addActionListener(e -> command.run());
         return item;
     }
 

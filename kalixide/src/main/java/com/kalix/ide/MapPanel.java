@@ -30,6 +30,7 @@ import com.kalix.ide.model.ClusterCollapse;
 import com.kalix.ide.rendering.MapLayers;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelNode;
+import com.kalix.ide.interaction.ClusterCollapseManager;
 import com.kalix.ide.interaction.LinkDragManager;
 import com.kalix.ide.interaction.MapClipboardManager;
 import com.kalix.ide.interaction.MapContextMenuManager;
@@ -123,6 +124,9 @@ public class MapPanel extends JPanel {
     /** Which clusters are collapsed, for this panel's model, for the session. */
     private final ClusterCollapse clusterCollapse = new ClusterCollapse();
 
+    /** The one writer of {@link #clusterCollapse}; the panel repaints on each of its changes. */
+    private final ClusterCollapseManager collapseManager;
+
     /**
      * Node whose label changes because the mouse is over it. Only ever set while
      * {@link #labelMode} reveals on hover — in names mode there is nothing to
@@ -163,7 +167,9 @@ public class MapPanel extends JPanel {
         this.interactionManager = new MapInteractionManager(this, model, textUpdater);
         this.clipboardManager = new MapClipboardManager(model, textEditor, textUpdater);
         this.mapSearchManager = new MapSearchManager(this, model);
-        this.contextMenuManager = new MapContextMenuManager(this, interactionManager, model, clusterCollapse);
+        this.collapseManager = new ClusterCollapseManager(model, clusterCollapse);
+        collapseManager.addListener(this::repaint);
+        this.contextMenuManager = new MapContextMenuManager(this, interactionManager, model, collapseManager);
         this.contextMenuManager.setMapSearchManager(mapSearchManager);
         this.contextMenuManager.setClipboardManager(clipboardManager);
         this.contextMenuManager.setTextEditor(textEditor);
@@ -734,12 +740,14 @@ public class MapPanel extends JPanel {
         return labelMode;
     }
 
-    /**
-     * Which clusters are collapsed. Collapsing or expanding isn't a model event, so whoever
-     * changes it repaints the map.
-     */
+    /** Which clusters are collapsed, to read; changes go through {@link #getCollapseManager()}. */
     public ClusterCollapse getClusterCollapse() {
         return clusterCollapse;
+    }
+
+    /** The one writer of the collapse state. Its changes repaint the map. */
+    public ClusterCollapseManager getCollapseManager() {
+        return collapseManager;
     }
 
     /**

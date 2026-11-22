@@ -234,13 +234,16 @@ its first annotation (`NodeSectionLocator`), so the clipboard and Delete already
 `#@cluster`.
 
 **Collapse state** (`ClusterCollapse`, one per map panel, since only the map shows it) is
-a session map keyed by `ClusterKey`, not by a spelling, so a rename that changes
-only capitalisation keeps its state; entries are **never removed
-when a cluster vanishes**. Undo is the editor's own text undo followed by a reparse, so a
-cluster that undo brings back finds its old state. Create and Rename write entries
-explicitly: a new name starts collapsed, a rename to a new name copies the old name's
-state, and joining an existing cluster leaves its state alone. The map's menu writes them,
-from the index as it was before the edit, since only that says whether a name is new.
+a session map keyed by `ClusterKey`, not by a spelling, so a rename that changes only
+capitalisation keeps its state; entries are **never removed when a cluster vanishes**. Undo
+is the editor's own text undo followed by a reparse, so a cluster that undo brings back
+finds its old state. Create and Rename write entries explicitly: a new name starts
+collapsed, a rename to a new name copies the old name's state, and joining an existing
+cluster leaves its state alone. **The state has one writer**, `ClusterCollapseManager` on the
+map panel: every collapse or expand, from the menu today and from the icon and the selection
+rule when they come, is a command to it. A command writes the state, deselects the nodes and links
+it hides, and tells the map once; the menu only issues commands. Create and Rename hand it
+the index as it was before the edit, since only that says whether a name is new.
 
 **Drawing order** (`MapRenderer`): links; loose nodes; for each cluster in order of its
 first mention in the file, its box and then its members; collapsed icons. Loose nodes draw

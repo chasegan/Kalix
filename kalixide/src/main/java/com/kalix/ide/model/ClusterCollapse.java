@@ -15,10 +15,12 @@ import java.util.Set;
  * vanishes, so one that undo brings back finds its old state.
  *
  * <p>The map panel holds one, for its model. It is view state, so it isn't kept on
- * {@link HydrologicalModel}: only the map reads it, where the selection there is read by
- * the text editor too. Create and Rename write entries ({@link #created}, {@link #renamed})
- * from the index as it was before the edit, since only that says whether a name is new.
- * Used on the event thread only.</p>
+ * {@link HydrologicalModel}, which models the text; only the map shows it. This class only
+ * answers questions: every change goes through its one writer, the map's
+ * {@code ClusterCollapseManager}, which deselects what a change hides and tells the map.
+ * Create and Rename write entries ({@link #created}, {@link #renamed}) from the index as it
+ * was before the edit, since only that says whether a name is new. Used on the event
+ * thread only.</p>
  */
 public final class ClusterCollapse {
 

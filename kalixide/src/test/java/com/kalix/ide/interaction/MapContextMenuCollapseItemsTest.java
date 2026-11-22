@@ -64,7 +64,8 @@ class MapContextMenuCollapseItemsTest {
 
     /** The items after {@code Zoom to fit}. */
     private static List<JMenuItem> viewItems(HydrologicalModel model, ClusterCollapse collapse) {
-        JPopupMenu menu = new MapContextMenuManager(null, null, model, collapse).buildMenu();
+        JPopupMenu menu = new MapContextMenuManager(null, null, model,
+                new ClusterCollapseManager(model, collapse)).buildMenu();
         List<JMenuItem> items = new ArrayList<>();
         boolean after = false;
         for (Component component : menu.getComponents()) {
@@ -127,10 +128,10 @@ class MapContextMenuCollapseItemsTest {
         assertEquals(0, model.getSelectedLinkCount(), "x → n1 now runs to the icon");
     }
 
-    /** The menu's step after Create, Add or a merging Rename, which the text edit can't test. */
+    /** The owner's step after an Add, or a Create that joined, which the text edit can't test. */
     private static void afterEdit(HydrologicalModel model, ClusterCollapse collapse,
                                   List<String> nodes, String cluster) {
-        new MapContextMenuManager(null, null, model, collapse).deselectIfHidden(nodes, cluster);
+        new ClusterCollapseManager(model, collapse).added(nodes, cluster);
     }
 
     @Test
