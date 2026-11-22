@@ -136,7 +136,16 @@ class MapLayersTest {
         List<MapLayers.Icon> icons = MapLayers.icons(threeClusters(), damExpanded());
         // In order of first mention; the centroid of (10, 20), (30, 20), (20, 50) is
         // (20, 30), where the span's centre would be (20, 35).
-        assertEquals(List.of(new MapLayers.Icon("weir", 5, 5, 1), new MapLayers.Icon("farm", 20, 30, 3)), icons);
+        assertEquals(List.of(new MapLayers.Icon("weir", 5, 5, 1, false), new MapLayers.Icon("farm", 20, 30, 3, false)), icons);
+    }
+
+    @Test
+    void anIconIsSelectedWhenAllItsMembersAre() {
+        HydrologicalModel model = threeClusters();
+        model.selectNodes(List.of("w", "f1", "f2"));
+        List<MapLayers.Icon> icons = MapLayers.icons(model, damExpanded());
+        assertEquals(List.of(true, false), icons.stream().map(MapLayers.Icon::selected).toList(),
+                "weir's one member is selected; two of farm's three are");
     }
 
     @Test

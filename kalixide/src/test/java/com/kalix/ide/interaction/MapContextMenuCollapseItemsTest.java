@@ -17,10 +17,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The collapse items at the foot of the map's real menu, after {@code Zoom to fit}: which
- * show for the collapse state and the selection, and what they do. In V1b, collapsing
- * deselects everything it hides, even a wholly selected cluster, since a selected icon
- * can't yet be shown as selected (clusters.md rule 10, "In V1b"); so do Create, Add and a
- * merging Rename that put nodes into a collapsed cluster.
+ * show for the collapse state and the selection, and what they do. Collapsing keeps a
+ * wholly selected cluster selected, as a selected icon, and deselects the links it hides
+ * (clusters.md rule 10); Create, Add and a merging Rename that put nodes into a collapsed
+ * cluster that isn't selected deselect them (rule 15).
  *
  * <p>The model: cluster north (n1, n2), cluster south (s1), and loose x, linked to n1.
  * Not covered: that the menu's Create, Add and Rename items call the owner after their
@@ -118,7 +118,7 @@ class MapContextMenuCollapseItemsTest {
     }
 
     @Test
-    void collapseHidesTheClusterAndDeselectsWhatItHides() {
+    void collapseHidesTheClusterKeepingItSelectedAndDeselectsItsLinks() {
         HydrologicalModel model = model("x", "n1", "n2");
         model.selectLink(model.getAllLinks().get(0), true);
         ClusterCollapse collapse = collapsed();
@@ -127,7 +127,7 @@ class MapContextMenuCollapseItemsTest {
 
         assertTrue(collapse.isCollapsed("north"));
         assertFalse(collapse.isCollapsed("south"));
-        assertEquals(Set.of("x"), model.getSelectedNodes(), "a wholly selected cluster too, in V1b");
+        assertEquals(Set.of("x", "n1", "n2"), model.getSelectedNodes(), "the icon is selected");
         assertEquals(0, model.getSelectedLinkCount(), "x → n1 now runs to the icon");
     }
 
@@ -160,14 +160,14 @@ class MapContextMenuCollapseItemsTest {
     }
 
     @Test
-    void aNewClusterStartsCollapsedSoCreateDeselects() {
+    void aNewClusterStartsCollapsedAndCreateKeepsItsNodesSelected() {
         HydrologicalModel model = model("x", "s1");
         ClusterCollapse collapse = collapsed();
-        collapse.created(model.getClusters(), "east");
 
-        afterEdit(model, collapse, List.of("x"), "east");
+        new ClusterCollapseManager(model, collapse).created(model.getClusters(), "east", List.of("x"));
 
-        assertEquals(Set.of("s1"), model.getSelectedNodes());
+        assertTrue(collapse.isCollapsed("east"));
+        assertEquals(Set.of("x", "s1"), model.getSelectedNodes(), "a selected icon, once reparsed");
     }
 
     @Test
@@ -199,7 +199,7 @@ class MapContextMenuCollapseItemsTest {
         ClusterCollapse collapse = collapsed();
         click(model, collapse, "Collapse all clusters");
         assertTrue(collapse.isCollapsed("north") && collapse.isCollapsed("south"));
-        assertTrue(model.getSelectedNodes().isEmpty());
+        assertEquals(Set.of("s1"), model.getSelectedNodes(), "south is wholly selected");
 
         click(model, collapse, "Expand all clusters");
         assertFalse(collapse.isCollapsed("north") || collapse.isCollapsed("south"));

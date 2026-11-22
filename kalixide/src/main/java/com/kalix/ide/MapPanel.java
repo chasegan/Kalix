@@ -880,9 +880,10 @@ public class MapPanel extends JPanel {
      *
      * <p>A member of a collapsed cluster is hidden, so its cluster is expanded first:
      * otherwise the map would pan to empty space with a node selected that isn't drawn, for
-     * Delete or Cut to act on unseen. This is one route following clusters.md rule 10, that
-     * some of a cluster selected means it expands so the modeller sees what they selected;
-     * the rule in full, run after every selection change, is still to come.</p>
+     * Delete or Cut to act on unseen. The selection rule (clusters.md rule 10) would expand
+     * it anyway when the cluster has other members, which are left unselected; expanding
+     * here also covers a cluster of one, which the rule would leave collapsed and selected,
+     * since the modeller asked for the node.</p>
      *
      * @param nodeName The name of the node to select and center on
      */

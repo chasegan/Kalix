@@ -361,6 +361,21 @@ public class HydrologicalModel {
     }
     
     /**
+     * Remove several nodes from the selection, notifying listeners once, so a listener
+     * never sees the change half made. Names that aren't selected are ignored.
+     * @param nodeNames Names of nodes to deselect
+     */
+    public void deselectNodes(Collection<String> nodeNames) {
+        boolean changed = false;
+        for (String nodeName : nodeNames) {
+            changed |= selectedNodes.remove(nodeName);
+        }
+        if (changed) {
+            notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.NODE_DESELECTED, null));
+        }
+    }
+
+    /**
      * Clear all selections (nodes and links)
      */
     public void clearSelection() {

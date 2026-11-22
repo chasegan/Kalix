@@ -32,8 +32,9 @@ public final class MapLayers {
     /**
      * A collapsed cluster as drawn: at its members' centroid, in map coordinates, with the
      * number of its members on the map. {@code clusterName} is the spelling shown under it.
+     * {@code selected} when all of those members are (clusters.md rule 10).
      */
-    public record Icon(String clusterName, double x, double y, int count) {
+    public record Icon(String clusterName, double x, double y, int count, boolean selected) {
 
         /** The cluster's key, which a link's end names it by. */
         public ClusterKey key() {
@@ -79,11 +80,13 @@ public final class MapLayers {
             if (!members.isEmpty() && collapse.isCollapsed(cluster)) {
                 double x = 0;
                 double y = 0;
+                boolean selected = true;
                 for (ModelNode member : members) {
                     x += member.getX();
                     y += member.getY();
+                    selected &= model.isNodeSelected(member.getName());
                 }
-                icons.add(new Icon(cluster, x / members.size(), y / members.size(), members.size()));
+                icons.add(new Icon(cluster, x / members.size(), y / members.size(), members.size(), selected));
             }
         }
         return icons;

@@ -428,7 +428,7 @@ public class MapRenderer {
         // icon's name. The hidden mode shows none: it shows names on hover, and an icon
         // can't be hovered until icons are hit-tested (V1c).
         for (MapLayers.Icon icon : icons) {
-            renderIcon(g2d, icon.count(), icon.x() * zoomLevel + panX, icon.y() * zoomLevel + panY, fm);
+            renderIcon(g2d, icon.count(), icon.selected(), icon.x() * zoomLevel + panX, icon.y() * zoomLevel + panY, fm);
         }
         if (labelMode.drawsLabels()) {
             for (MapLayers.Icon icon : icons) {
@@ -477,13 +477,23 @@ public class MapRenderer {
         return ClusterBox.bounds(members, metrics, nameWidth);
     }
 
-    /** Draws a collapsed cluster's stacked cards, centred on the screen point, with its count. */
-    private void renderIcon(Graphics2D g2d, int count, double x, double y, FontMetrics labelFm) {
+    /**
+     * Draws a collapsed cluster's stacked cards, centred on the screen point, with its count.
+     * A selected icon's face has the selected node's border (clusters.md rule 10).
+     */
+    private void renderIcon(Graphics2D g2d, int count, boolean selected, double x, double y, FontMetrics labelFm) {
         double arc = 2 * ClusterIcon.CORNER_RADIUS;
         g2d.setStroke(DEFAULT_STROKE);
         Rectangle2D face = ClusterIcon.face(x, y);
         renderCard(g2d, ClusterIcon.back(x, y), ClusterIcon.BACK, arc);
         renderCard(g2d, face, ClusterIcon.FACE, arc);
+        if (selected) {
+            g2d.setColor(UIConstants.Selection.NODE_SELECTED_BORDER);
+            g2d.setStroke(SELECTED_NODE_STROKE);
+            g2d.draw(new RoundRectangle2D.Double(face.getX(), face.getY(),
+                    face.getWidth(), face.getHeight(), arc, arc));
+            g2d.setStroke(DEFAULT_STROKE);
+        }
 
         Font originalFont = g2d.getFont();
         g2d.setFont(labelFm.getFont().deriveFont(Font.BOLD));

@@ -107,16 +107,15 @@ name at the box's top left.
     each collapsed cluster, *all* members selected means the cluster is selected and stays
     collapsed; *some* selected means it expands, so the modeller sees what they selected.
     This covers `Select nodes ▸`, Find…, Show on map, hand edits and undo. The selection is
-    never widened to the other members. Collapsing a partly selected cluster deselects its
-    members: they were selected some other way, and the modeller may not have intended it.
+    never widened to the other members. A selected cluster's icon has a selected node's
+    border. Collapsing a partly selected cluster deselects its members: they were selected
+    some other way, and the modeller may not have intended it; a wholly selected one stays
+    selected. Find… and Show on map expand the cluster of the node they select, even a
+    cluster of one, since the modeller asked for that node.
 
-    **In V1b, until an icon can be drawn as selected (V1c):** an edit or a collapse that
-    hides selected nodes deselects them, and every link that ends at them, even when they
-    are the whole cluster. That is Collapse, Collapse all, and Create, Add or Rename into
-    or of a collapsed cluster. A selection out of sight would otherwise be acted on by
-    Delete or Cut unseen. Find… and Show on map expand the cluster of a hidden member before
-    selecting it, so the modeller sees the node they asked for. Other routes can still leave
-    hidden members selected: `Select nodes ▸`, undo and redo, and hand edits.
+    **Links:** a selected link with an end in a collapsed cluster is deselected whenever the
+    rule runs. It can't be shown there (rule 12), and nothing is lost: deleting the members
+    deletes their links. Links never decide whether a cluster expands.
 
 11. **The box name and proxy stand for the cluster** and behave like the icon: a click
     selects (all the members, when expanded) and takes the editor to the section of the
@@ -241,9 +240,12 @@ is the editor's own text undo followed by a reparse, so a cluster that undo brin
 finds its old state. Create and Rename write entries explicitly: a new name starts
 collapsed, a rename to a new name copies the old name's state, and joining an existing
 cluster leaves its state alone. **The state has one writer**, `ClusterCollapseManager` on the
-map panel: every collapse or expand, from the menu today and from the icon and the selection
-rule when they come, is a command to it. A command writes the state, deselects the nodes and links
-it hides, and tells the map once; the menu only issues commands. Create and Rename hand it
+map panel: every collapse or expand, from the menu or from the selection rule, goes through
+it. It listens to the model and runs rule 10 after every selection event and reparse; a
+command writes the state, keeps the selection to rule 10, and tells the map once, after the
+selection is final; the menu only issues commands. A change to several nodes' selection is
+made in one batch (`HydrologicalModel.selectNodes`, `deselectNodes`), so the rule never sees
+it half made. Create and Rename hand it
 the index as it was before the edit, since only that says whether a name is new.
 
 **Drawing order** (`MapRenderer`): links; loose nodes; for each cluster in order of its
