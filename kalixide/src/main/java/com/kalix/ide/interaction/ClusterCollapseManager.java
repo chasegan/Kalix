@@ -41,7 +41,11 @@ public final class ClusterCollapseManager {
         this.collapse = collapse;
     }
 
-    /** Runs {@code listener} after every change of collapse state, once per command. */
+    /**
+     * Runs {@code listener} once after every command that can change collapse state, whether
+     * or not it did (a Create that turns out to join an existing cluster still tells). Only
+     * {@link #added} can't change it, so only it is silent.
+     */
     public void addListener(Runnable listener) {
         listeners.add(listener);
     }

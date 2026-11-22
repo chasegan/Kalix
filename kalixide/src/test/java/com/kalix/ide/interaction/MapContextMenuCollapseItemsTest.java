@@ -22,7 +22,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * can't yet be shown as selected (clusters.md rule 10, "In V1b"); so do Create, Add and a
  * merging Rename that put nodes into a collapsed cluster.
  *
- * <p>The model: cluster north (n1, n2), cluster south (s1), and loose x, linked to n1.</p>
+ * <p>The model: cluster north (n1, n2), cluster south (s1), and loose x, linked to n1.
+ * Not covered: that the menu's Create, Add and Rename items call the owner after their
+ * text edit, since those items need a text editor to run; {@link #afterEdit} calls the
+ * owner directly.</p>
  */
 class MapContextMenuCollapseItemsTest {
 

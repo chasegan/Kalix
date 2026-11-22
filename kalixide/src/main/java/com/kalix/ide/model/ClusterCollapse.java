@@ -15,9 +15,9 @@ import java.util.Set;
  * vanishes, so one that undo brings back finds its old state.
  *
  * <p>The map panel holds one, for its model. It is view state, so it isn't kept on
- * {@link HydrologicalModel}, which models the text; only the map shows it. This class only
- * answers questions: every change goes through its one writer, the map's
- * {@code ClusterCollapseManager}, which deselects what a change hides and tells the map.
+ * {@link HydrologicalModel}, which models the text; only the map shows it. Its setters are
+ * called by one writer only, the map's {@code ClusterCollapseManager}, which deselects what
+ * a change hides and tells the map; everything else only asks it questions.
  * Create and Rename write entries ({@link #created}, {@link #renamed}) from the index as it
  * was before the edit, since only that says whether a name is new. Used on the event
  * thread only.</p>
