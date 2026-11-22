@@ -4,6 +4,7 @@ import com.kalix.ide.model.ClusterCollapse;
 import com.kalix.ide.model.ClusterIndex;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelNode;
+import com.kalix.ide.utils.ClusterKey;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,15 +25,20 @@ import java.util.List;
  */
 public final class MapLayers {
 
-    /** One layer: a cluster's members, or the loose nodes when {@code cluster} is null. */
-    public record Layer(String cluster, List<ModelNode> nodes) {
+    /** One layer: a cluster's members, or the loose nodes when {@code clusterName} is null. */
+    public record Layer(String clusterName, List<ModelNode> nodes) {
     }
 
     /**
      * A collapsed cluster as drawn: at its members' centroid, in map coordinates, with the
-     * number of its members on the map.
+     * number of its members on the map. {@code clusterName} is the spelling shown under it.
      */
-    public record Icon(String cluster, double x, double y, int count) {
+    public record Icon(String clusterName, double x, double y, int count) {
+
+        /** The cluster's key, which a link's end names it by. */
+        public ClusterKey key() {
+            return new ClusterKey(clusterName);
+        }
     }
 
     private MapLayers() {

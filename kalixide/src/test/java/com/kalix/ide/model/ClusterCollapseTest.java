@@ -1,8 +1,10 @@
 package com.kalix.ide.model;
 
+import com.kalix.ide.utils.ClusterKey;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -50,7 +52,7 @@ class ClusterCollapseTest {
         // Nothing removes an entry: reading against an index without the cluster (after a
         // disband, or an undo) leaves it for the cluster's return.
         ClusterCollapse collapse = expanded("farm");
-        collapse.collapsedNames(ClusterIndex.EMPTY);
+        collapse.collapsedKeys(ClusterIndex.EMPTY);
         collapse.isHidden("a", ClusterIndex.EMPTY);
         assertFalse(collapse.isCollapsed("farm"));
     }
@@ -66,10 +68,10 @@ class ClusterCollapseTest {
     }
 
     @Test
-    void collapsedNamesAreTheIndexsSpellingsInItsOrder() {
+    void collapsedKeysAreTheKeysOfTheIndexsCollapsedClusters() {
         ClusterIndex index = ClusterIndex.of(List.of(node("a", "Farm"), node("b", "dam"), node("c", "weir")));
         ClusterCollapse collapse = expanded("DAM");
-        assertEquals(List.of("Farm", "weir"), collapse.collapsedNames(index));
+        assertEquals(Set.of(new ClusterKey("farm"), new ClusterKey("weir")), collapse.collapsedKeys(index));
     }
 
     @Test

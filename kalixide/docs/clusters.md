@@ -206,9 +206,10 @@ order, so the order of first mention has to be kept from the parse. The index ho
 cluster's members in file order, and is replaced whole at every reparse, so it is a snapshot
 of the text. Only complete nodes (with a `type` and a `loc`) count, as only they are on
 the map. Names are matched ignoring case, as node names are, so `teemburra` and
-`Teemburra` are one cluster, shown with the spelling of its first mention. The index owns
-both choices, each in one place: how names are compared (by a key), and which spelling is
-shown. The linter warns on each
+`Teemburra` are one cluster, shown with the spelling of its first mention. Each of those
+two choices is made in one place. Names are compared by `ClusterKey` (in `utils`), a typed
+key that every map of clusters is keyed by, so a spelling can't be used as a key by mistake
+(ADR-0003 §2.1, §2.4). The spelling shown is chosen by the index. The linter warns on each
 mention spelled differently from the first, naming it, so a stray spelling is found.
 
 **Edits** (`ClusterEdits`, `CommandExecutor`). Each is a pure function from text to text
@@ -233,7 +234,7 @@ its first annotation (`NodeSectionLocator`), so the clipboard and Delete already
 `#@cluster`.
 
 **Collapse state** (`ClusterCollapse`, one per map panel, since only the map shows it) is
-a session map keyed by `ClusterIndex.key()`, not by a spelling, so a rename that changes
+a session map keyed by `ClusterKey`, not by a spelling, so a rename that changes
 only capitalisation keeps its state; entries are **never removed
 when a cluster vanishes**. Undo is the editor's own text undo followed by a reparse, so a
 cluster that undo brings back finds its old state. Create and Rename write entries

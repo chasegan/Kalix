@@ -48,7 +48,7 @@ class MapLinksTest {
     }
 
     private static String show(MapLinks.End end) {
-        return end.isIcon() ? "[" + end.cluster() + "]" : end.node();
+        return end.isIcon() ? "[" + end.cluster().value() + "]" : end.node();
     }
 
     @Test

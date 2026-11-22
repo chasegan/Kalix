@@ -1,6 +1,6 @@
 package com.kalix.ide.linter.parsing;
 
-import com.kalix.ide.model.ClusterIndex;
+import com.kalix.ide.utils.ClusterKey;
 import com.kalix.ide.utils.EngineNames;
 
 import java.util.ArrayList;
@@ -170,7 +170,7 @@ public class INIModelParser {
         Section currentSection = null;
         // Annotations waiting for the header they attach to (ADR-0010 §3).
         List<PendingAnnotation> pending = new ArrayList<>();
-        Map<String, PendingAnnotation> firstClusterMentions = new HashMap<>();
+        Map<ClusterKey, PendingAnnotation> firstClusterMentions = new HashMap<>();
 
         for (int i = 0; i < lines.length; i++) {
             int lineNumber = i + 1;
@@ -380,11 +380,11 @@ public class INIModelParser {
      * <p>A node's last valid {@code cluster} line is a mention of that cluster. One
      * spelled differently from the cluster's first mention, in capitalisation only,
      * is a warning naming that first mention: they are one cluster, shown with the
-     * first spelling ({@link ClusterIndex}). {@code firstClusterMentions} holds the
-     * first mention of each cluster so far, by {@link ClusterIndex#key}.</p>
+     * first spelling (the model's {@code ClusterIndex}). {@code firstClusterMentions} holds
+     * the first mention of each cluster so far, by {@link ClusterKey}.</p>
      */
     private static void checkAnnotations(List<PendingAnnotation> pending, String sectionName,
-                                         Map<String, PendingAnnotation> firstClusterMentions, ParsedModel model) {
+                                         Map<ClusterKey, PendingAnnotation> firstClusterMentions, ParsedModel model) {
         int earlierCluster = 0;
         PendingAnnotation mention = null;
         for (PendingAnnotation p : pending) {
@@ -422,7 +422,7 @@ public class INIModelParser {
         }
         if (mention != null) {
             String spelling = mention.annotation().value();
-            PendingAnnotation first = firstClusterMentions.putIfAbsent(ClusterIndex.key(spelling), mention);
+            PendingAnnotation first = firstClusterMentions.putIfAbsent(new ClusterKey(spelling), mention);
             if (first != null && !first.annotation().value().equals(spelling)) {
                 model.getSyntaxIssues().add(new SyntaxIssue(mention.lineNumber(),
                     "Cluster spelled '" + spelling + "' here and '" + first.annotation().value()

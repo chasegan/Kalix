@@ -8,6 +8,7 @@ import com.kalix.ide.model.NodeSectionLocator;
 import com.kalix.ide.model.NodeSectionLocator.AnnotationLine;
 import com.kalix.ide.model.NodeSectionLocator.HeaderBlock;
 import com.kalix.ide.model.NodeSectionLocator.NodeSection;
+import com.kalix.ide.utils.ClusterKey;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -29,7 +30,7 @@ import java.util.stream.Collectors;
  * header, below any comments: those belong to the section above with or without the line
  * (ADR-0010 §3), so a later Cut takes the same text plus the annotation.</p>
  *
- * <p>A cluster is found from any spelling ({@link ClusterIndex#key}), but every line an
+ * <p>A cluster is found from any spelling ({@link ClusterKey}), but every line an
  * edit touches gets exactly the name it is given, so the edit brings its nodes'
  * spellings back together.</p>
  */
@@ -85,12 +86,12 @@ final class ClusterEdits {
 
     /** Takes every member of the named clusters out of them; the nodes stay. */
     static List<CommandExecutor.TextEdit> disband(String text, Collection<String> clusters) {
-        Set<String> keys = clusters.stream().map(ClusterIndex::key).collect(Collectors.toSet());
+        Set<ClusterKey> keys = clusters.stream().map(ClusterKey::new).collect(Collectors.toSet());
         List<CommandExecutor.TextEdit> edits = new ArrayList<>();
         for (NodeSection section : NodeSectionLocator.findAll(text)) {
             HeaderBlock block = NodeSectionLocator.headerBlock(text, section, AnnotationKey.CLUSTER);
             String cluster = cluster(block);
-            if (cluster != null && keys.contains(ClusterIndex.key(cluster))) {
+            if (cluster != null && keys.contains(new ClusterKey(cluster))) {
                 addEdits(edits, text, block, null);
             }
         }
@@ -103,7 +104,7 @@ final class ClusterEdits {
     }
 
     private static boolean sameCluster(String name, String other) {
-        return other != null && ClusterIndex.key(name).equals(ClusterIndex.key(other));
+        return other != null && new ClusterKey(name).equals(new ClusterKey(other));
     }
 
     /** The cluster a section's lines put it in, read as the parser reads them. */

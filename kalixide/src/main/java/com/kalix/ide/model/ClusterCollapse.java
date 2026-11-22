@@ -1,13 +1,15 @@
 package com.kalix.ide.model;
 
-import java.util.ArrayList;
+import com.kalix.ide.utils.ClusterKey;
+
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.List;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
- * Which clusters the map shows collapsed: a session map keyed by {@link ClusterIndex#key},
+ * Which clusters the map shows collapsed: a session map keyed by {@link ClusterKey},
  * never saved (clusters.md, Architecture, "Collapse state"). A cluster with no entry is
  * collapsed, so everything starts collapsed. Entries are never removed when a cluster
  * vanishes, so one that undo brings back finds its old state.
@@ -20,17 +22,17 @@ import java.util.Map;
  */
 public final class ClusterCollapse {
 
-    private final Map<String, Boolean> collapsedByKey = new HashMap<>();
+    private final Map<ClusterKey, Boolean> collapsedByKey = new HashMap<>();
 
     /** Whether the cluster, by any spelling, is collapsed; one never seen is. */
     public boolean isCollapsed(String cluster) {
-        return collapsedByKey.getOrDefault(ClusterIndex.key(cluster), true);
+        return collapsedByKey.getOrDefault(new ClusterKey(cluster), true);
     }
 
     /** Collapses or expands the clusters, by any spelling. */
     public void setCollapsed(Collection<String> clusters, boolean collapsed) {
         for (String cluster : clusters) {
-            collapsedByKey.put(ClusterIndex.key(cluster), collapsed);
+            collapsedByKey.put(new ClusterKey(cluster), collapsed);
         }
     }
 
@@ -43,12 +45,12 @@ public final class ClusterCollapse {
         return cluster != null && isCollapsed(cluster);
     }
 
-    /** The collapsed clusters of {@code index}, as it shows their names, in its order. */
-    public List<String> collapsedNames(ClusterIndex index) {
-        List<String> collapsed = new ArrayList<>();
+    /** The keys of the collapsed clusters of {@code index}, which the menu's rules are given. */
+    public Set<ClusterKey> collapsedKeys(ClusterIndex index) {
+        Set<ClusterKey> collapsed = new HashSet<>();
         for (String name : index.names()) {
             if (isCollapsed(name)) {
-                collapsed.add(name);
+                collapsed.add(new ClusterKey(name));
             }
         }
         return collapsed;
@@ -63,7 +65,7 @@ public final class ClusterCollapse {
      */
     public void created(ClusterIndex before, String name) {
         if (before.name(name) == null) {
-            collapsedByKey.put(ClusterIndex.key(name), true);
+            collapsedByKey.put(new ClusterKey(name), true);
         }
     }
 
@@ -77,7 +79,7 @@ public final class ClusterCollapse {
      */
     public void renamed(ClusterIndex before, String oldName, String newName) {
         if (before.name(newName) == null) {
-            collapsedByKey.put(ClusterIndex.key(newName), isCollapsed(oldName));
+            collapsedByKey.put(new ClusterKey(newName), isCollapsed(oldName));
         }
     }
 }

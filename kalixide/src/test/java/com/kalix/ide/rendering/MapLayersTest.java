@@ -46,7 +46,7 @@ class MapLayersTest {
     void aModelWithNoClustersIsOneLooseLayer() {
         List<MapLayers.Layer> layers = layersOf(section("a", null), section("b", null));
         assertEquals(1, layers.size());
-        assertNull(layers.get(0).cluster());
+        assertNull(layers.get(0).clusterName());
         assertEquals(List.of("a", "b"), names(layers.get(0)));
     }
 
@@ -59,7 +59,7 @@ class MapLayersTest {
                 section("z2", "zebra"),
                 section("loose_2", null));
         assertEquals(Arrays.asList(null, "zebra", "apple"),
-                layers.stream().map(MapLayers.Layer::cluster).toList());
+                layers.stream().map(MapLayers.Layer::clusterName).toList());
         assertEquals(List.of("loose_1", "loose_2"), names(layers.get(0)));
         assertEquals(List.of("z1", "z2"), namesInOrder(layers.get(1)));
         assertEquals(List.of("a1"), namesInOrder(layers.get(2)));
@@ -93,7 +93,7 @@ class MapLayersTest {
         // "Farm" and "farm" are one layer. A name used twice counts at its last section,
         // which is loose; an invalid cluster name leaves its node loose.
         assertEquals(Arrays.asList(null, "Farm", "dam"),
-                layers.stream().map(MapLayers.Layer::cluster).toList());
+                layers.stream().map(MapLayers.Layer::clusterName).toList());
         assertEquals(List.of("bad_name", "loose", "twice"), names(layers.get(0)));
         assertEquals(List.of("upper", "lower"), namesInOrder(layers.get(1)));
     }
@@ -102,7 +102,7 @@ class MapLayersTest {
     void aModelWithOnlyClustersHasNoLooseLayer() {
         List<MapLayers.Layer> layers = layersOf(section("a", "farm"));
         assertEquals(1, layers.size());
-        assertEquals("farm", layers.get(0).cluster());
+        assertEquals("farm", layers.get(0).clusterName());
     }
 
     /** A model of loose {@code l} and three clusters, with {@code dam} expanded. */
@@ -127,7 +127,7 @@ class MapLayersTest {
     @Test
     void aCollapsedClusterHasNoLayerAndItsMembersAreNotDrawn() {
         List<MapLayers.Layer> layers = MapLayers.of(threeClusters(), damExpanded());
-        assertEquals(Arrays.asList(null, "dam"), layers.stream().map(MapLayers.Layer::cluster).toList());
+        assertEquals(Arrays.asList(null, "dam"), layers.stream().map(MapLayers.Layer::clusterName).toList());
         assertEquals(List.of("l"), names(layers.get(0)));
     }
 

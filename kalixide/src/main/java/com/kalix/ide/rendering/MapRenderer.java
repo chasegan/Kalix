@@ -21,6 +21,7 @@ import com.kalix.ide.model.ClusterCollapse;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelNode;
 import com.kalix.ide.themes.NodeTheme;
+import com.kalix.ide.utils.ClusterKey;
 import com.kalix.ide.constants.UIConstants;
 
 /**
@@ -251,9 +252,9 @@ public class MapRenderer {
     private void renderLinks(Graphics2D g2d, HydrologicalModel model, ClusterCollapse collapse,
                             List<MapLayers.Icon> icons, double zoomLevel, double panX, double panY) {
 
-        Map<String, MapLayers.Icon> iconByCluster = new HashMap<>();
+        Map<ClusterKey, MapLayers.Icon> iconByCluster = new HashMap<>();
         for (MapLayers.Icon icon : icons) {
-            iconByCluster.put(icon.cluster(), icon);
+            iconByCluster.put(icon.key(), icon);
         }
         // Render each link (color and stroke set individually based on selection state)
         for (MapLinks.Drawn link : MapLinks.of(model.getAllLinks(), model.getClusters(), collapse,
@@ -272,13 +273,13 @@ public class MapRenderer {
      * @param g2d Graphics context
      * @param link Link to render
      * @param model Model for node lookups
-     * @param iconByCluster The icons, by cluster
+     * @param iconByCluster The icons, by cluster key
      * @param zoomLevel Current zoom level
      * @param panX Horizontal pan offset
      * @param panY Vertical pan offset
      */
     private void renderSingleLink(Graphics2D g2d, MapLinks.Drawn link,
-                                 HydrologicalModel model, Map<String, MapLayers.Icon> iconByCluster,
+                                 HydrologicalModel model, Map<ClusterKey, MapLayers.Icon> iconByCluster,
                                  double zoomLevel, double panX, double panY) {
 
         // Where each end is drawn, in map coordinates
@@ -319,7 +320,7 @@ public class MapRenderer {
 
     /** Where a drawn end sits, in map coordinates, or {@code null} if it isn't on the map. */
     private static double[] position(MapLinks.End end, HydrologicalModel model,
-                                     Map<String, MapLayers.Icon> iconByCluster) {
+                                     Map<ClusterKey, MapLayers.Icon> iconByCluster) {
         if (end.isIcon()) {
             MapLayers.Icon icon = iconByCluster.get(end.cluster());
             return icon == null ? null : new double[] {icon.x(), icon.y()};
@@ -399,7 +400,7 @@ public class MapRenderer {
         ModelNode hovered = null;
         for (MapLayers.Layer layer : MapLayers.of(model, collapse)) {
             Rectangle2D box = null;
-            if (layer.cluster() != null) {
+            if (layer.clusterName() != null) {
                 box = clusterBox(layer, fm, metrics, labelMode, zoomLevel, panX, panY);
                 renderClusterBox(g2d, box);
             }
@@ -420,7 +421,7 @@ public class MapRenderer {
             // The box name is a label, so it goes in the label pass; the hidden mode has
             // none (clusters.md, settled decision 8).
             if (box != null && labelMode.drawsLabels()) {
-                renderBoxName(g2d, layer.cluster(), box, fm, metrics, textStyle);
+                renderBoxName(g2d, layer.clusterName(), box, fm, metrics, textStyle);
             }
         }
 
@@ -432,7 +433,7 @@ public class MapRenderer {
         }
         if (labelMode.drawsLabels()) {
             for (MapLayers.Icon icon : icons) {
-                renderNodeText(g2d, List.of(icon.cluster()), icon.x() * zoomLevel + panX,
+                renderNodeText(g2d, List.of(icon.clusterName()), icon.x() * zoomLevel + panX,
                                icon.y() * zoomLevel + panY + ClusterIcon.LABEL_DROP, nodeTheme);
             }
         }
@@ -473,7 +474,7 @@ public class MapRenderer {
                     node.getY() * zoomLevel + panY, widths));
         }
         OptionalInt nameWidth = labelMode.drawsLabels()
-                ? OptionalInt.of(fm.stringWidth(layer.cluster())) : OptionalInt.empty();
+                ? OptionalInt.of(fm.stringWidth(layer.clusterName())) : OptionalInt.empty();
         return ClusterBox.bounds(members, metrics, nameWidth);
     }
 

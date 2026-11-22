@@ -3,6 +3,7 @@ package com.kalix.ide.rendering;
 import com.kalix.ide.model.ClusterCollapse;
 import com.kalix.ide.model.ClusterIndex;
 import com.kalix.ide.model.ModelLink;
+import com.kalix.ide.utils.ClusterKey;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -19,14 +20,14 @@ import java.util.function.Predicate;
  */
 public final class MapLinks {
 
-    /** One end of a drawn link: a node, or the icon of the collapsed cluster named. */
-    public record End(String node, String cluster) {
+    /** One end of a drawn link: a node, or the icon of the collapsed cluster keyed. */
+    public record End(String node, ClusterKey cluster) {
 
         static End node(String name) {
             return new End(name, null);
         }
 
-        static End icon(String cluster) {
+        static End icon(ClusterKey cluster) {
             return new End(null, cluster);
         }
 
@@ -66,6 +67,6 @@ public final class MapLinks {
     }
 
     private static End end(String node, ClusterIndex index, ClusterCollapse collapse) {
-        return collapse.isHidden(node, index) ? End.icon(index.clusterOf(node)) : End.node(node);
+        return collapse.isHidden(node, index) ? End.icon(new ClusterKey(index.clusterOf(node))) : End.node(node);
     }
 }

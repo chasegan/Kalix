@@ -193,8 +193,9 @@ untouched. `ModelParser` attaches an `aka` above a `[node.*]` header to that nod
 (`ModelNode.getAka()`); a code line in between orphans it. A `cluster` attaches the same
 way (`ModelNode.getCluster()`), the last line counting and an invalid name leaving the
 node loose, and `HydrologicalModel.getClusters()` holds a `ClusterIndex` rebuilt at each
-parse, which owns how names compare (ignoring case) and which spelling is shown (the
-first mention's); the design is `docs/clusters.md`. `AnnotationKey` owns which values a
+parse, which chooses the spelling shown (the first mention's); `ClusterKey` (in `utils`)
+owns how names compare (ignoring case) and is what every map of clusters is keyed by
+(ADR-0003 §2); the design is `docs/clusters.md`. `AnnotationKey` owns which values a
 key accepts and the message refusing one, so the parser, linter and edits can't disagree.
 `ClusterEdits` computes cluster edits as pure functions, and `CommandExecutor` applies
 them as one atomic edit. `ClusterLabels` makes
@@ -211,7 +212,7 @@ order of node layers), `ClusterBox`, `ClusterIcon` and `MapLinks`. Which cluster
 collapsed is session view state in `ClusterCollapse`, one per `MapPanel`; the design is
 `docs/clusters.md`, Architecture.
 
-Key files: `IniSyntax.java`, `AnnotationKey.java`, `ModelParser.java`, `ClusterIndex.java`, `NodeLabelMode.java`, `ToolBarBuilder.java`, `MapLayers.java`, `ClusterBox.java`, `ClusterIcon.java`, `MapLinks.java`, `ClusterCollapse.java`
+Key files: `IniSyntax.java`, `AnnotationKey.java`, `ModelParser.java`, `ClusterIndex.java`, `ClusterKey.java`, `NodeLabelMode.java`, `ToolBarBuilder.java`, `MapLayers.java`, `ClusterBox.java`, `ClusterIcon.java`, `MapLinks.java`, `ClusterCollapse.java`
 
 ### Folding (#494)
 `KalixIniFoldParser` is the one fold grammar, registered for the Kalix INI style beside

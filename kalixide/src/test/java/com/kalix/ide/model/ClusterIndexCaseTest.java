@@ -20,13 +20,6 @@ class ClusterIndexCaseTest {
     }
 
     @Test
-    void namesDifferingOnlyInCaseHaveOneKey() {
-        assertEquals(ClusterIndex.key("teemburra"), ClusterIndex.key("Teemburra"));
-        assertEquals(ClusterIndex.key("teemburra"), ClusterIndex.key("TEEMBURRA"));
-        assertNotEquals(ClusterIndex.key("teemburra"), ClusterIndex.key("teemburra_2"));
-    }
-
-    @Test
     void twoSpellingsAreOneCluster() {
         ClusterIndex index = ClusterIndex.of(List.of(node("a", "north"), node("b", "North"), node("c", "NORTH")));
         assertEquals(List.of("north"), index.names());

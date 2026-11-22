@@ -135,7 +135,7 @@ public class MapContextMenuManager {
         // selected link never changes them.
         List<String> selectedNodes = List.copyOf(model.getSelectedNodes());
         ClusterMenuRules clusterRules = ClusterMenuRules.of(selectedNodes, model.getClusters(),
-            Set.copyOf(clusterCollapse.collapsedNames(model.getClusters())));
+            clusterCollapse.collapsedKeys(model.getClusters()));
         ClusterLabels clusterLabels = new ClusterLabels(
             model.getAllNodes().stream().map(ModelNode::getName).toList());
 

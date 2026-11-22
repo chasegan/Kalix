@@ -1,6 +1,7 @@
 package com.kalix.ide.interaction;
 
 import com.kalix.ide.model.ClusterIndex;
+import com.kalix.ide.utils.ClusterKey;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -36,7 +37,7 @@ final class ClusterMenuRules {
     private final boolean collapseAll;
     private final boolean expandAll;
 
-    private ClusterMenuRules(Collection<String> selectedNodes, ClusterIndex index, Set<String> collapsed) {
+    private ClusterMenuRules(Collection<String> selectedNodes, ClusterIndex index, Set<ClusterKey> collapsed) {
         Set<String> selected = new LinkedHashSet<>(selectedNodes);
 
         List<String> collapsedSelected = new ArrayList<>();
@@ -45,7 +46,7 @@ final class ClusterMenuRules {
         int loose = 0;
         for (String cluster : index.names()) {
             boolean whole = selected.containsAll(index.members(cluster));
-            if (collapsed.contains(cluster) && whole) {
+            if (collapsed.contains(new ClusterKey(cluster)) && whole) {
                 collapsedSelected.add(cluster);
             }
         }
@@ -82,12 +83,12 @@ final class ClusterMenuRules {
         nodeRename = selected.size() == 1 && collapsedSelected.isEmpty();
         rotate = loose + members + collapsedSelected.size() >= 2;
         // Collapse state outlives the clusters it names, so only live names count.
-        collapseAll = index.names().stream().anyMatch(cluster -> !collapsed.contains(cluster));
-        expandAll = index.names().stream().anyMatch(collapsed::contains);
+        collapseAll = index.names().stream().anyMatch(cluster -> !collapsed.contains(new ClusterKey(cluster)));
+        expandAll = index.names().stream().anyMatch(cluster -> collapsed.contains(new ClusterKey(cluster)));
     }
 
-    /** The rules for {@code selectedNodes}, given the model's clusters and the collapsed ones. */
-    static ClusterMenuRules of(Collection<String> selectedNodes, ClusterIndex index, Set<String> collapsed) {
+    /** The rules for {@code selectedNodes}, given the model's clusters and the keys of the collapsed ones. */
+    static ClusterMenuRules of(Collection<String> selectedNodes, ClusterIndex index, Set<ClusterKey> collapsed) {
         return new ClusterMenuRules(selectedNodes, index, collapsed);
     }
 

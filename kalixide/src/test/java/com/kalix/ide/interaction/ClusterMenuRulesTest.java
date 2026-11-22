@@ -2,11 +2,13 @@ package com.kalix.ide.interaction;
 
 import com.kalix.ide.model.ClusterIndex;
 import com.kalix.ide.model.ModelNode;
+import com.kalix.ide.utils.ClusterKey;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -36,7 +38,8 @@ class ClusterMenuRulesTest {
     }
 
     private static String menu(Set<String> collapsed, String... selected) {
-        return describe(ClusterMenuRules.of(List.of(selected), INDEX, collapsed));
+        return describe(ClusterMenuRules.of(List.of(selected), INDEX,
+                collapsed.stream().map(ClusterKey::new).collect(Collectors.toSet())));
     }
 
     private static String describe(ClusterMenuRules rules) {
