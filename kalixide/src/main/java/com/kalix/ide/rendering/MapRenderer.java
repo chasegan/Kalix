@@ -70,8 +70,7 @@ public class MapRenderer {
             10.0f, new float[]{5.0f, 5.0f}, 0.0f);
 
     // Node border strokes (cached — allocated per node per frame before)
-    private static final BasicStroke SELECTED_NODE_STROKE =
-            new BasicStroke(UIConstants.Selection.NODE_SELECTED_STROKE_WIDTH);
+    private static final BasicStroke SELECTED_NODE_STROKE = NodeShapeRenderer.SELECTED_BORDER;
     private static final BasicStroke UNSELECTED_NODE_STROKE =
             new BasicStroke(UIConstants.Selection.NODE_UNSELECTED_STROKE_WIDTH);
     private static final BasicStroke DEFAULT_STROKE = new BasicStroke(1.0f);

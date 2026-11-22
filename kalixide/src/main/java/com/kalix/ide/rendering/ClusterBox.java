@@ -21,12 +21,19 @@ import java.util.OptionalInt;
 public final class ClusterBox {
 
     /**
-     * How far a member's drawn shape can reach from its centre, in every direction: the
-     * widest shapes (the triangles) reach 13 px, a selected border adds half its 3 px
-     * stroke, and the link ring drawn on hover reaches 15 px. Reserving all of it keeps the
-     * box the same size whether or not a member is selected or hovered.
+     * The link ring drawn on hover: half a node plus half the ring, plus half the ring's 2 px
+     * stroke ({@code MapRenderer.renderLinkHandle}).
      */
-    static final double SHAPE_CLEARANCE = 15;
+    static final double LINK_RING_REACH =
+            UIConstants.Map.NODE_SIZE / 2.0 + UIConstants.Map.LINK_HANDLE_RING_PX / 2.0 + 1;
+
+    /**
+     * How far a member's drawing can reach from its centre, in every direction: the furthest
+     * any shape's selected border reaches, which the shape renderer states, or the link ring
+     * drawn on hover, whichever is more, rounded up to whole pixels. Reserving all of it keeps
+     * the box the same size whether or not a member is selected or hovered.
+     */
+    static final double SHAPE_CLEARANCE = Math.ceil(Math.max(NodeShapeRenderer.REACH, LINK_RING_REACH));
 
     /** The clear space between the box's contents and its border. */
     static final double GAP = 4;

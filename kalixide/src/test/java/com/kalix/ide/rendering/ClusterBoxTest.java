@@ -1,6 +1,7 @@
 package com.kalix.ide.rendering;
 
 import com.kalix.ide.constants.UIConstants;
+import com.kalix.ide.themes.NodeTheme;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.themes.NodeTheme;
 import org.junit.jupiter.api.Test;
@@ -76,23 +77,26 @@ class ClusterBoxTest {
     }
 
     @Test
-    void theAgreedSizesAreFifteenFourAndSix() {
-        // Agreed with Tim before coding (15 px for shapes, a 4 px gap, 6 px corners), so
-        // pinned here as numbers, not computed from the constants they check.
-        assertEquals(new Rectangle2D.Double(81, 31, 38, 38), box(member(100, 50)));
+    void theAgreedGapAndCornerAreFourAndSix() {
+        // Agreed before coding (a 4 px gap, 6 px corners), so pinned as numbers, not computed
+        // from the constants they check. The 15 px once agreed for shapes was short (the
+        // review of #531): the clearance is now the shape renderer's stated reach.
+        assertEquals(4, ClusterBox.GAP);
         assertEquals(6, ClusterBox.CORNER_RADIUS);
     }
 
     @Test
-    void theShapeClearanceCoversAWidestShapeWithASelectedBorderAndTheLinkRing() {
-        // Triangles reach 13 px, a figure only the drawing code holds; a selected border
-        // adds half its stroke.
-        double selectedTriangle = 13 + UIConstants.Selection.NODE_SELECTED_STROKE_WIDTH / 2.0;
-        // The hover ring is drawn at half a node plus half its ring width
-        // (MapRenderer.renderLinkHandle), with a 2 px stroke, private to MapRenderer.
-        double ring = UIConstants.Map.NODE_SIZE / 2.0 + UIConstants.Map.LINK_HANDLE_RING_PX / 2.0 + 2 / 2.0;
-        assertTrue(ClusterBox.SHAPE_CLEARANCE >= selectedTriangle);
-        assertTrue(ClusterBox.SHAPE_CLEARANCE >= ring);
+    void theShapeClearanceIsTheWidestOfEveryShapesSelectedBorderAndTheLinkRing() {
+        double widest = ClusterBox.LINK_RING_REACH;
+        for (NodeTheme.NodeShape shape : NodeTheme.NodeShape.values()) {
+            widest = Math.max(widest, NodeShapeRenderer.reach(shape, NodeShapeRenderer.SELECTED_BORDER));
+        }
+        assertEquals(Math.ceil(widest), ClusterBox.SHAPE_CLEARANCE, 1e-9,
+                "covers every shape and the ring to the next whole pixel, with no slack");
+        // The hover ring is drawn at half a node plus half its ring width with a 2 px stroke
+        // (MapRenderer.renderLinkHandle, private to MapRenderer).
+        assertEquals(UIConstants.Map.NODE_SIZE / 2.0 + UIConstants.Map.LINK_HANDLE_RING_PX / 2.0 + 1,
+                ClusterBox.LINK_RING_REACH, 1e-9);
     }
 
     @Test

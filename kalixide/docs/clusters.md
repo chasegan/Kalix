@@ -261,9 +261,11 @@ everything, so the label being read is never covered.
 a fixed screen size and only positions scale, so a box's size relative to the map changes
 with zoom. Padding has to: keep selection halos clear of the border; keep rounded corners
 clear of the contents; cover each member's drawn label, with a small gap; and stay
-symmetric about the members. Labels shown only on hover don't widen a box. The box name
-sits in a band along the top, mirrored at the bottom to keep the symmetry; a long name
-widens the box, and in hidden label mode there is no band.
+symmetric about the members. The room kept for a shape is the shape renderer's own stated
+reach, the furthest any node's selected border extends (the water drop's mitred tip), not a
+figure guessed elsewhere. Labels shown only on hover don't widen a box. The box name sits
+in a band along the top, mirrored at the bottom to keep the symmetry; a long name widens
+the box, and in hidden label mode there is no band.
 
 **Links.** A link with one end on a member of a collapsed cluster is drawn to that
 cluster's icon. A link between two collapsed clusters runs icon to icon; a link within one
