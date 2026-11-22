@@ -876,7 +876,13 @@ public class MapPanel extends JPanel {
 
     /**
      * Selects a node and centers the view on it, without triggering the
-     * map→editor scroll callback. Used by the editor's "Show on Map" action.
+     * map→editor scroll callback. Used by the editor's "Show on Map" action and by Find….
+     *
+     * <p>A member of a collapsed cluster is hidden, so its cluster is expanded first:
+     * otherwise the map would pan to empty space with a node selected that isn't drawn, for
+     * Delete or Cut to act on unseen. This is one route following clusters.md rule 10, that
+     * some of a cluster selected means it expands so the modeller sees what they selected;
+     * the rule in full, run after every selection change, is still to come.</p>
      *
      * @param nodeName The name of the node to select and center on
      */
@@ -888,6 +894,10 @@ public class MapPanel extends JPanel {
         ModelNode node = model.getNode(nodeName);
         if (node == null) {
             return;
+        }
+
+        if (isHidden(nodeName)) {
+            collapseManager.expand(List.of(model.getClusters().clusterOf(nodeName)));
         }
 
         // Select the node (replace selection)

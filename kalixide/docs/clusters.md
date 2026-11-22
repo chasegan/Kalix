@@ -114,8 +114,9 @@ name at the box's top left.
     hides selected nodes deselects them, and every link that ends at them, even when they
     are the whole cluster. That is Collapse, Collapse all, and Create, Add or Rename into
     or of a collapsed cluster. A selection out of sight would otherwise be acted on by
-    Delete or Cut unseen. Other routes can still leave hidden members selected: Find…, Show
-    on map, `Select nodes ▸`, undo and redo, and hand edits.
+    Delete or Cut unseen. Find… and Show on map expand the cluster of a hidden member before
+    selecting it, so the modeller sees the node they asked for. Other routes can still leave
+    hidden members selected: `Select nodes ▸`, undo and redo, and hand edits.
 
 11. **The box name and proxy stand for the cluster** and behave like the icon: a click
     selects (all the members, when expanded) and takes the editor to the section of the
