@@ -417,10 +417,10 @@ public class MapRenderer {
                 renderNodeText(g2d, labelMode.labelLines(node, false),
                                node.getX() * zoomLevel + panX, node.getY() * zoomLevel + panY, nodeTheme);
             }
-            // The box name is a label, so it goes in the label pass; the hidden mode has
-            // none (clusters.md, settled decision 8).
+            // The box name and its proxy are labels, so they go in the label pass; the
+            // hidden mode has neither (clusters.md, settled decision 8).
             if (box != null && labelMode.drawsLabels()) {
-                renderBoxName(g2d, layer.clusterName(), box, fm, metrics, textStyle);
+                renderBoxName(g2d, layer.clusterName(), layer.nodes().size(), box, fm, metrics, textStyle);
             }
         }
 
@@ -483,10 +483,8 @@ public class MapRenderer {
      */
     private void renderIcon(Graphics2D g2d, int count, boolean selected, double x, double y, FontMetrics labelFm) {
         double arc = 2 * ClusterIcon.CORNER_RADIUS;
-        g2d.setStroke(DEFAULT_STROKE);
         Rectangle2D face = ClusterIcon.face(x, y);
-        renderCard(g2d, ClusterIcon.back(x, y), ClusterIcon.BACK, arc);
-        renderCard(g2d, face, ClusterIcon.FACE, arc);
+        renderCards(g2d, ClusterIcon.back(x, y), face, arc, count, labelFm.getFont().deriveFont(Font.BOLD));
         if (selected) {
             g2d.setColor(UIConstants.Selection.NODE_SELECTED_BORDER);
             g2d.setStroke(SELECTED_NODE_STROKE);
@@ -494,9 +492,17 @@ public class MapRenderer {
                     face.getWidth(), face.getHeight(), arc, arc));
             g2d.setStroke(DEFAULT_STROKE);
         }
+    }
+
+    /** Draws two stacked cards, the back then the face, with {@code count} centred on the face. */
+    private void renderCards(Graphics2D g2d, Rectangle2D back, Rectangle2D face, double arc,
+                             int count, Font countFont) {
+        g2d.setStroke(DEFAULT_STROKE);
+        renderCard(g2d, back, ClusterIcon.BACK, arc);
+        renderCard(g2d, face, ClusterIcon.FACE, arc);
 
         Font originalFont = g2d.getFont();
-        g2d.setFont(labelFm.getFont().deriveFont(Font.BOLD));
+        g2d.setFont(countFont);
         FontMetrics fm = g2d.getFontMetrics();
         String text = Integer.toString(count);
         g2d.setColor(ClusterIcon.COUNT);
@@ -526,9 +532,19 @@ public class MapRenderer {
         g2d.draw(shape);
     }
 
-    /** Draws a cluster's name at its box's top left, looking like a node label. */
-    private void renderBoxName(Graphics2D g2d, String name, Rectangle2D box, FontMetrics fm,
+    /**
+     * Draws a cluster's proxy, with its member count, at its box's top left, if boxes show
+     * one ({@link ClusterBox#showsProxy}), and its name after it, looking like a node label.
+     */
+    private void renderBoxName(Graphics2D g2d, String name, int count, Rectangle2D box, FontMetrics fm,
                                ClusterBox.TextMetrics metrics, NodeTheme.TextStyle textStyle) {
+        if (ClusterBox.showsProxy()) {
+            Rectangle2D proxy = ClusterBox.proxyFace(box.getX(), box.getY(), metrics);
+            renderCards(g2d, ClusterIcon.proxyBack(proxy.getX(), proxy.getY()), proxy,
+                    2 * ClusterIcon.PROXY_CORNER_RADIUS, count,
+                    textStyle.getFont().deriveFont(Font.BOLD, ClusterIcon.PROXY_COUNT_SIZE));
+        }
+
         Rectangle strip = ClusterBox.nameStrip(box.getX(), box.getY(), fm.stringWidth(name), metrics);
         Font originalFont = g2d.getFont();
         g2d.setFont(textStyle.getFont());

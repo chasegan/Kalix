@@ -30,8 +30,8 @@ boxes.
 
 A collapsed cluster draws as one icon at its members' centroid, a small stacked-card
 shape with its node count on it and its name below. Links to its members are drawn to the
-icon. An expanded cluster draws its members as usual on a translucent grey box, with its
-name at the box's top left.
+icon. An expanded cluster draws its members as usual on a translucent grey box, with a
+small copy of its icon and its name at the box's top left.
 
 ## Terms
 
@@ -44,8 +44,9 @@ name at the box's top left.
 - **Node count:** the number of members, drawn on the icon.
 - **Icon label:** the cluster's name, drawn under the icon.
 - **Box:** the translucent grey rectangle under an expanded cluster's members.
-- **Box name:** the cluster's name, drawn at the box's top left, looking like a node label.
-- **Proxy:** a tiny copy of the icon, drawn beside the box name.
+- **Box name:** the cluster's name, drawn at the box's top left, after the proxy, looking
+  like a node label.
+- **Proxy:** a small copy of the icon, node count included, drawn before the box name.
 
 ## Settled decisions (discussed October and November 2026)
 
@@ -265,9 +266,13 @@ with zoom. Padding has to: keep selection halos clear of the border; keep rounde
 clear of the contents; cover each member's drawn label, with a small gap; and stay
 symmetric about the members. The room kept for a shape is the shape renderer's own stated
 reach, the furthest any node's selected border extends (the water drop's mitred tip), not a
-figure guessed elsewhere. Labels shown only on hover don't widen a box. The box name sits
-in a band along the top, mirrored at the bottom to keep the symmetry; a long name widens
-the box, and in hidden label mode there is no band.
+figure guessed elsewhere. Labels shown only on hover don't widen a box. The proxy and then
+the box name sit in a band along the top, as tall as the taller of the two and mirrored at
+the bottom to keep the symmetry; a long name widens the box, and in hidden label mode there
+is no band. The proxy is 22 × 15 px with a 2 px stack and a 9 px count: about a name's
+height, so the band barely grows. One switch, `ClusterBox.showsProxy`, turns the proxy off
+everywhere it is used, so boxes can be compared with and without it; it has no menu or
+button.
 
 **Links.** A link with one end on a member of a collapsed cluster is drawn to that
 cluster's icon. A link between two collapsed clusters runs icon to icon; a link within one

@@ -28,6 +28,17 @@ public final class ClusterIcon {
      */
     static final double LABEL_DROP = 4;
 
+    /**
+     * The proxy (clusters.md, Terms): a smaller copy of the cards, with the count, drawn
+     * before the box name of an expanded cluster. As tall as a name strip, near enough, so
+     * the band holding both barely grows.
+     */
+    static final double PROXY_WIDTH = 22;
+    static final double PROXY_HEIGHT = 15;
+    static final double PROXY_CORNER_RADIUS = 3;
+    static final double PROXY_STACK_OFFSET = 2;
+    static final float PROXY_COUNT_SIZE = 9f;
+
     /** The cards' colours, the same on every theme, as the box's are (clusters.md, settled decision 7). */
     static final Color BACK = new Color(0xbd, 0xbd, 0xbd);
     static final Color FACE = new Color(0xd9, 0xd9, 0xd9);
@@ -41,6 +52,16 @@ public final class ClusterIcon {
     public static Rectangle2D.Double face(double x, double y) {
         return new Rectangle2D.Double(x - (WIDTH + STACK_OFFSET) / 2, y - (HEIGHT + STACK_OFFSET) / 2,
                 WIDTH, HEIGHT);
+    }
+
+    /** The proxy's front card, with its top left corner at ({@code x}, {@code y}). */
+    public static Rectangle2D.Double proxyFace(double x, double y) {
+        return new Rectangle2D.Double(x, y, PROXY_WIDTH, PROXY_HEIGHT);
+    }
+
+    /** The proxy's back card, for a front card at ({@code x}, {@code y}). */
+    public static Rectangle2D.Double proxyBack(double x, double y) {
+        return new Rectangle2D.Double(x + PROXY_STACK_OFFSET, y + PROXY_STACK_OFFSET, PROXY_WIDTH, PROXY_HEIGHT);
     }
 
     /** The back card of an icon centred at ({@code x}, {@code y}): the face, moved down and right. */

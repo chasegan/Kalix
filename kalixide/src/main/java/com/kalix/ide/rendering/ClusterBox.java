@@ -39,6 +39,15 @@ public final class ClusterBox {
     static final double GAP = 4;
 
     /**
+     * Whether a box shows the proxy before its name. On by default. It is a switch, not a
+     * setting: no menu, toolbar or preference sets it, so turning the proxy off to compare
+     * means changing this line. With it off, nothing uses the proxy: the band holds only
+     * the name, and the name sits {@link #GAP} in from the corner. Tests flip it, and put it
+     * back.
+     */
+    static boolean showsProxy = true;
+
+    /**
      * The radius of the box's rounded corners. A corner of radius r cuts in about 0.3 r
      * (r(1 - 1/√2)) at the diagonal, under 2 px here, so {@link #GAP} keeps it clear of the
      * contents.
@@ -103,14 +112,10 @@ public final class ClusterBox {
      *
      * <p>Labels shown only on hover aren't passed in, so they never move the box.</p>
      *
-     * <p><b>The proxy</b> (a tiny copy of the collapsed icon beside the box name; clusters.md,
-     * Terms) isn't drawn yet. When it is, it goes in the name band, so enlarge the band
-     * here, not the contents: the band's height becomes the larger of the name strip's and
-     * the proxy's, and the width the box must hold across the top
-     * ({@code nameStrip.width + 2 * GAP} below) gains the proxy's width and the space
-     * between it and the name. The band exists only when the name does (none in hidden
-     * label mode), and so does the proxy. {@link #nameStrip} would then place the proxy
-     * after the strip.</p>
+     * <p>The band holds the proxy (a small copy of the collapsed icon; clusters.md, Terms)
+     * and then the name, {@link #GAP} apart: its height is the taller of the two, and the
+     * box is at least as wide as both. The band exists only when the name does (none in
+     * hidden label mode), and so does the proxy.</p>
      *
      * @param members at least one
      * @param nameWidth the box name's text width, or empty when the label mode hides it
@@ -158,10 +163,11 @@ public final class ClusterBox {
         double down = maxY - centreY + GAP;
 
         if (nameWidth.isPresent()) {
-            // The band: the name strip, GAP below the border and GAP above the contents.
+            // The band: the proxy and the name strip, GAP below the border and GAP above
+            // the contents.
             Rectangle strip = nameStrip(0, 0, nameWidth.getAsInt(), metrics);
-            up += strip.height + GAP;
-            halfWidth = Math.max(halfWidth, (strip.width + 2 * GAP) / 2);
+            up += bandHeight(metrics) + GAP;
+            halfWidth = Math.max(halfWidth, (strip.getMaxX() + GAP) / 2);
         }
         double halfHeight = Math.max(up, down);
 
@@ -170,13 +176,41 @@ public final class ClusterBox {
     }
 
     /**
+     * The height of the band along the top of a box: the taller of the proxy, if shown, and
+     * the name strip.
+     */
+    static double bandHeight(TextMetrics metrics) {
+        double name = metrics.height() + TEXT_PADDING;
+        return showsProxy ? Math.max(ClusterIcon.PROXY_HEIGHT + ClusterIcon.PROXY_STACK_OFFSET, name) : name;
+    }
+
+    /** Whether a box shows the proxy before its name ({@link #showsProxy}). */
+    public static boolean showsProxy() {
+        return showsProxy;
+    }
+
+    /**
+     * The proxy's front card in the band of a box whose top left corner is ({@code boxX},
+     * {@code boxY}): {@link #GAP} in from the corner, centred on the band's height. Only
+     * meaningful while {@link #showsProxy}.
+     */
+    public static Rectangle2D.Double proxyFace(double boxX, double boxY, TextMetrics metrics) {
+        double stack = ClusterIcon.PROXY_HEIGHT + ClusterIcon.PROXY_STACK_OFFSET;
+        return ClusterIcon.proxyFace(boxX + GAP, boxY + GAP + (bandHeight(metrics) - stack) / 2);
+    }
+
+    /**
      * The strip behind the box name of a box whose top left corner is ({@code boxX},
-     * {@code boxY}): {@link #GAP} in from the corner, sized like a node label's strip. The
-     * name's baseline is {@link #nameBaseline}.
+     * {@code boxY}): after the proxy, {@link #GAP} from it, or {@link #GAP} in from the
+     * corner when there is none; centred on the band's height, and sized like a node
+     * label's strip. The name's baseline is {@link #nameBaseline}.
      */
     public static Rectangle nameStrip(double boxX, double boxY, int nameWidth, TextMetrics metrics) {
-        return new Rectangle((int) (boxX + GAP), (int) (boxY + GAP),
-                nameWidth + TEXT_PADDING * 2, metrics.height() + TEXT_PADDING);
+        int height = metrics.height() + TEXT_PADDING;
+        double x = boxX + GAP
+                + (showsProxy ? ClusterIcon.PROXY_WIDTH + ClusterIcon.PROXY_STACK_OFFSET + GAP : 0);
+        double y = boxY + GAP + (bandHeight(metrics) - height) / 2;
+        return new Rectangle((int) x, (int) y, nameWidth + TEXT_PADDING * 2, height);
     }
 
     /** The baseline of the box name on {@code strip}, placed as a node label's is on its strip. */

@@ -129,6 +129,7 @@ class ClusterBoxTest {
         }
         Rectangle name = ClusterBox.nameStrip(box.getX(), box.getY(), 60, METRICS);
         assertTrue(rounded.contains(name), "a corner cuts the box name");
+        assertTrue(rounded.contains(proxyStack(box)), "a corner cuts the proxy");
     }
 
     @Test
@@ -155,24 +156,74 @@ class ClusterBoxTest {
         assertCentredOn(200, 0, box);
     }
 
+    /** The proxy's two cards, front and back, in the band of {@code box}. */
+    private static Rectangle2D proxyStack(Rectangle2D box) {
+        Rectangle2D face = ClusterBox.proxyFace(box.getX(), box.getY(), METRICS);
+        return face.createUnion(ClusterIcon.proxyBack(face.getX(), face.getY()));
+    }
+
     @Test
-    void theNameSitsInABandAboveEveryMembersContents() {
+    void theProxyThenTheNameSitInABandAboveEveryMembersContents() {
         ClusterBox.Member m = member(0, 0, 40);
         Rectangle2D box = box(OptionalInt.of(50), m);
         Rectangle name = ClusterBox.nameStrip(box.getX(), box.getY(), 50, METRICS);
+        Rectangle2D proxy = proxyStack(box);
 
-        assertEquals(box.getX() + ClusterBox.GAP, name.getX(), 1.0);
-        assertEquals(box.getY() + ClusterBox.GAP, name.getY(), 1.0);
+        assertEquals(box.getX() + ClusterBox.GAP, proxy.getX(), 1e-9);
+        assertEquals(box.getY() + ClusterBox.GAP, Math.min(proxy.getY(), name.getY()), 1.0);
+        assertEquals(proxy.getMaxX() + ClusterBox.GAP, name.getX(), 1.0);
+        assertEquals(proxy.getCenterY(), name.getCenterY(), 1.0, "the two share the band's middle");
         double contentsTop = shapeReach(m).getMinY();
-        assertTrue(name.getMaxY() + ClusterBox.GAP <= contentsTop, "the name runs into the members");
+        assertTrue(Math.max(proxy.getMaxY(), name.getMaxY()) + ClusterBox.GAP <= contentsTop,
+                "the band runs into the members");
         assertCentredOn(0, 0, box);
     }
 
     @Test
-    void aNameAddsRoomAtTheTopAndTheSameAtTheBottom() {
+    void aLargerFontMakesTheNameTheTallerAndCentresTheProxyOnIt() {
+        ClusterBox.TextMetrics large = new ClusterBox.TextMetrics(18, 24, 25);
+        Rectangle name = ClusterBox.nameStrip(0, 0, 50, large);
+        Rectangle2D proxy = ClusterBox.proxyFace(0, 0, large);
+        double stack = ClusterIcon.PROXY_HEIGHT + ClusterIcon.PROXY_STACK_OFFSET;
+
+        assertEquals(ClusterBox.GAP, name.getY(), 1e-9, "the name fills the band");
+        assertEquals(name.getCenterY(), proxy.getY() + stack / 2, 1e-9);
+    }
+
+    @Test
+    void aSmallerFontMakesTheProxyTheTallerAndCentresTheNameOnIt() {
+        ClusterBox.TextMetrics small = new ClusterBox.TextMetrics(8, 10, 25);
+        Rectangle name = ClusterBox.nameStrip(0, 0, 50, small);
+        Rectangle2D proxy = ClusterBox.proxyFace(0, 0, small);
+        double stack = ClusterIcon.PROXY_HEIGHT + ClusterIcon.PROXY_STACK_OFFSET;
+
+        assertEquals(ClusterBox.GAP, proxy.getY(), 1e-9, "the proxy fills the band");
+        assertEquals(proxy.getY() + stack / 2, name.getCenterY(), 1.0);
+    }
+
+    @Test
+    void withTheProxySwitchedOffTheNameSitsAtTheCornerInABandOfItsOwnHeight() {
+        ClusterBox.showsProxy = false;
+        try {
+            Rectangle2D without = box(member(0, 0));
+            Rectangle2D with = box(OptionalInt.of(10), member(0, 0));
+            Rectangle name = ClusterBox.nameStrip(with.getX(), with.getY(), 10, METRICS);
+            double band = METRICS.height() + ClusterBox.TEXT_PADDING + ClusterBox.GAP;
+
+            assertEquals(with.getX() + ClusterBox.GAP, name.getX(), 1.0);
+            assertEquals(with.getY() + ClusterBox.GAP, name.getY(), 1.0);
+            assertEquals(without.getHeight() + 2 * band, with.getHeight(), 1e-9);
+        } finally {
+            ClusterBox.showsProxy = true;
+        }
+    }
+
+    @Test
+    void aNameAddsTheBandAtTheTopAndTheSameAtTheBottom() {
         Rectangle2D without = box(member(0, 0));
         Rectangle2D with = box(OptionalInt.of(10), member(0, 0));
-        double band = METRICS.height() + ClusterBox.TEXT_PADDING + ClusterBox.GAP;
+        double band = Math.max(METRICS.height() + ClusterBox.TEXT_PADDING,
+                ClusterIcon.PROXY_HEIGHT + ClusterIcon.PROXY_STACK_OFFSET) + ClusterBox.GAP;
         assertEquals(without.getHeight() + 2 * band, with.getHeight(), 1e-9);
     }
 

@@ -63,7 +63,7 @@ class MapRendererClusterBoxTest {
     private static final String NAMED = "#@cluster = f\n[node.a_long_node_name]\ntype = storage\nloc = 150, 100\n";
 
     /** The image of {@link #NAMED} in {@code mode}, and the box and name strip it is drawn with. */
-    private record Drawn(BufferedImage image, Rectangle2D box, Rectangle strip) {
+    private record Drawn(BufferedImage image, Rectangle2D box, Rectangle strip, Rectangle2D proxy) {
         int at(int x, int y) {
             return image.getRGB(x, y);
         }
@@ -82,8 +82,9 @@ class MapRendererClusterBoxTest {
         ClusterBox.TextMetrics metrics = MapRenderer.textMetrics(fm, theme.getCurrentTextStyle());
         Rectangle2D box = MapRenderer.clusterBox(MapLayers.of(model, AllExpanded.of(model)).get(0), fm, metrics, mode, 1.0, 0, 0);
         Rectangle strip = ClusterBox.nameStrip(box.getX(), box.getY(), fm.stringWidth("f"), metrics);
+        Rectangle2D proxy = ClusterBox.proxyFace(box.getX(), box.getY(), metrics);
         g2d.dispose();
-        return new Drawn(image, box, strip);
+        return new Drawn(image, box, strip, proxy);
     }
 
     /** A point in the top band, beside the name strip, where only the box is drawn. */
@@ -104,6 +105,50 @@ class MapRendererClusterBoxTest {
     void theBoxNameIsNotDrawnInHiddenMode() {
         Drawn d = drawNamed(NodeLabelMode.HIDDEN);
         assertEquals(besideTheStrip(d), d.at(d.strip().x + 1, d.strip().y + 1));
+    }
+
+    /** A point just inside the proxy's front card, clear of its border and its count. */
+    private static int inTheProxy(Drawn d) {
+        return d.at((int) d.proxy().getX() + 3, (int) d.proxy().getY() + 3);
+    }
+
+    @Test
+    void theProxyIsDrawnBeforeTheNameWhenLabelsAre() {
+        Drawn d = drawNamed(NodeLabelMode.NAMES);
+        assertEquals(ClusterIcon.FACE.getRGB(), inTheProxy(d));
+        assertTrue(d.proxy().getMaxX() < d.strip().x, "the proxy comes before the name");
+    }
+
+    @Test
+    void theProxyIsNotDrawnInHiddenMode() {
+        Drawn d = drawNamed(NodeLabelMode.HIDDEN);
+        assertEquals(besideTheStrip(d), inTheProxy(d));
+    }
+
+    @Test
+    void theProxyIsNotDrawnWhenSwitchedOff() {
+        assertTrue(facePixels(drawNamed(NodeLabelMode.NAMES)) > 0, "the probe finds the proxy when on");
+        ClusterBox.showsProxy = false;
+        try {
+            Drawn off = drawNamed(NodeLabelMode.NAMES);
+            assertEquals(0, facePixels(off), "no card is drawn anywhere");
+            assertEquals(off.box().getX() + ClusterBox.GAP, off.strip().getX(), 1.0, "the name takes the corner");
+        } finally {
+            ClusterBox.showsProxy = true;
+        }
+    }
+
+    /** How many pixels have the cards' face colour: only a proxy has it, every cluster being expanded. */
+    private static int facePixels(Drawn d) {
+        int count = 0;
+        for (int x = 0; x < d.image().getWidth(); x++) {
+            for (int y = 0; y < d.image().getHeight(); y++) {
+                if (d.at(x, y) == ClusterIcon.FACE.getRGB()) {
+                    count++;
+                }
+            }
+        }
+        return count;
     }
 
     @Test
