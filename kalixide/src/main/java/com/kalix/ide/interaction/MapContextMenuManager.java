@@ -195,6 +195,12 @@ public class MapContextMenuManager {
                 selectMenu.add(growSelectionItem("Connected downstream", NodeAdjacency::connectedDownstream));
                 selectMenu.add(growSelectionItem("Connected upstream", NodeAdjacency::connectedUpstream));
             }
+            if (clusterRules.offersSelectCluster()) {
+                // The clusters of the selected members are the ones Collapse would fold.
+                List<String> clusters = clusterRules.collapseTargets();
+                selectMenu.addSeparator();
+                selectMenu.add(selectClusterItem(clusters));
+            }
             menu.add(selectMenu);
             menu.addSeparator();
         }
@@ -247,8 +253,8 @@ public class MapContextMenuManager {
 
         menu.addSeparator();
 
-        // Rename - only enabled when exactly one node is selected
-        boolean singleNodeSelected = model.getSelectedNodeCount() == 1;
+        // Rename - only enabled for one selected node that isn't a collapsed cluster
+        boolean singleNodeSelected = clusterRules.offersNodeRename();
         String selectedNodeName = singleNodeSelected ?
             model.getSelectedNodes().iterator().next() : null;
 
@@ -344,11 +350,16 @@ public class MapContextMenuManager {
         menu.add(zoomToFitItem);
 
         // Collapse and expand change how the map shows clusters, never the model
-        // (ADR-0002 §1, block 8). Expand cluster(s) needs a selected icon, which is V1c.
+        // (ADR-0002 §1, block 8).
         List<String> collapseTargets = clusterRules.collapseTargets();
         if (!collapseTargets.isEmpty()) {
             menu.add(viewItem(ClusterLabels.collapse(collapseTargets.size()),
                 () -> collapseManager.collapse(collapseTargets)));
+        }
+        List<String> expandTargets = clusterRules.expandTargets();
+        if (!expandTargets.isEmpty()) {
+            menu.add(viewItem(ClusterLabels.expand(expandTargets.size()),
+                () -> collapseManager.expand(expandTargets)));
         }
         if (clusterRules.offersCollapseAll()) {
             menu.add(viewItem("Collapse all clusters", () -> collapseManager.collapse(model.getClusters().names())));
@@ -399,6 +410,17 @@ public class MapContextMenuManager {
         item.addActionListener(e -> {
             NodeAdjacency adjacency = new NodeAdjacency(model.getAllLinks());
             model.selectNodes(grow.apply(adjacency, model.getSelectionSeedNodes()));
+            mapPanel.repaint();
+        });
+        return item;
+    }
+
+    /** {@code Cluster}: adds every member of {@code clusters} to the selection, as one change. */
+    private JMenuItem selectClusterItem(List<String> clusters) {
+        JMenuItem item = new JMenuItem("Cluster");
+        item.addActionListener(e -> {
+            ClusterIndex index = model.getClusters();
+            model.selectNodes(clusters.stream().flatMap(cluster -> index.members(cluster).stream()).toList());
             mapPanel.repaint();
         });
         return item;

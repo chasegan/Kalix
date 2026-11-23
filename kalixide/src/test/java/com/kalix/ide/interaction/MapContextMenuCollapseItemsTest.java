@@ -194,6 +194,51 @@ class MapContextMenuCollapseItemsTest {
     }
 
     @Test
+    void aSelectedIconOffersExpand() {
+        assertEquals("Expand cluster | Collapse all clusters | Expand all clusters",
+                labels(model("s1"), collapsed("south")));
+        assertEquals("Expand clusters | Expand all clusters",
+                labels(model("n1", "n2", "s1"), collapsed("north", "south")));
+    }
+
+    @Test
+    void anExpandedAndACollapsedClusterOfferBoth() {
+        assertEquals("Collapse cluster | Expand cluster | Collapse all clusters | Expand all clusters",
+                labels(model("n1", "s1"), collapsed("south")));
+    }
+
+    @Test
+    void expandOpensOnlyTheSelectedIconsKeepingTheirMembersSelected() {
+        HydrologicalModel model = model("s1");
+        ClusterCollapse collapse = collapsed("north", "south");
+
+        click(model, collapse, "Expand cluster");
+
+        assertFalse(collapse.isCollapsed("south"));
+        assertTrue(collapse.isCollapsed("north"), "north wasn't selected");
+        assertEquals(Set.of("s1"), model.getSelectedNodes());
+    }
+
+    /** The node {@code Rename} item's label, which names the node only when it offers to rename it. */
+    private static String nodeRenameLabel(HydrologicalModel model, ClusterCollapse collapse) {
+        JPopupMenu menu = new MapContextMenuManager(null, null, model,
+                new ClusterCollapseManager(model, collapse)).buildMenu();
+        for (Component component : menu.getComponents()) {
+            if (component instanceof JMenuItem item && item.getText().startsWith("Rename")
+                    && !item.getText().endsWith("…")) {
+                return item.getText();
+            }
+        }
+        throw new AssertionError("no node Rename item");
+    }
+
+    @Test
+    void aSelectedIconIsNotANodeToRename() {
+        assertEquals("Rename \"s1\"", nodeRenameLabel(model("s1"), collapsed()), "an expanded member");
+        assertEquals("Rename", nodeRenameLabel(model("s1"), collapsed("south")), "south's icon");
+    }
+
+    @Test
     void collapseAllAndExpandAllActOnEveryCluster() {
         HydrologicalModel model = model("s1");
         ClusterCollapse collapse = collapsed();
