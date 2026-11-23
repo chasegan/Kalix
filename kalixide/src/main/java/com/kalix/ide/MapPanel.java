@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.kalix.ide.model.ClusterCollapse;
+import com.kalix.ide.rendering.ClusterHandles;
 import com.kalix.ide.rendering.MapLayers;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelNode;
@@ -89,6 +90,8 @@ public class MapPanel extends JPanel {
     // Click tracking for node navigation
     private Point clickStartPoint = null;
     private String clickedNodeName = null;
+    // The cluster whose icon, box name or proxy was pressed, for its navigation on release
+    private String clickedClusterName = null;
 
     // Rectangle selection state
     private boolean isRectangleSelecting = false;
@@ -308,16 +311,21 @@ public class MapPanel extends JPanel {
                     // Request focus for keyboard events (delete key)
                     requestFocusInWindow();
                     
-                    // Check if clicking on a node first
-                    String nodeAtPoint = getNodeAtPoint(e.getPoint());
-                    
+                    // In the order of clusters.md, "Hit-testing": an icon, a node, then a
+                    // box name or proxy, each of which stands for its cluster.
+                    String iconAtPoint = getIconAtPoint(e.getPoint());
+                    String nodeAtPoint = iconAtPoint == null ? getNodeAtPoint(e.getPoint()) : null;
+                    String clusterAtPoint = iconAtPoint != null || nodeAtPoint != null
+                        ? iconAtPoint : getBoxNameAtPoint(e.getPoint());
+
                     // Store click information for potential navigation
                     clickStartPoint = new Point(e.getPoint());
                     clickedNodeName = nodeAtPoint;
-                    
+                    clickedClusterName = clusterAtPoint;
+
                     // A press in the ring just outside a node (not on any node) drags out a
                     // new link. Shift keeps its meaning of rectangle selection.
-                    String ringNode = nodeAtPoint == null && !e.isShiftDown()
+                    String ringNode = nodeAtPoint == null && clusterAtPoint == null && !e.isShiftDown()
                         ? linkDragManager.ringNodeAt(e.getPoint()) : null;
 
                     // Check for Ctrl+click rotation start (anywhere on the map)
@@ -326,6 +334,12 @@ public class MapPanel extends JPanel {
                         // Ctrl held with multiple nodes selected — start rotation
                         interactionManager.startDrag(e.getPoint(), true);
                         setCursor(rotateCursor());
+                    } else if (clusterAtPoint != null) {
+                        // As a node: a click on a selected cluster keeps the selection, for
+                        // a drag; navigation waits for the release.
+                        if (e.isShiftDown() || !isClusterSelected(clusterAtPoint)) {
+                            handleClusterSelection(clusterAtPoint, e.isShiftDown());
+                        }
                     } else if (nodeAtPoint != null) {
                         // Check if clicking on an already selected node
                         boolean nodeWasSelected = model.isNodeSelected(nodeAtPoint);
@@ -398,6 +412,13 @@ public class MapPanel extends JPanel {
                     if (!wasDragging && clickedNodeName != null && interactionManager != null) {
                         interactionManager.handleNodeClick(clickedNodeName);
                     }
+                    // A cluster's: the section of its first member in the file (rule 11)
+                    if (!wasDragging && clickedClusterName != null && interactionManager != null) {
+                        List<String> members = model.getClusters().members(clickedClusterName);
+                        if (!members.isEmpty()) {
+                            interactionManager.handleNodeClick(members.get(0));
+                        }
+                    }
 
                     // Handle rectangle selection completion
                     if (isRectangleSelecting) {
@@ -412,6 +433,7 @@ public class MapPanel extends JPanel {
                     // Clear click tracking
                     clickStartPoint = null;
                     clickedNodeName = null;
+                    clickedClusterName = null;
                 }
             }
             
@@ -947,6 +969,44 @@ public class MapPanel extends JPanel {
         }
         
         return null;
+    }
+
+    /** The collapsed cluster whose icon is drawn on top at the screen point, or null. */
+    public String getIconAtPoint(Point screenPoint) {
+        return ClusterHandles.at(ClusterHandles.icons(model, clusterCollapse, zoomLevel, panX, panY), screenPoint);
+    }
+
+    /**
+     * The expanded cluster whose box name, or proxy, is drawn on top at the screen point, or
+     * null. Neither is drawn in hidden label mode, nor the proxy when boxes show none.
+     */
+    public String getBoxNameAtPoint(Point screenPoint) {
+        NodeTheme.TextStyle textStyle = nodeTheme.getCurrentTextStyle();
+        return ClusterHandles.at(ClusterHandles.boxNames(model, clusterCollapse,
+            getFontMetrics(textStyle.getFont()), textStyle, labelMode, zoomLevel, panX, panY), screenPoint);
+    }
+
+    /** Whether every member of the cluster is selected, as a collapsed one is when selected. */
+    private boolean isClusterSelected(String cluster) {
+        return model.getSelectedNodes().containsAll(model.getClusters().members(cluster));
+    }
+
+    /**
+     * A click on a cluster's icon, box name or proxy, as {@link #handleNodeSelection} is on a
+     * node: it selects all the members; Shift adds them, or removes them when all are
+     * selected. Each is one change, so the selection rule never sees a cluster half selected
+     * (clusters.md rules 10, 11).
+     */
+    private void handleClusterSelection(String cluster, boolean addToSelection) {
+        List<String> members = model.getClusters().members(cluster);
+        if (addToSelection && isClusterSelected(cluster)) {
+            model.deselectNodes(members);
+            return;
+        }
+        if (!addToSelection) {
+            model.clearSelection();
+        }
+        model.selectNodes(members);
     }
 
     /**

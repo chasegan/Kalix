@@ -286,8 +286,9 @@ node's link ring (#435); link; empty space. Members of a collapsed cluster and t
 drop out of every hit-test, hover and rectangle selection included. Rectangle selection
 picks an icon if the point it is drawn at lies inside. A selection made after an edit waits
 for the reparse, as Insert node's does. Where node shapes overlap, a click picks the one
-drawn on top. Icons, box names and proxies aren't hit-tested yet, so a click on an icon
-reaches a node under it; hidden members already drop out.
+drawn on top. Icons, box names and proxies are found where they are drawn: `ClusterHandles`
+lays them out from the same `ClusterIcon` and `ClusterBox` geometry as `MapRenderer`, so a
+proxy that isn't drawn, or a box name in hidden label mode, is never hit.
 
 **Locations** (`TextCoordinateUpdater.updateNodeCoordinates`). A drag moves each member by
 the same offset, as one atomic edit, with dotted ghosts of the members while dragging or
