@@ -11,6 +11,7 @@ import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -34,13 +35,18 @@ class MapRendererCollapseTest {
     private static final String LINKED = "[node.l]\ntype = storage\nloc = 60, 180\nds_1 = f1\n\n";
 
     private static BufferedImage draw(String text, boolean collapsed, NodeLabelMode mode, String hovered) {
+        return draw(text, collapsed, mode, hovered, null);
+    }
+
+    private static BufferedImage draw(String text, boolean collapsed, NodeLabelMode mode, String hovered,
+                                      String hoveredCluster) {
         HydrologicalModel model = new HydrologicalModel();
         model.parseFromIniText(text);
         ClusterCollapse collapse = collapsed ? new ClusterCollapse() : AllExpanded.of(model);
         BufferedImage image = new BufferedImage(SIZE, SIZE, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g2d = image.createGraphics();
         new MapRenderer().renderMap(g2d, SIZE, SIZE, 1.0, 0, 0, false, model, new NodeTheme(),
-                null, null, 0, 0, false, mode, hovered, collapse);
+                null, null, 0, 0, false, mode, hovered, hoveredCluster, collapse);
         g2d.dispose();
         return image;
     }
@@ -111,5 +117,24 @@ class MapRendererCollapseTest {
 
         int unhovered = draw(text, false, NodeLabelMode.HIDDEN, null).getRGB(x, y);
         assertNotEquals(unhovered, draw(text, false, NodeLabelMode.HIDDEN, "a").getRGB(x, y));
+    }
+
+    /** Whether two images have every pixel the same. */
+    private static boolean samePixels(BufferedImage a, BufferedImage b) {
+        for (int y = 0; y < SIZE; y++) {
+            for (int x = 0; x < SIZE; x++) {
+                if (a.getRGB(x, y) != b.getRGB(x, y)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    @Test
+    void inHiddenModeAHoveredIconShowsItsNameAsInNamesMode() {
+        BufferedImage named = draw(FARM, true, NodeLabelMode.NAMES, null);
+        assertTrue(samePixels(named, draw(FARM, true, NodeLabelMode.HIDDEN, null, "farm")));
+        assertFalse(samePixels(named, draw(FARM, true, NodeLabelMode.HIDDEN, null, null)), "not hovered");
     }
 }

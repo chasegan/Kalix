@@ -139,6 +139,9 @@ public class MapPanel extends JPanel {
      */
     private String hoveredNodeName = null;
 
+    /** As {@link #hoveredNodeName}, for a collapsed cluster's icon (clusters.md rule 8). */
+    private String hoveredClusterName = null;
+
     // Theme management (optional - for enhanced unified theme support)
 
     /**
@@ -412,7 +415,7 @@ public class MapPanel extends JPanel {
                     if (!wasDragging && clickedNodeName != null && interactionManager != null) {
                         interactionManager.handleNodeClick(clickedNodeName);
                     }
-                    // A cluster's: the section of its first member in the file (rule 11)
+                    // A cluster's: the section of its first member in the file (clusters.md rule 11)
                     if (!wasDragging && clickedClusterName != null && interactionManager != null) {
                         List<String> members = model.getClusters().members(clickedClusterName);
                         if (!members.isEmpty()) {
@@ -443,8 +446,9 @@ public class MapPanel extends JPanel {
                 // Leaving the panel must retract a hover-revealed label or link ring,
                 // otherwise it stays painted with the mouse nowhere near it.
                 boolean linkHoverChanged = linkDragManager.updateHover(null);
-                if (hoveredNodeName != null || linkHoverChanged) {
+                if (hoveredNodeName != null || hoveredClusterName != null || linkHoverChanged) {
                     hoveredNodeName = null;
+                    hoveredClusterName = null;
                     repaint();
                 } else {
                     repaintCoordinateOverlay();
@@ -546,11 +550,14 @@ public class MapPanel extends JPanel {
         boolean hoverChanged = updateHoveredNode(e.getPoint());
 
         // With Shift (rectangle select) or a rotation modifier held, a press would not
-        // draw a link, so no ring is offered.
+        // draw a link, so no ring is offered; nor over an icon, box name or proxy, which a
+        // press selects first (clusters.md, "Hit-testing").
         boolean isCtrlDown = e.isControlDown() || e.isMetaDown();
         boolean rotating = isCtrlDown && interactionManager != null
             && interactionManager.canStartRotation();
-        hoverChanged |= linkDragManager.updateHover(rotating || e.isShiftDown() ? null : e.getPoint());
+        boolean noRing = rotating || e.isShiftDown()
+            || getIconAtPoint(e.getPoint()) != null || getBoxNameAtPoint(e.getPoint()) != null;
+        hoverChanged |= linkDragManager.updateHover(noRing ? null : e.getPoint());
 
         // Show rotation cursor when Ctrl is held and multiple nodes are selected,
         // and a crosshair over a node's link ring. Only touch the cursor on a state
@@ -656,7 +663,7 @@ public class MapPanel extends JPanel {
 
         mapRenderer.renderMap(g2d, getWidth(), getHeight(), zoomLevel, panX, panY,
                              showGridlines, model, nodeTheme, selectionStart, selectionCurrent,
-                             mouseWorldX, mouseWorldY, mouseInPanel, labelMode, hoveredNodeName,
+                             mouseWorldX, mouseWorldY, mouseInPanel, labelMode, hoveredNodeName, hoveredClusterName,
                              clusterCollapse);
         linkDragManager.paint(g2d);
 
@@ -755,6 +762,7 @@ public class MapPanel extends JPanel {
         // A mode change makes any pending hover reveal meaningless, and a mode that
         // reveals must not inherit a hover computed under one that did not.
         this.hoveredNodeName = null;
+        this.hoveredClusterName = null;
         repaint();
     }
 
@@ -798,12 +806,21 @@ public class MapPanel extends JPanel {
      * @return true if the revealed node changed and the map needs repainting
      */
     private boolean updateHoveredNode(Point screenPoint) {
-        String hovered = labelMode.revealsOnHover() ? getNodeAtPoint(screenPoint) : null;
-        if (java.util.Objects.equals(hovered, hoveredNodeName)) {
+        // An icon is over any node under it, as for a click (clusters.md, "Hit-testing").
+        String icon = labelMode.revealsOnHover() ? getIconAtPoint(screenPoint) : null;
+        String hovered = labelMode.revealsOnHover() && icon == null ? getNodeAtPoint(screenPoint) : null;
+        if (java.util.Objects.equals(hovered, hoveredNodeName)
+                && java.util.Objects.equals(icon, hoveredClusterName)) {
             return false;
         }
         hoveredNodeName = hovered;
+        hoveredClusterName = icon;
         return true;
+    }
+
+    /** The collapsed cluster whose icon the mouse is over, when the label mode reveals on hover. */
+    String getHoveredClusterName() {
+        return hoveredClusterName;
     }
     
     /**

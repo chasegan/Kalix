@@ -10,6 +10,7 @@ import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -39,7 +40,7 @@ class MapRendererClusterBoxTest {
         BufferedImage image = new BufferedImage(SIZE, SIZE, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g2d = image.createGraphics();
         new MapRenderer().renderMap(g2d, SIZE, SIZE, 1.0, 0, 0, false, model, new NodeTheme(),
-                null, null, 0, 0, false, NodeLabelMode.HIDDEN, null, AllExpanded.of(model));
+                null, null, 0, 0, false, NodeLabelMode.HIDDEN, null, null, AllExpanded.of(model));
         g2d.dispose();
         return image.getRGB(x, y);
     }
@@ -62,7 +63,7 @@ class MapRendererClusterBoxTest {
         Graphics2D g2d = image.createGraphics();
         // A new ClusterCollapse holds every cluster collapsed.
         new MapRenderer().renderMap(g2d, SIZE, SIZE, 1.0, 0, 0, false, model, new NodeTheme(),
-                null, null, 0, 0, false, NodeLabelMode.HIDDEN, null, new ClusterCollapse());
+                null, null, 0, 0, false, NodeLabelMode.HIDDEN, null, null, new ClusterCollapse());
         g2d.dispose();
         Rectangle2D face = ClusterIcon.face(X, Y);
         return image.getRGB((int) face.getCenterX(), (int) face.getY());
@@ -93,13 +94,26 @@ class MapRendererClusterBoxTest {
     }
 
     private static Drawn drawNamed(NodeLabelMode mode) {
+        return drawNamed(mode, false);
+    }
+
+    /** As {@link #drawNamed(NodeLabelMode)}, with the cluster's one member selected or not. */
+    private static Drawn drawNamed(NodeLabelMode mode, boolean selected) {
+        return drawNamed(NAMED, mode, selected ? List.of("a_long_node_name") : List.of());
+    }
+
+    /** {@link #NAMED} with a second member of f, b, beside a. */
+    private static final String NAMED_TWO = NAMED + "#@cluster = f\n[node.b]\ntype = storage\nloc = 170, 100\n";
+
+    private static Drawn drawNamed(String text, NodeLabelMode mode, List<String> selected) {
         HydrologicalModel model = new HydrologicalModel();
-        model.parseFromIniText(NAMED);
+        model.parseFromIniText(text);
+        model.selectNodes(selected);
         BufferedImage image = new BufferedImage(300, 200, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g2d = image.createGraphics();
         NodeTheme theme = new NodeTheme();
         new MapRenderer().renderMap(g2d, 300, 200, 1.0, 0, 0, false, model, theme,
-                null, null, 0, 0, false, mode, null, AllExpanded.of(model));
+                null, null, 0, 0, false, mode, null, null, AllExpanded.of(model));
         // The geometry as the renderer computes it, from the same font.
         FontMetrics fm = g2d.getFontMetrics(theme.getCurrentTextStyle().getFont());
         ClusterBox.TextMetrics metrics = MapRenderer.textMetrics(fm, theme.getCurrentTextStyle());
@@ -115,6 +129,27 @@ class MapRendererClusterBoxTest {
         int x = (int) (d.box().getMaxX() - ClusterBox.GAP - 2);
         assertTrue(x > d.strip().getMaxX(), "the box is too narrow to probe beside the strip");
         return d.at(x, d.strip().y + 1);
+    }
+
+    @Test
+    void aSelectedClustersProxyHasTheSelectedBorder() {
+        // The middle of the proxy face's top edge, as an icon's is probed.
+        Drawn plain = drawNamed(NodeLabelMode.NAMES, false);
+        Drawn selected = drawNamed(NodeLabelMode.NAMES, true);
+        int x = (int) plain.proxy().getCenterX();
+        int y = (int) plain.proxy().getY();
+        assertNotEquals(plain.at(x, y), selected.at(x, y));
+    }
+
+    @Test
+    void aPartlySelectedClustersProxyIsDrawnPlain() {
+        Drawn none = drawNamed(NAMED_TWO, NodeLabelMode.NAMES, List.of());
+        Drawn some = drawNamed(NAMED_TWO, NodeLabelMode.NAMES, List.of("b"));
+        Drawn all = drawNamed(NAMED_TWO, NodeLabelMode.NAMES, List.of("a_long_node_name", "b"));
+        int x = (int) none.proxy().getCenterX();
+        int y = (int) none.proxy().getY();
+        assertEquals(none.at(x, y), some.at(x, y));
+        assertNotEquals(none.at(x, y), all.at(x, y));
     }
 
     @Test

@@ -7,6 +7,7 @@ import com.kalix.ide.rendering.NodeLabelMode;
 import com.kalix.ide.themes.NodeTheme;
 import org.junit.jupiter.api.Test;
 
+import java.awt.Cursor;
 import java.awt.Point;
 import java.awt.event.InputEvent;
 import java.awt.event.MouseEvent;
@@ -17,6 +18,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -164,6 +166,59 @@ class MapPanelClusterClickTest {
 
         click(boxHandle(-1), true);
         assertEquals(Set.of("x"), model.getSelectedNodes());
+    }
+
+    private void moveTo(Point point) {
+        MouseEvent move = new MouseEvent(panel, MouseEvent.MOUSE_MOVED, 0, 0, point.x, point.y, 0, false);
+        for (java.awt.event.MouseMotionListener l : panel.getMouseMotionListeners()) l.mouseMoved(move);
+    }
+
+    @Test
+    void inHiddenLabelModeTheIconUnderTheMouseIsHovered() {
+        collapse(true);
+        panel.setLabelMode(NodeLabelMode.HIDDEN);
+
+        moveTo(ICON);
+        assertEquals("north", panel.getHoveredClusterName(), "the icon, over y");
+
+        moveTo(new Point(0, 100));
+        assertEquals(null, panel.getHoveredClusterName(), "x");
+    }
+
+    @Test
+    void noLinkRingIsOfferedOverAnIcon() {
+        // 11 px below y's centre: in its link ring, clear of every node, on north's icon.
+        Point nearY = new Point(120, 111);
+        Cursor crosshair = Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR);
+
+        collapse(false);
+        moveTo(nearY);
+        assertEquals(crosshair, panel.getCursor(), "y's ring, with no icon there");
+
+        collapse(true);
+        moveTo(nearY);
+        assertNotEquals(crosshair, panel.getCursor(), "the icon is over the ring");
+    }
+
+    @Test
+    void aNodeDrawnOverABoxNameIsClickedFirst() {
+        collapse(false);
+        Point name = boxHandle(-1);
+        String withZ = MODEL + "\n[node.z]\ntype = gauge\nloc = " + name.x + ", " + name.y + "\n";
+        model.parseFromIniText(withZ);
+
+        click(name, false);
+
+        assertEquals(Set.of("z"), model.getSelectedNodes());
+    }
+
+    @Test
+    void inNamesModeNoIconIsHovered() {
+        collapse(true);
+
+        moveTo(ICON);
+
+        assertEquals(null, panel.getHoveredClusterName(), "its name is always drawn");
     }
 
     @Test

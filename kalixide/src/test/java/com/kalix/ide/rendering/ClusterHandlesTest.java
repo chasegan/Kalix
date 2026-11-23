@@ -70,6 +70,26 @@ class ClusterHandlesTest {
     }
 
     @Test
+    void anIconFollowsZoomAndPan() {
+        List<ClusterHandles.Handle> icons = ClusterHandles.icons(model(), collapsed(true), 2, 10, 20);
+        // north's point (120, 100) is drawn at (2 × 120 + 10, 2 × 100 + 20).
+        assertEquals(ClusterIcon.face(250, 220), icons.get(0).shapes().get(0));
+    }
+
+    @Test
+    void aBoxNameFollowsZoomAndPan() {
+        ClusterCollapse expanded = collapsed(false);
+        Rectangle2D at1 = ClusterHandles.boxNames(model(), expanded, FM, STYLE, NodeLabelMode.NAMES, 1, 0, 0)
+                .get(0).shapes().get(0);
+        Rectangle2D at2 = ClusterHandles.boxNames(model(), expanded, FM, STYLE, NodeLabelMode.NAMES, 2, 10, 20)
+                .get(0).shapes().get(0);
+        // The members' screen points move from (100..140, 100) to (210..290, 220): the box's
+        // top left moves by (2 × 100 + 10 − 100, 2 × 100 + 20 − 100); shapes keep their size.
+        assertEquals(at1.getX() + 110, at2.getX(), 1e-9);
+        assertEquals(at1.getY() + 120, at2.getY(), 1e-9);
+    }
+
+    @Test
     void aBoxHasItsProxyAndItsName() {
         List<Rectangle2D> shapes = boxNames(NodeLabelMode.NAMES).get(0).shapes();
         assertEquals(3, shapes.size(), "the proxy's two cards and the name strip");
