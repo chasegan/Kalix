@@ -13,6 +13,7 @@ import java.awt.Cursor;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Point;
+import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
@@ -1245,6 +1246,14 @@ public class MapPanel extends JPanel {
     }
 
 
+    /** Whether the world point is inside the screen rectangle, edges included. */
+    private boolean contains(Rectangle rect, double worldX, double worldY) {
+        double screenX = toScreenX(worldX);
+        double screenY = toScreenY(worldY);
+        return screenX >= rect.x && screenX <= rect.x + rect.width
+            && screenY >= rect.y && screenY <= rect.y + rect.height;
+    }
+
     /**
      * Completes the rectangle selection by selecting all nodes and links within the rectangle.
      */
@@ -1269,22 +1278,22 @@ public class MapPanel extends JPanel {
             return; // Too small to be a meaningful selection
         }
 
-        // Find all nodes within the rectangle
+        // The nodes whose centre is inside, and every member of an icon drawn at a point
+        // inside, selected in one batch so the selection rule never sees an icon half
+        // selected (clusters.md rule 10).
+        Rectangle rect = new Rectangle(rectX, rectY, rectWidth, rectHeight);
+        List<String> inside = new ArrayList<>();
         for (ModelNode node : model.getAllNodes()) {
-            if (isHidden(node.getName())) {
-                continue;
-            }
-            // Transform node world coordinates to screen coordinates
-            double screenX = toScreenX(node.getX());
-            double screenY = toScreenY(node.getY());
-
-            // Check if node center is within the rectangle
-            if (screenX >= rectX && screenX <= rectX + rectWidth &&
-                screenY >= rectY && screenY <= rectY + rectHeight) {
-                // Add to selection
-                model.selectNode(node.getName(), true); // Add to selection
+            if (!isHidden(node.getName()) && contains(rect, node.getX(), node.getY())) {
+                inside.add(node.getName());
             }
         }
+        for (MapLayers.Icon icon : MapLayers.icons(model, clusterCollapse)) {
+            if (contains(rect, icon.x(), icon.y())) {
+                inside.addAll(model.getClusters().members(icon.clusterName()));
+            }
+        }
+        model.selectNodes(inside);
 
         // Find all links within the rectangle (check if link midpoint or any part intersects)
         for (com.kalix.ide.model.ModelLink link : model.getAllLinks()) {

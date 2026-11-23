@@ -247,8 +247,7 @@ it. It listens to the model and runs rule 10 after every selection event and rep
 command writes the state, keeps the selection to rule 10, and tells the map once, after the
 selection is final; the menu only issues commands. A command that changes several nodes'
 selection does it in one batch (`HydrologicalModel.selectNodes`, `deselectNodes`), so the
-rule never sees it half made. Rectangle selection still selects node by node, which is safe
-only because it skips hidden members. Create and Rename hand it
+rule never sees it half made; rectangle selection is one such batch. Create and Rename hand it
 the index as it was before the edit, since only that says whether a name is new.
 
 **Drawing order** (`MapRenderer`): links; loose nodes; for each cluster in order of its
