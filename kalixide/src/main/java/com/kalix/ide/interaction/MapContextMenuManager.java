@@ -358,7 +358,10 @@ public class MapContextMenuManager {
         }
     }
 
-    /** Puts the nodes in the cluster ({@code Add to}); the owner deselects them if it's collapsed. */
+    /**
+     * Puts the nodes in the cluster ({@code Add to}); the owner deselects them if it's
+     * collapsed and not selected (clusters.md rule 15).
+     */
     private boolean addTo(Collection<String> nodes, String cluster) {
         if (!textEditor.addToCluster(nodes, cluster)) {
             return false;

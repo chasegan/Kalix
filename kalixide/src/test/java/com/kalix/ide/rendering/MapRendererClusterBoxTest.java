@@ -1,5 +1,6 @@
 package com.kalix.ide.rendering;
 
+import com.kalix.ide.model.ClusterCollapse;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.themes.NodeTheme;
 import org.junit.jupiter.api.Test;
@@ -16,10 +17,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The map draws a box under an expanded cluster's members, and the members over it. Like
- * {@code MapRendererLabelOrderTest}, this reads pixels and asserts only "changed or not",
- * never a colour: a node drawn loose and the same node drawn as a member must differ just
- * outside its shape, where only the box can reach, and must not differ at its centre,
- * where its own shape covers the box.
+ * {@code MapRendererLabelOrderTest}, this reads pixels and asserts mostly "changed or not":
+ * a node drawn loose and the same node drawn as a member must differ just outside its shape,
+ * where only the box can reach, and must not differ at its centre, where its own shape covers
+ * the box. The proxy's tests look for the cards' face colour, which nothing else uses.
  */
 class MapRendererClusterBoxTest {
 
@@ -48,6 +49,28 @@ class MapRendererClusterBoxTest {
         // Inside the box's clearance, outside any shape.
         int x = X + (int) ClusterBox.SHAPE_CLEARANCE;
         assertNotEquals(pixel(node(false), x, Y), pixel(node(true), x, Y));
+    }
+
+    /** The pixel on the top edge of the face of a collapsed cluster of one at (X, Y). */
+    private static int iconEdge(boolean selected) {
+        HydrologicalModel model = new HydrologicalModel();
+        model.parseFromIniText(node(true));
+        if (selected) {
+            model.selectNode("a", false);
+        }
+        BufferedImage image = new BufferedImage(SIZE, SIZE, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2d = image.createGraphics();
+        // A new ClusterCollapse holds every cluster collapsed.
+        new MapRenderer().renderMap(g2d, SIZE, SIZE, 1.0, 0, 0, false, model, new NodeTheme(),
+                null, null, 0, 0, false, NodeLabelMode.HIDDEN, null, new ClusterCollapse());
+        g2d.dispose();
+        Rectangle2D face = ClusterIcon.face(X, Y);
+        return image.getRGB((int) face.getCenterX(), (int) face.getY());
+    }
+
+    @Test
+    void aSelectedIconsFaceHasTheSelectedBorder() {
+        assertNotEquals(iconEdge(false), iconEdge(true));
     }
 
     @Test
@@ -117,6 +140,22 @@ class MapRendererClusterBoxTest {
         Drawn d = drawNamed(NodeLabelMode.NAMES);
         assertEquals(ClusterIcon.FACE.getRGB(), inTheProxy(d));
         assertTrue(d.proxy().getMaxX() < d.strip().x, "the proxy comes before the name");
+    }
+
+    @Test
+    void theProxyShowsItsCount() {
+        Drawn d = drawNamed(NodeLabelMode.NAMES);
+        Rectangle2D proxy = d.proxy();
+        int marks = 0;
+        // Inside the face, clear of its border: anything not the face colour is the count.
+        for (int x = (int) proxy.getX() + 3; x < proxy.getMaxX() - 3; x++) {
+            for (int y = (int) proxy.getY() + 3; y < proxy.getMaxY() - 3; y++) {
+                if (d.at(x, y) != ClusterIcon.FACE.getRGB()) {
+                    marks++;
+                }
+            }
+        }
+        assertTrue(marks > 0, "no count on the proxy");
     }
 
     @Test

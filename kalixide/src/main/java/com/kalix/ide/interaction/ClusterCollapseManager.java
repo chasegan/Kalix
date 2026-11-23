@@ -23,7 +23,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *
  * <p>Like the map's other managers it holds the model and acts on it. Unlike them it owns
  * durable session state and has listeners, which is the shape ADR-0016 §3 asks of a view's
- * state. The map panel holds one for its model and repaints on each change.</p>
+ * state. The map panel holds one for its model and repaints on each change. It listens to
+ * the model and never stops, so it must live as long as the model: one per model, as the map
+ * panel is. A second manager on the same model would run the rule a second time.</p>
  *
  * <p><b>The selection rule</b> (clusters.md rule 10) runs after every selection change and
  * every reparse, so undo, redo and hand edits are held to it as well as the map: a collapsed
@@ -111,8 +113,8 @@ public final class ClusterCollapseManager {
     /**
      * After a Rename of {@code oldName} to {@code newName} ({@link ClusterCollapse#renamed}).
      * A new name, or a change of capitalisation alone, keeps the cluster and its selection
-     * as they were. A merge into a collapsed cluster that isn't selected deselects the
-     * members moved in, as {@link #added} does.
+     * as they were. A merge is an Add of the members moved in (clusters.md rule 13): into a
+     * collapsed cluster that isn't selected it deselects them, as {@link #added} does.
      */
     public void renamed(ClusterIndex before, String oldName, String newName) {
         collapse.renamed(before, oldName, newName);

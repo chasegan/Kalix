@@ -132,9 +132,10 @@ small copy of its icon and its name at the box's top left.
 
 ### Editing
 
-13. **Rename to an existing name merges** the clusters; the merged cluster keeps the
-    target's collapse state and is selected. Renaming a *node* to an existing name stays
-    refused: a node name is identity, a cluster is a grouping.
+13. **Rename to an existing name merges** the clusters, as Add of the renamed cluster's
+    members to the other one would (rule 15); the merged cluster keeps the target's
+    collapse state. Renaming a *node* to an existing name stays refused: a node name is
+    identity, a cluster is a grouping.
 
 14. **Disband keeps the nodes; Delete deletes them.** Delete on a collapsed cluster deletes
     its members and their links.
@@ -244,9 +245,10 @@ cluster leaves its state alone. **The state has one writer**, `ClusterCollapseMa
 map panel: every collapse or expand, from the menu or from the selection rule, goes through
 it. It listens to the model and runs rule 10 after every selection event and reparse; a
 command writes the state, keeps the selection to rule 10, and tells the map once, after the
-selection is final; the menu only issues commands. A change to several nodes' selection is
-made in one batch (`HydrologicalModel.selectNodes`, `deselectNodes`), so the rule never sees
-it half made. Create and Rename hand it
+selection is final; the menu only issues commands. A command that changes several nodes'
+selection does it in one batch (`HydrologicalModel.selectNodes`, `deselectNodes`), so the
+rule never sees it half made. Rectangle selection still selects node by node, which is safe
+only because it skips hidden members. Create and Rename hand it
 the index as it was before the edit, since only that says whether a name is new.
 
 **Drawing order** (`MapRenderer`): links; loose nodes; for each cluster in order of its
@@ -285,9 +287,8 @@ node's link ring (#435); link; empty space. Members of a collapsed cluster and t
 drop out of every hit-test, hover and rectangle selection included. Rectangle selection
 picks an icon if the point it is drawn at lies inside. A selection made after an edit waits
 for the reparse, as Insert node's does. Where node shapes overlap, a click picks the one
-drawn on top. In V1b icons and box names aren't hit-tested yet (V1c), so a click on an
-icon reaches a node under it, and proxies aren't drawn yet; hidden members already drop
-out.
+drawn on top. Icons, box names and proxies aren't hit-tested yet, so a click on an icon
+reaches a node under it; hidden members already drop out.
 
 **Locations** (`TextCoordinateUpdater.updateNodeCoordinates`). A drag moves each member by
 the same offset, as one atomic edit, with dotted ghosts of the members while dragging or
