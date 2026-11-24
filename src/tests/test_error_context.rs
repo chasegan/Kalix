@@ -2,6 +2,7 @@
 // Var block and [ras.*] cases are in test_var_blocks.rs
 
 use crate::io::ini_model_io::IniModelIO;
+use crate::misc::simulation_context::is_in_simulation;
 use crate::model::Model;
 
 fn load(ini: &str) -> Model {
@@ -177,6 +178,8 @@ fn failure_before_any_item_names_none() {
     let mut model = load(&flow_rig("node.low.dsflow", ""));
     let err = run_err(&mut model);
     assert!(err.contains("Node: 'mid'"), "first run should name mid: {err}");
+    // The CLI's panic hook stays silent while a run is in progress; a failed run has ended
+    assert!(!is_in_simulation(), "a failed run should clear the phase");
     let err = interrupt_err(&mut model.clone_for_run());
     assert!(err.contains("unknown_node"), "a copy of a failed model should name no item: {err}");
     let err = interrupt_err(&mut model);

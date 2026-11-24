@@ -129,6 +129,11 @@ pub struct DataCache {
     /// User-defined functions ([fn] section), inlined into expressions at
     /// lowering. Arc-shared defs, so cloning the cache is cheap.
     pub fns: crate::functions::fn_registry::FnRegistry,
+
+    /// The running item, for a run error to name: written per item, read only after a panic.
+    /// Hot despite the banner: rustc places it beside `current_step` (measured, offset 608).
+    /// Holds 0 until a run starts and resets it to `simulation_context::NO_ITEM`.
+    pub context_item: usize,
 }
 
 
