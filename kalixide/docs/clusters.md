@@ -1,10 +1,10 @@
 # Node Clusters
 
-Status: **design settled; the model, rules, drawing and interaction are done:
+Status: **design settled; the model, rules, drawing, interaction and boxes setting are done:
 `#@cluster` is parsed and indexed, the map's menu offers every cluster item, the map draws
-boxes, proxies and collapsed icons, and a cluster is selected and dragged from its icon,
-box name or proxy, rotated and deleted; the boxes toolbar button is still to come** (stages
-below).
+boxes, proxies and collapsed icons, a cluster is selected and dragged from its icon, box name
+or proxy, rotated and deleted, and a toolbar button shows or hides boxes; its menu-bar item
+waits for the map's menu-bar items** (stages below).
 Issue [#476](https://github.com/chasegan/Kalix/issues/476).
 The present tense below describes the design. A few choices are marked for checking at
 user testing (see Context menu).
@@ -291,7 +291,8 @@ picks an icon if the point it is drawn at lies inside. A selection made after an
 for the reparse, as Insert node's does. Where node shapes overlap, a click picks the one
 drawn on top. Icons, box names and proxies are found where they are drawn: `ClusterHandles`
 lays them out from the same `ClusterIcon` and `ClusterBox` geometry as `MapRenderer`, so a
-proxy that isn't drawn, or a box name in hidden label mode, is never hit. The panel measures
+proxy that isn't drawn, or a box name with boxes hidden or in hidden label mode, is never
+hit. The panel measures
 text with its own font metrics, not the paint's, so a name's edge may differ by a pixel, and
 cards are hit as rectangles though drawn with rounded corners. No link ring is offered over
 an icon, box name or proxy.
@@ -318,8 +319,11 @@ member has.
   cluster(s)`), selection (rule 10 in full), the proxy, icon hit-testing (and so the icon
   label on hover in hidden mode, rule 8), drag, rotate, Delete, and a paste expanding the
   cluster it joins (rule 16).
-- **V1d: toolbar and menu bar.** The boxes setting and its preference. The last code stage,
-  since nothing depends on it.
+- **V1d: toolbar and menu bar.** The boxes setting, its preference
+  (`map.showClusterBoxes`, shown by default) and its toolbar button, beside the node-label
+  button. The last code stage, since nothing depends on it. The menu bar has no map view
+  items yet (gridlines and node labels are toolbar-only too); the boxes item joins them
+  when they come.
 - **V1e: docs.** A clusters section in `website/docs/docs/ide.md`, a release-note bullet.
 
 ## V1 limitations (known, accepted)

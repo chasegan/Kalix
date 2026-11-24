@@ -10,9 +10,12 @@ import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
+import java.util.Arrays;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -39,10 +42,30 @@ class MapRendererClusterBoxTest {
         model.parseFromIniText(text);
         BufferedImage image = new BufferedImage(SIZE, SIZE, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g2d = image.createGraphics();
-        new MapRenderer().renderMap(g2d, SIZE, SIZE, 1.0, 0, 0, false, model, new NodeTheme(),
+        new MapRenderer().renderMap(g2d, SIZE, SIZE, 1.0, 0, 0, false, true, model, new NodeTheme(),
                 null, null, 0, 0, false, NodeLabelMode.HIDDEN, null, null, AllExpanded.of(model));
         g2d.dispose();
         return image.getRGB(x, y);
+    }
+
+    /** The whole map of {@code text}, expanded, with node names drawn. */
+    private static int[] namesImage(String text, boolean showBoxes) {
+        HydrologicalModel model = new HydrologicalModel();
+        model.parseFromIniText(text);
+        BufferedImage image = new BufferedImage(SIZE, SIZE, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2d = image.createGraphics();
+        new MapRenderer().renderMap(g2d, SIZE, SIZE, 1.0, 0, 0, false, showBoxes, model, new NodeTheme(),
+                null, null, 0, 0, false, NodeLabelMode.NAMES, null, null, AllExpanded.of(model));
+        g2d.dispose();
+        return image.getRGB(0, 0, SIZE, SIZE, null, 0, SIZE);
+    }
+
+    @Test
+    void withBoxesHiddenAMemberIsDrawnAsIfLoose() {
+        // No box, box name or proxy: every pixel as for the same node in no cluster.
+        assertArrayEquals(namesImage(node(false), true), namesImage(node(true), false));
+        // And the comparison can fail: shown, the box differs.
+        assertFalse(Arrays.equals(namesImage(node(false), true), namesImage(node(true), true)));
     }
 
     @Test
@@ -62,7 +85,7 @@ class MapRendererClusterBoxTest {
         BufferedImage image = new BufferedImage(SIZE, SIZE, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g2d = image.createGraphics();
         // A new ClusterCollapse holds every cluster collapsed.
-        new MapRenderer().renderMap(g2d, SIZE, SIZE, 1.0, 0, 0, false, model, new NodeTheme(),
+        new MapRenderer().renderMap(g2d, SIZE, SIZE, 1.0, 0, 0, false, true, model, new NodeTheme(),
                 null, null, 0, 0, false, NodeLabelMode.HIDDEN, null, null, new ClusterCollapse());
         g2d.dispose();
         Rectangle2D face = ClusterIcon.face(X, Y);
@@ -112,7 +135,7 @@ class MapRendererClusterBoxTest {
         BufferedImage image = new BufferedImage(300, 200, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g2d = image.createGraphics();
         NodeTheme theme = new NodeTheme();
-        new MapRenderer().renderMap(g2d, 300, 200, 1.0, 0, 0, false, model, theme,
+        new MapRenderer().renderMap(g2d, 300, 200, 1.0, 0, 0, false, true, model, theme,
                 null, null, 0, 0, false, mode, null, null, AllExpanded.of(model));
         // The geometry as the renderer computes it, from the same font.
         FontMetrics fm = g2d.getFontMetrics(theme.getCurrentTextStyle().getFont());

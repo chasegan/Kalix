@@ -42,14 +42,14 @@ public final class ClusterHandles {
 
     /**
      * The proxy, if boxes show one ({@link ClusterBox#showsProxy}), and the box name of each
-     * expanded cluster, in drawing order. None in a label mode that draws no labels, which
-     * has neither (clusters.md rule 8).
+     * expanded cluster, in drawing order. None with boxes hidden, or in a label mode that
+     * draws no labels, which have neither (clusters.md rules 6, 8).
      */
     public static List<Handle> boxNames(HydrologicalModel model, ClusterCollapse collapse,
                                         FontMetrics fm, NodeTheme.TextStyle textStyle,
-                                        NodeLabelMode labelMode,
+                                        NodeLabelMode labelMode, boolean showBoxes,
                                         double zoomLevel, double panX, double panY) {
-        if (!labelMode.drawsLabels()) {
+        if (!showBoxes || !labelMode.drawsLabels()) {
             return List.of();
         }
         ClusterBox.TextMetrics metrics = MapRenderer.textMetrics(fm, textStyle);

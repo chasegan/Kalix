@@ -110,6 +110,7 @@ public class MapRenderer {
      * @param panX Horizontal pan offset
      * @param panY Vertical pan offset
      * @param showGridlines Whether to show grid lines
+     * @param showClusterBoxes Whether expanded clusters draw their boxes, with name and proxy
      * @param model Hydrological model containing nodes to render
      * @param nodeTheme Theme for node visualization
      * @param selectionStart Selection rectangle start point (null if no selection)
@@ -126,7 +127,7 @@ public class MapRenderer {
      */
     public void renderMap(Graphics2D g2d, int width, int height,
                          double zoomLevel, double panX, double panY,
-                         boolean showGridlines, HydrologicalModel model,
+                         boolean showGridlines, boolean showClusterBoxes, HydrologicalModel model,
                          NodeTheme nodeTheme, Point selectionStart, Point selectionCurrent,
                          double mouseWorldX, double mouseWorldY, boolean mouseInPanel,
                          NodeLabelMode labelMode, String hoveredNodeName, String hoveredClusterName,
@@ -155,7 +156,7 @@ public class MapRenderer {
             List<MapLayers.Icon> icons = MapLayers.icons(model, collapse);
             renderLinks(g2d, model, collapse, icons, zoomLevel, panX, panY);
             renderNodes(g2d, model, collapse, icons, nodeTheme, zoomLevel, panX, panY,
-                        labelMode, hoveredNodeName, hoveredClusterName);
+                        labelMode, showClusterBoxes, hoveredNodeName, hoveredClusterName);
         }
 
         if (selectionStart != null && selectionCurrent != null) {
@@ -391,13 +392,15 @@ public class MapRenderer {
      * @param panX Horizontal pan offset
      * @param panY Vertical pan offset
      * @param labelMode Which text is drawn under each node
+     * @param showBoxes Whether expanded clusters draw their boxes, with name and proxy
      * @param hoveredNodeName Node whose label the mouse changes, or null
      * @param hoveredClusterName Collapsed cluster whose icon the mouse is over, or null
      */
     private void renderNodes(Graphics2D g2d, HydrologicalModel model, ClusterCollapse collapse,
                             List<MapLayers.Icon> icons, NodeTheme nodeTheme,
                             double zoomLevel, double panX, double panY,
-                            NodeLabelMode labelMode, String hoveredNodeName, String hoveredClusterName) {
+                            NodeLabelMode labelMode, boolean showBoxes,
+                            String hoveredNodeName, String hoveredClusterName) {
 
         AffineTransform originalTransform = g2d.getTransform();
         NodeTheme.TextStyle textStyle = nodeTheme.getCurrentTextStyle();
@@ -409,7 +412,7 @@ public class MapRenderer {
         ModelNode hovered = null;
         for (MapLayers.Layer layer : MapLayers.of(model, collapse)) {
             Rectangle2D box = null;
-            if (layer.clusterName() != null) {
+            if (layer.clusterName() != null && showBoxes) {
                 box = clusterBox(layer, fm, metrics, labelMode, zoomLevel, panX, panY);
                 renderClusterBox(g2d, box);
             }

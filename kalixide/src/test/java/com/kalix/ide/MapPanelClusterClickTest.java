@@ -10,12 +10,15 @@ import org.junit.jupiter.api.Test;
 import javax.swing.SwingUtilities;
 
 import java.awt.Cursor;
+import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.event.InputEvent;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.awt.geom.Rectangle2D;
+import java.awt.image.BufferedImage;
 import java.lang.reflect.InvocationTargetException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 
@@ -98,7 +101,7 @@ class MapPanelClusterClickTest {
     private Point boxHandle(int index) {
         NodeTheme.TextStyle style = new NodeTheme().getCurrentTextStyle();
         List<Rectangle2D> shapes = ClusterHandles.boxNames(model, panel.getClusterCollapse(),
-                panel.getFontMetrics(style.getFont()), style, NodeLabelMode.NAMES, 1, 0, 0).get(0).shapes();
+                panel.getFontMetrics(style.getFont()), style, NodeLabelMode.NAMES, true, 1, 0, 0).get(0).shapes();
         Rectangle2D shape = shapes.get(index < 0 ? shapes.size() - 1 : index);
         return new Point((int) shape.getCenterX(), (int) shape.getCenterY());
     }
@@ -273,5 +276,60 @@ class MapPanelClusterClickTest {
 
             assertEquals(Set.of(), model.getSelectedNodes(), "empty map: the selection is cleared");
         });
+    }
+
+    @Test
+    void withBoxesHiddenABoxHasNoNameOrProxyToClick() {
+        onEdt(() -> {
+            collapse(false);
+            Point name = boxHandle(-1);
+            Point proxy = boxHandle(0);
+            panel.setShowClusterBoxes(false);
+
+            model.selectNode("x", false);
+            click(name, false);
+            assertEquals(Set.of(), model.getSelectedNodes(), "the name: empty map");
+
+            model.selectNode("x", false);
+            click(proxy, false);
+            assertEquals(Set.of(), model.getSelectedNodes(), "the proxy: empty map");
+        });
+    }
+
+    @Test
+    void withBoxesHiddenMembersAndIconsStillClick() {
+        onEdt(() -> {
+            panel.setShowClusterBoxes(false);
+
+            collapse(false);
+            click(new Point(100, 100), false);
+            assertEquals(Set.of("n1"), model.getSelectedNodes(), "a member of an expanded cluster");
+
+            collapse(true);
+            click(ICON, false);
+            assertEquals(Set.of("n1", "n2"), model.getSelectedNodes(), "a collapsed cluster's icon");
+        });
+    }
+
+    @Test
+    void thePanelPaintsWithoutBoxesWhenHidden() {
+        onEdt(() -> {
+            collapse(false);
+            panel.setSize(300, 250); // the first size applies the editor's pending zoom to fit
+            int[] shown = paint();
+            panel.setShowClusterBoxes(false);
+            int[] hidden = paint();
+
+            // Same nodes, same places; only north's box differs.
+            assertFalse(Arrays.equals(shown, hidden), "the panel still painted the box");
+        });
+    }
+
+    private int[] paint() {
+        BufferedImage image = new BufferedImage(panel.getWidth(), panel.getHeight(), BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = image.createGraphics();
+        panel.paint(g);
+        g.dispose();
+        return image.getRGB(0, 0, image.getWidth(), image.getHeight(), null, 0, image.getWidth());
     }
 }

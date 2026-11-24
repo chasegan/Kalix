@@ -45,7 +45,7 @@ class MapRendererCollapseTest {
         ClusterCollapse collapse = collapsed ? new ClusterCollapse() : AllExpanded.of(model);
         BufferedImage image = new BufferedImage(SIZE, SIZE, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g2d = image.createGraphics();
-        new MapRenderer().renderMap(g2d, SIZE, SIZE, 1.0, 0, 0, false, model, new NodeTheme(),
+        new MapRenderer().renderMap(g2d, SIZE, SIZE, 1.0, 0, 0, false, true, model, new NodeTheme(),
                 null, null, 0, 0, false, mode, hovered, hoveredCluster, collapse);
         g2d.dispose();
         return image;

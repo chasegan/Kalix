@@ -97,6 +97,8 @@ public class MenuBarBuilder {
         boolean isGridlinesVisible();
         void setLabelMode(NodeLabelMode mode);
         NodeLabelMode getLabelMode();
+        void toggleClusterBoxes(boolean showClusterBoxes);
+        boolean isClusterBoxesVisible();
         void toggleAutoReload(boolean enabled);
         boolean isAutoReloadEnabled();
 

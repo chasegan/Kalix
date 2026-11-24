@@ -47,7 +47,7 @@ class MapRendererLabelOrderTest {
         model.parseFromIniText(text);
         BufferedImage image = new BufferedImage(SIZE, SIZE, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g2d = image.createGraphics();
-        new MapRenderer().renderMap(g2d, SIZE, SIZE, 1.0, 0, 0, false, model, new NodeTheme(),
+        new MapRenderer().renderMap(g2d, SIZE, SIZE, 1.0, 0, 0, false, true, model, new NodeTheme(),
                 null, null, 0, 0, false, labelMode, null, null, AllExpanded.of(model));
         g2d.dispose();
         return image.getRGB(UPPER_X + 4, LOWER_Y);

@@ -135,7 +135,7 @@ class MapPanelClusterDragTest {
     private Point boxHandle(int index) {
         NodeTheme.TextStyle style = new NodeTheme().getCurrentTextStyle();
         List<Rectangle2D> shapes = ClusterHandles.boxNames(model, panel.getClusterCollapse(),
-                panel.getFontMetrics(style.getFont()), style, NodeLabelMode.NAMES, 1, 0, 0).get(0).shapes();
+                panel.getFontMetrics(style.getFont()), style, NodeLabelMode.NAMES, true, 1, 0, 0).get(0).shapes();
         Rectangle2D shape = shapes.get(index < 0 ? shapes.size() - 1 : index);
         return new Point((int) shape.getCenterX(), (int) shape.getCenterY());
     }

@@ -123,6 +123,7 @@ public class MapPanel extends JPanel {
 
     // Display settings
     private boolean showGridlines = true;
+    private boolean showClusterBoxes = true;
     private NodeLabelMode labelMode = NodeLabelMode.NAMES;
 
     /** Which clusters are collapsed, for this panel's model, for the session. */
@@ -660,7 +661,7 @@ public class MapPanel extends JPanel {
         Point selectionCurrent = isRectangleSelecting ? rectangleCurrentPoint : null;
 
         mapRenderer.renderMap(g2d, getWidth(), getHeight(), zoomLevel, panX, panY,
-                             showGridlines, model, nodeTheme, selectionStart, selectionCurrent,
+                             showGridlines, showClusterBoxes, model, nodeTheme, selectionStart, selectionCurrent,
                              mouseWorldX, mouseWorldY, mouseInPanel, labelMode, hoveredNodeName, hoveredClusterName,
                              clusterCollapse);
         List<ModelNode> ghosts = ghostNodes();
@@ -752,6 +753,20 @@ public class MapPanel extends JPanel {
      */
     public boolean isShowGridlines() {
         return showGridlines;
+    }
+
+    /**
+     * Sets whether expanded clusters draw their boxes. Hidden, a box's name and proxy go with
+     * it, and can't be clicked; members and collapsed icons are unchanged (clusters.md rule 6).
+     */
+    public void setShowClusterBoxes(boolean showClusterBoxes) {
+        this.showClusterBoxes = showClusterBoxes;
+        repaint();
+    }
+
+    /** Whether expanded clusters draw their boxes. */
+    public boolean isShowClusterBoxes() {
+        return showClusterBoxes;
     }
 
     /**
@@ -997,12 +1012,14 @@ public class MapPanel extends JPanel {
 
     /**
      * The expanded cluster whose box name, or proxy, is drawn on top at the screen point, or
-     * null. Neither is drawn in hidden label mode, nor the proxy when boxes show none.
+     * null. Neither is drawn with boxes hidden or in hidden label mode, nor the proxy when
+     * boxes show none.
      */
     public String getBoxNameAtPoint(Point screenPoint) {
         NodeTheme.TextStyle textStyle = nodeTheme.getCurrentTextStyle();
         return ClusterHandles.at(ClusterHandles.boxNames(model, clusterCollapse,
-            getFontMetrics(textStyle.getFont()), textStyle, labelMode, zoomLevel, panX, panY), screenPoint);
+            getFontMetrics(textStyle.getFont()), textStyle, labelMode, showClusterBoxes,
+            zoomLevel, panX, panY), screenPoint);
     }
 
     /**

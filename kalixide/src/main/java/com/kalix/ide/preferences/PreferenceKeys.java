@@ -120,6 +120,10 @@ public final class PreferenceKeys {
     public static final Pref<Boolean> MAP_SHOW_LABELS =
         Pref.fileBoolean("map.showLabels", true);
 
+    /** Whether expanded clusters draw their boxes on the map (clusters.md rule 6). */
+    public static final Pref<Boolean> MAP_SHOW_CLUSTER_BOXES =
+        Pref.fileBoolean("map.showClusterBoxes", true);
+
     /** Whether the project tree shows hidden (dot-prefixed) files/folders. */
     public static final Pref<Boolean> TREE_SHOW_HIDDEN_FILES =
         Pref.fileBoolean("tree.showHiddenFiles", true);

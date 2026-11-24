@@ -146,6 +146,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private JToggleButton autoReloadToggleButton;
     private JToggleButton gridlinesToggleButton;
     private JToggleButton labelsToggleButton;
+    private JToggleButton clusterBoxesToggleButton;
 
     // Navigation buttons (stored for state synchronization)
     private JButton backButton;
@@ -524,6 +525,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             map.setNodeTheme(com.kalix.ide.themes.ThemePreferences.effectiveNodeTheme());
             map.setShowGridlines(PreferenceKeys.MAP_SHOW_GRIDLINES.get());
             map.setLabelMode(NodeLabelMode.saved());
+            map.setShowClusterBoxes(PreferenceKeys.MAP_SHOW_CLUSTER_BOXES.get());
             map.setTrackpadNavigation(PreferenceKeys.MAP_TRACKPAD_NAVIGATION.get());
         }
 
@@ -769,6 +771,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         autoReloadToggleButton = components.autoReloadToggleButton;
         gridlinesToggleButton = components.gridlinesToggleButton;
         labelsToggleButton = components.labelsToggleButton;
+        clusterBoxesToggleButton = components.clusterBoxesToggleButton;
         backButton = components.backButton;
         forwardButton = components.forwardButton;
         add(toolBar, BorderLayout.NORTH);
@@ -962,6 +965,10 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
         if (labelsToggleButton != null) {
             ToolBarBuilder.applyLabelMode(labelsToggleButton, getLabelMode());
+        }
+
+        if (clusterBoxesToggleButton != null) {
+            ToolBarBuilder.applyClusterBoxes(clusterBoxesToggleButton, isClusterBoxesVisible());
         }
     }
 
@@ -1996,6 +2003,26 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     @Override
+    public void toggleClusterBoxes(boolean showClusterBoxes) {
+        // Apply to every open document's map so background tabs stay consistent.
+        for (KalixDocument document : documentManager.getDocuments()) {
+            MapPanel map = document.getMapPanel();
+            if (map != null) {
+                map.setShowClusterBoxes(showClusterBoxes);
+            }
+        }
+        PreferenceKeys.MAP_SHOW_CLUSTER_BOXES.set(showClusterBoxes);
+    }
+
+    @Override
+    public boolean isClusterBoxesVisible() {
+        // Falls back to the saved preference before any document/map exists (toolbar build).
+        return mapPanel != null
+            ? mapPanel.isShowClusterBoxes()
+            : PreferenceKeys.MAP_SHOW_CLUSTER_BOXES.get();
+    }
+
+    @Override
     public void toggleLinting() {
         boolean currentState = schemaManager.isLintingEnabled();
         boolean newState = !currentState;
@@ -2285,6 +2312,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             autoReloadToggleButton = components.autoReloadToggleButton;
             gridlinesToggleButton = components.gridlinesToggleButton;
             labelsToggleButton = components.labelsToggleButton;
+            clusterBoxesToggleButton = components.clusterBoxesToggleButton;
             backButton = components.backButton;
             forwardButton = components.forwardButton;
             setupNavigationStateListener();

@@ -58,7 +58,7 @@ class ClusterHandlesTest {
     }
 
     private static List<ClusterHandles.Handle> boxNames(NodeLabelMode mode) {
-        return ClusterHandles.boxNames(model(), collapsed(false), FM, STYLE, mode, 1, 0, 0);
+        return ClusterHandles.boxNames(model(), collapsed(false), FM, STYLE, mode, true, 1, 0, 0);
     }
 
     @Test
@@ -79,9 +79,9 @@ class ClusterHandlesTest {
     @Test
     void aBoxNameFollowsZoomAndPan() {
         ClusterCollapse expanded = collapsed(false);
-        Rectangle2D at1 = ClusterHandles.boxNames(model(), expanded, FM, STYLE, NodeLabelMode.NAMES, 1, 0, 0)
+        Rectangle2D at1 = ClusterHandles.boxNames(model(), expanded, FM, STYLE, NodeLabelMode.NAMES, true, 1, 0, 0)
                 .get(0).shapes().get(0);
-        Rectangle2D at2 = ClusterHandles.boxNames(model(), expanded, FM, STYLE, NodeLabelMode.NAMES, 2, 10, 20)
+        Rectangle2D at2 = ClusterHandles.boxNames(model(), expanded, FM, STYLE, NodeLabelMode.NAMES, true, 2, 10, 20)
                 .get(0).shapes().get(0);
         // The members' screen points move from (100..140, 100) to (210..290, 220): the box's
         // top left moves by (2 × 100 + 10 − 100, 2 × 100 + 20 − 100); shapes keep their size.
@@ -107,6 +107,12 @@ class ClusterHandlesTest {
         } finally {
             ClusterBox.showsProxy = was;
         }
+    }
+
+    @Test
+    void withBoxesHiddenThereAreNoBoxNames() {
+        assertEquals(0, ClusterHandles.boxNames(model(), collapsed(false), FM, STYLE,
+                NodeLabelMode.NAMES, false, 1, 0, 0).size());
     }
 
     @Test
