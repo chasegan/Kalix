@@ -7,12 +7,22 @@ import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.Point;
+import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.geom.AffineTransform;
+import java.awt.geom.Rectangle2D;
+import java.awt.geom.RoundRectangle2D;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.OptionalInt;
+import com.kalix.ide.model.ClusterCollapse;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelNode;
 import com.kalix.ide.themes.NodeTheme;
+import com.kalix.ide.utils.ClusterKey;
 import com.kalix.ide.constants.UIConstants;
 
 /**
@@ -37,7 +47,6 @@ public class MapRenderer {
 
     // Rendering constants (centralized in UIConstants)
     private static final int NODE_SIZE = UIConstants.Map.NODE_SIZE;
-    private static final int TEXT_BACKGROUND_PADDING = UIConstants.Text.BACKGROUND_PADDING;
 
     // Selection rectangle styling (centralized in UIConstants)
     private static final Color SELECTION_FILL_COLOR = UIConstants.Selection.RECTANGLE_FILL;
@@ -62,8 +71,7 @@ public class MapRenderer {
             10.0f, new float[]{5.0f, 5.0f}, 0.0f);
 
     // Node border strokes (cached — allocated per node per frame before)
-    private static final BasicStroke SELECTED_NODE_STROKE =
-            new BasicStroke(UIConstants.Selection.NODE_SELECTED_STROKE_WIDTH);
+    private static final BasicStroke SELECTED_NODE_STROKE = NodeShapeRenderer.SELECTED_BORDER;
     private static final BasicStroke UNSELECTED_NODE_STROKE =
             new BasicStroke(UIConstants.Selection.NODE_UNSELECTED_STROKE_WIDTH);
     private static final BasicStroke DEFAULT_STROKE = new BasicStroke(1.0f);
@@ -75,6 +83,11 @@ public class MapRenderer {
     private static final Color LINK_DRAG_COLOR = UIConstants.Selection.RECTANGLE_BORDER;
     private static final Color LINK_DRAG_REFUSED_COLOR = UIConstants.Selection.LINK_DRAG_REFUSED;
     private static final BasicStroke LINK_HANDLE_STROKE = new BasicStroke(2.0f);
+
+    // Ghosts of a collapsed cluster's members while it is dragged: the icon border's grey, dotted
+    static final Color GHOST_COLOR = ClusterIcon.BORDER;
+    static final BasicStroke GHOST_STROKE = new BasicStroke(1.5f, BasicStroke.CAP_BUTT,
+            BasicStroke.JOIN_MITER, 10.0f, new float[]{3.0f, 3.0f}, 0.0f);
 
     // Chevron arrow constants
     private static final double CHEVRON_SIZE = 8.0; // Size of chevron in pixels
@@ -97,6 +110,7 @@ public class MapRenderer {
      * @param panX Horizontal pan offset
      * @param panY Vertical pan offset
      * @param showGridlines Whether to show grid lines
+     * @param showClusterBoxes Whether expanded clusters draw their boxes, with name and proxy
      * @param model Hydrological model containing nodes to render
      * @param nodeTheme Theme for node visualization
      * @param selectionStart Selection rectangle start point (null if no selection)
@@ -107,13 +121,17 @@ public class MapRenderer {
      * @param labelMode Which text is drawn under each node
      * @param hoveredNodeName Node whose label the mouse changes, per {@code labelMode};
      *                        null when nothing is revealed
+     * @param hoveredClusterName Collapsed cluster whose icon the mouse is over, or null; its
+     *                           name is drawn when the mode draws no labels
+     * @param collapse Which clusters are collapsed
      */
     public void renderMap(Graphics2D g2d, int width, int height,
                          double zoomLevel, double panX, double panY,
-                         boolean showGridlines, HydrologicalModel model,
+                         boolean showGridlines, boolean showClusterBoxes, HydrologicalModel model,
                          NodeTheme nodeTheme, Point selectionStart, Point selectionCurrent,
                          double mouseWorldX, double mouseWorldY, boolean mouseInPanel,
-                         NodeLabelMode labelMode, String hoveredNodeName) {
+                         NodeLabelMode labelMode, String hoveredNodeName, String hoveredClusterName,
+                         ClusterCollapse collapse) {
 
         // Enable antialiasing for smoother graphics
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -135,8 +153,10 @@ public class MapRenderer {
 
         // Render screen-space elements (links first, then nodes, then selection, debug)
         if (model != null) {
-            renderLinks(g2d, model, zoomLevel, panX, panY);
-            renderNodes(g2d, model, nodeTheme, zoomLevel, panX, panY, labelMode, hoveredNodeName);
+            List<MapLayers.Icon> icons = MapLayers.icons(model, collapse);
+            renderLinks(g2d, model, collapse, icons, zoomLevel, panX, panY);
+            renderNodes(g2d, model, collapse, icons, nodeTheme, zoomLevel, panX, panY,
+                        labelMode, showClusterBoxes, hoveredNodeName, hoveredClusterName);
         }
 
         if (selectionStart != null && selectionCurrent != null) {
@@ -227,21 +247,28 @@ public class MapRenderer {
     }
 
     /**
-     * Renders all model links in screen-space coordinates.
-     * Links are drawn as solid lines from upstream to downstream node centers.
+     * Renders all model links in screen-space coordinates, from centre to centre, as
+     * {@link MapLinks} redirects them to the icons of collapsed clusters.
      *
      * @param g2d Graphics context (in screen space)
      * @param model Hydrological model containing links
+     * @param collapse Which clusters are collapsed
+     * @param icons The icons of the collapsed clusters
      * @param zoomLevel Current zoom level for coordinate transformation
      * @param panX Horizontal pan offset
      * @param panY Vertical pan offset
      */
-    private void renderLinks(Graphics2D g2d, HydrologicalModel model,
-                            double zoomLevel, double panX, double panY) {
+    private void renderLinks(Graphics2D g2d, HydrologicalModel model, ClusterCollapse collapse,
+                            List<MapLayers.Icon> icons, double zoomLevel, double panX, double panY) {
 
+        Map<ClusterKey, MapLayers.Icon> iconByCluster = new HashMap<>();
+        for (MapLayers.Icon icon : icons) {
+            iconByCluster.put(icon.key(), icon);
+        }
         // Render each link (color and stroke set individually based on selection state)
-        for (com.kalix.ide.model.ModelLink link : model.getAllLinks()) {
-            renderSingleLink(g2d, link, model, zoomLevel, panX, panY);
+        for (MapLinks.Drawn link : MapLinks.of(model.getAllLinks(), model.getClusters(), collapse,
+                model::isLinkSelected)) {
+            renderSingleLink(g2d, link, model, iconByCluster, zoomLevel, panX, panY);
         }
 
         // Reset stroke and color for subsequent rendering
@@ -250,45 +277,46 @@ public class MapRenderer {
     }
 
     /**
-     * Renders a single link between two nodes.
+     * Renders a single link between two drawn ends: nodes, or icons.
      *
      * @param g2d Graphics context
      * @param link Link to render
      * @param model Model for node lookups
+     * @param iconByCluster The icons, by cluster key
      * @param zoomLevel Current zoom level
      * @param panX Horizontal pan offset
      * @param panY Vertical pan offset
      */
-    private void renderSingleLink(Graphics2D g2d, com.kalix.ide.model.ModelLink link,
-                                 HydrologicalModel model, double zoomLevel,
-                                 double panX, double panY) {
+    private void renderSingleLink(Graphics2D g2d, MapLinks.Drawn link,
+                                 HydrologicalModel model, Map<ClusterKey, MapLayers.Icon> iconByCluster,
+                                 double zoomLevel, double panX, double panY) {
 
-        // Get upstream and downstream nodes
-        com.kalix.ide.model.ModelNode upstreamNode = model.getNode(link.getUpstreamTerminus());
-        com.kalix.ide.model.ModelNode downstreamNode = model.getNode(link.getDownstreamTerminus());
+        // Where each end is drawn, in map coordinates
+        double[] upstream = position(link.upstream(), model, iconByCluster);
+        double[] downstream = position(link.downstream(), model, iconByCluster);
 
-        // Skip link if either node is missing
-        if (upstreamNode == null || downstreamNode == null) {
+        // Skip link if either end is missing
+        if (upstream == null || downstream == null) {
             return;
         }
 
         // Check if link is selected and set appropriate color and stroke
-        boolean isSelected = model.isLinkSelected(link);
+        boolean isSelected = link.selected();
         if (isSelected) {
             g2d.setColor(UIConstants.Selection.NODE_SELECTED_BORDER);
             // Use solid or dashed stroke based on link type, but with selected width
-            g2d.setStroke(link.isPrimary() ? SELECTED_LINK_STROKE : SELECTED_LINK_DASHED_STROKE);
+            g2d.setStroke(link.primary() ? SELECTED_LINK_STROKE : SELECTED_LINK_DASHED_STROKE);
         } else {
             g2d.setColor(LINK_COLOR);
             // Use solid stroke for primary links, dashed stroke for alternative links
-            g2d.setStroke(link.isPrimary() ? LINK_STROKE : LINK_DASHED_STROKE);
+            g2d.setStroke(link.primary() ? LINK_STROKE : LINK_DASHED_STROKE);
         }
 
-        // Transform node world coordinates to screen coordinates
-        double upstreamScreenX = upstreamNode.getX() * zoomLevel + panX;
-        double upstreamScreenY = upstreamNode.getY() * zoomLevel + panY;
-        double downstreamScreenX = downstreamNode.getX() * zoomLevel + panX;
-        double downstreamScreenY = downstreamNode.getY() * zoomLevel + panY;
+        // Transform the ends' world coordinates to screen coordinates
+        double upstreamScreenX = upstream[0] * zoomLevel + panX;
+        double upstreamScreenY = upstream[1] * zoomLevel + panY;
+        double downstreamScreenX = downstream[0] * zoomLevel + panX;
+        double downstreamScreenY = downstream[1] * zoomLevel + panY;
 
         // Draw the link line
         g2d.drawLine((int) upstreamScreenX, (int) upstreamScreenY,
@@ -297,6 +325,17 @@ public class MapRenderer {
         // Draw chevron arrow at midpoint
         renderChevronArrow(g2d, upstreamScreenX, upstreamScreenY,
                           downstreamScreenX, downstreamScreenY);
+    }
+
+    /** Where a drawn end sits, in map coordinates, or {@code null} if it isn't on the map. */
+    private static double[] position(MapLinks.End end, HydrologicalModel model,
+                                     Map<ClusterKey, MapLayers.Icon> iconByCluster) {
+        if (end.isIcon()) {
+            MapLayers.Icon icon = iconByCluster.get(end.cluster());
+            return icon == null ? null : new double[] {icon.x(), icon.y()};
+        }
+        ModelNode node = model.getNode(end.node());
+        return node == null ? null : new double[] {node.getX(), node.getY()};
     }
 
     /**
@@ -353,26 +392,207 @@ public class MapRenderer {
      * @param panX Horizontal pan offset
      * @param panY Vertical pan offset
      * @param labelMode Which text is drawn under each node
+     * @param showBoxes Whether expanded clusters draw their boxes, with name and proxy
      * @param hoveredNodeName Node whose label the mouse changes, or null
+     * @param hoveredClusterName Collapsed cluster whose icon the mouse is over, or null
      */
-    private void renderNodes(Graphics2D g2d, HydrologicalModel model, NodeTheme nodeTheme,
+    private void renderNodes(Graphics2D g2d, HydrologicalModel model, ClusterCollapse collapse,
+                            List<MapLayers.Icon> icons, NodeTheme nodeTheme,
                             double zoomLevel, double panX, double panY,
-                            NodeLabelMode labelMode, String hoveredNodeName) {
+                            NodeLabelMode labelMode, boolean showBoxes,
+                            String hoveredNodeName, String hoveredClusterName) {
 
         AffineTransform originalTransform = g2d.getTransform();
+        NodeTheme.TextStyle textStyle = nodeTheme.getCurrentTextStyle();
+        FontMetrics fm = g2d.getFontMetrics(textStyle.getFont());
+        ClusterBox.TextMetrics metrics = textMetrics(fm, textStyle);
 
-        // Render each node
-        for (ModelNode node : model.getAllNodes()) {
-            renderSingleNode(g2d, node, model, nodeTheme, zoomLevel, panX, panY, originalTransform,
-                             labelMode, hoveredNodeName);
+        // Layer by layer: a cluster's box, then every shape, then every label, so no shape
+        // in a layer covers a label in it (MapLayers says why not all labels last).
+        ModelNode hovered = null;
+        for (MapLayers.Layer layer : MapLayers.of(model, collapse)) {
+            Rectangle2D box = null;
+            if (layer.clusterName() != null && showBoxes) {
+                box = clusterBox(layer, fm, metrics, labelMode, zoomLevel, panX, panY);
+                renderClusterBox(g2d, box);
+            }
+            for (ModelNode node : layer.nodes()) {
+                renderNodeShape(g2d, node, model, nodeTheme, zoomLevel, panX, panY, originalTransform);
+            }
+            for (ModelNode node : layer.nodes()) {
+                // The label the mouse is over waits for the end, over everything.
+                if (node.getName().equals(hoveredNodeName)) {
+                    hovered = node;
+                    continue;
+                }
+                // What the mode draws for this node without the mouse over it
+                // (NodeLabelMode owns that rule).
+                renderNodeText(g2d, labelMode.labelLines(node, false),
+                               node.getX() * zoomLevel + panX, node.getY() * zoomLevel + panY, nodeTheme);
+            }
+            // The box name and its proxy are labels, so they go in the label pass; the
+            // hidden mode has neither (clusters.md, settled decision 8).
+            if (box != null && labelMode.drawsLabels()) {
+                boolean selected = layer.nodes().stream().allMatch(node -> model.isNodeSelected(node.getName()));
+                renderBoxName(g2d, layer.clusterName(), layer.nodes().size(), selected, box, fm, metrics, textStyle);
+            }
+        }
+
+        // The icons of collapsed clusters, over every layer: every icon's cards, then every
+        // icon's name. The hidden mode shows only the name of the icon under the mouse, as
+        // it does a node's (clusters.md rule 8), last of all, below.
+        for (MapLayers.Icon icon : icons) {
+            renderIcon(g2d, icon.count(), icon.selected(), icon.x() * zoomLevel + panX, icon.y() * zoomLevel + panY, fm);
+        }
+        MapLayers.Icon hoveredIcon = null;
+        for (MapLayers.Icon icon : icons) {
+            if (labelMode.drawsLabels()) {
+                renderIconName(g2d, icon, zoomLevel, panX, panY, nodeTheme);
+            } else if (icon.clusterName().equals(hoveredClusterName)) {
+                hoveredIcon = icon;
+            }
+        }
+
+        // The label the mouse is over, last of all, so nothing covers it while it is read.
+        // A label shown only on hover is there for a moment, so being drawn over a box it
+        // lies under doesn't matter (MapLayers says why other labels stay in their layer).
+        if (hovered != null) {
+            renderNodeText(g2d, labelMode.labelLines(hovered, true),
+                           hovered.getX() * zoomLevel + panX, hovered.getY() * zoomLevel + panY, nodeTheme);
+        }
+        if (hoveredIcon != null) {
+            renderIconName(g2d, hoveredIcon, zoomLevel, panX, panY, nodeTheme);
         }
 
         // Restore the original transform
         g2d.setTransform(originalTransform);
     }
 
+    /** An icon's cluster name, under it as a node's label is. */
+    private void renderIconName(Graphics2D g2d, MapLayers.Icon icon, double zoomLevel, double panX, double panY,
+                                NodeTheme nodeTheme) {
+        renderNodeText(g2d, List.of(icon.clusterName()), icon.x() * zoomLevel + panX,
+                       icon.y() * zoomLevel + panY + ClusterIcon.LABEL_DROP, nodeTheme);
+    }
+
+    /** The label measurements {@link ClusterBox} lays strips out from, for this theme's font. */
+    static ClusterBox.TextMetrics textMetrics(FontMetrics fm, NodeTheme.TextStyle textStyle) {
+        return new ClusterBox.TextMetrics(fm.getAscent(), fm.getHeight(),
+                NODE_SIZE / 2.0 + textStyle.getYOffset());
+    }
+
     /**
-     * Renders a single node with proper coordinate transformation and styling.
+     * The box of a cluster's layer, in screen pixels, from what its members show without
+     * the mouse over them: hover-only labels don't widen it (clusters.md, "Box bounds").
+     */
+    static Rectangle2D clusterBox(MapLayers.Layer layer, FontMetrics fm,
+                                  ClusterBox.TextMetrics metrics, NodeLabelMode labelMode,
+                                  double zoomLevel, double panX, double panY) {
+        List<ClusterBox.Member> members = new ArrayList<>(layer.nodes().size());
+        for (ModelNode node : layer.nodes()) {
+            List<String> lines = labelMode.labelLines(node, false);
+            List<Integer> widths = new ArrayList<>(lines.size());
+            for (String line : lines) {
+                widths.add(fm.stringWidth(line));
+            }
+            members.add(new ClusterBox.Member(node.getX() * zoomLevel + panX,
+                    node.getY() * zoomLevel + panY, widths));
+        }
+        OptionalInt nameWidth = labelMode.drawsLabels()
+                ? OptionalInt.of(fm.stringWidth(layer.clusterName())) : OptionalInt.empty();
+        return ClusterBox.bounds(members, metrics, nameWidth);
+    }
+
+    /**
+     * Draws a collapsed cluster's stacked cards, centred on the screen point, with its count.
+     * A selected icon's face has the selected node's border (clusters.md rule 10).
+     */
+    private void renderIcon(Graphics2D g2d, int count, boolean selected, double x, double y, FontMetrics labelFm) {
+        double arc = 2 * ClusterIcon.CORNER_RADIUS;
+        Rectangle2D face = ClusterIcon.face(x, y);
+        renderCards(g2d, ClusterIcon.back(x, y), face, arc, count, labelFm.getFont().deriveFont(Font.BOLD));
+        if (selected) {
+            renderSelectedBorder(g2d, face, arc);
+        }
+    }
+
+    /** A selected node's border round a card's face. */
+    private void renderSelectedBorder(Graphics2D g2d, Rectangle2D face, double arc) {
+        g2d.setColor(UIConstants.Selection.NODE_SELECTED_BORDER);
+        g2d.setStroke(SELECTED_NODE_STROKE);
+        g2d.draw(new RoundRectangle2D.Double(face.getX(), face.getY(),
+                face.getWidth(), face.getHeight(), arc, arc));
+        g2d.setStroke(DEFAULT_STROKE);
+    }
+
+    /** Draws two stacked cards, the back then the face, with {@code count} centred on the face. */
+    private void renderCards(Graphics2D g2d, Rectangle2D back, Rectangle2D face, double arc,
+                             int count, Font countFont) {
+        g2d.setStroke(DEFAULT_STROKE);
+        renderCard(g2d, back, ClusterIcon.BACK, arc);
+        renderCard(g2d, face, ClusterIcon.FACE, arc);
+
+        Font originalFont = g2d.getFont();
+        g2d.setFont(countFont);
+        FontMetrics fm = g2d.getFontMetrics();
+        String text = Integer.toString(count);
+        g2d.setColor(ClusterIcon.COUNT);
+        g2d.drawString(text, (float) (face.getCenterX() - fm.stringWidth(text) / 2.0),
+                (float) (face.getCenterY() + (fm.getAscent() - fm.getDescent()) / 2.0));
+        g2d.setFont(originalFont);
+    }
+
+    private void renderCard(Graphics2D g2d, Rectangle2D card, Color fill, double arc) {
+        RoundRectangle2D shape = new RoundRectangle2D.Double(card.getX(), card.getY(),
+                card.getWidth(), card.getHeight(), arc, arc);
+        g2d.setColor(fill);
+        g2d.fill(shape);
+        g2d.setColor(ClusterIcon.BORDER);
+        g2d.draw(shape);
+    }
+
+    /** Fills and outlines a cluster's box, in the one box colour on every theme. */
+    private void renderClusterBox(Graphics2D g2d, Rectangle2D box) {
+        double arc = 2 * ClusterBox.CORNER_RADIUS;
+        RoundRectangle2D shape = new RoundRectangle2D.Double(box.getX(), box.getY(),
+                box.getWidth(), box.getHeight(), arc, arc);
+        g2d.setColor(ClusterBox.FILL);
+        g2d.fill(shape);
+        g2d.setColor(ClusterBox.border(isLightTheme()));
+        g2d.setStroke(DEFAULT_STROKE);
+        g2d.draw(shape);
+    }
+
+    /**
+     * Draws a cluster's proxy, with its member count, at its box's top left, if boxes show
+     * one ({@link ClusterBox#showsProxy}), and its name after it, looking like a node label.
+     * A selected cluster's proxy looks like a selected icon.
+     */
+    private void renderBoxName(Graphics2D g2d, String name, int count, boolean selected, Rectangle2D box,
+                               FontMetrics fm, ClusterBox.TextMetrics metrics, NodeTheme.TextStyle textStyle) {
+        if (ClusterBox.showsProxy()) {
+            Rectangle2D proxy = ClusterBox.proxyFace(box.getX(), box.getY(), metrics);
+            double arc = 2 * ClusterIcon.PROXY_CORNER_RADIUS;
+            renderCards(g2d, ClusterIcon.proxyBack(proxy.getX(), proxy.getY()), proxy, arc, count,
+                    textStyle.getFont().deriveFont(Font.BOLD, ClusterIcon.PROXY_COUNT_SIZE));
+            if (selected) {
+                renderSelectedBorder(g2d, proxy, arc);
+            }
+        }
+
+        Rectangle strip = ClusterBox.nameStrip(box.getX(), box.getY(), fm.stringWidth(name), metrics);
+        Font originalFont = g2d.getFont();
+        g2d.setFont(textStyle.getFont());
+        g2d.setColor(textStyle.getBackgroundColorWithAlpha());
+        g2d.fill(strip);
+        g2d.setColor(textStyle.getTextColor());
+        g2d.drawString(name, strip.x + ClusterBox.TEXT_PADDING, ClusterBox.nameBaseline(strip, metrics));
+        g2d.setFont(originalFont);
+    }
+
+    /**
+     * Renders a node's shape, with its border and the text inside it; its label is drawn
+     * separately, after every shape in its layer.
      *
      * @param g2d Graphics context
      * @param node Node to render
@@ -382,13 +602,10 @@ public class MapRenderer {
      * @param panX Horizontal pan offset
      * @param panY Vertical pan offset
      * @param originalTransform Original screen-space transform
-     * @param labelMode Which text is drawn under each node
-     * @param hoveredNodeName Node whose label the mouse changes, or null
      */
-    private void renderSingleNode(Graphics2D g2d, ModelNode node, HydrologicalModel model,
+    private void renderNodeShape(Graphics2D g2d, ModelNode node, HydrologicalModel model,
                                  NodeTheme nodeTheme, double zoomLevel, double panX, double panY,
-                                 AffineTransform originalTransform,
-                                 NodeLabelMode labelMode, String hoveredNodeName) {
+                                 AffineTransform originalTransform) {
 
         // Get node styling from theme
         Color nodeColor = nodeTheme.getColorForNodeType(node.getType());
@@ -415,11 +632,26 @@ public class MapRenderer {
 
         // Reset stroke for next node
         g2d.setStroke(DEFAULT_STROKE);
+    }
 
-        // The label under the shape: what the mode draws for this node, given
-        // whether the mouse is over it (NodeLabelMode owns that rule).
-        boolean hovered = node.getName().equals(hoveredNodeName);
-        renderNodeText(g2d, labelMode.labelLines(node, hovered), screenX, screenY, nodeTheme);
+    /**
+     * Draws a ghost of each node: its shape's outline, dotted and unfilled, where it is now.
+     * While a collapsed cluster is dragged or rotated, its hidden members are drawn this way
+     * so the modeller sees where they will land (clusters.md, "Locations"). In screen space,
+     * over everything else.
+     */
+    public void renderGhosts(Graphics2D g2d, Collection<ModelNode> nodes, NodeTheme nodeTheme,
+                             double zoomLevel, double panX, double panY) {
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2d.setColor(GHOST_COLOR);
+        g2d.setStroke(GHOST_STROKE);
+        for (ModelNode node : nodes) {
+            AffineTransform at = AffineTransform.getTranslateInstance(
+                    node.getX() * zoomLevel + panX, node.getY() * zoomLevel + panY);
+            NodeTheme.NodeShape shape = nodeTheme.getShapeForNodeType(node.getType());
+            g2d.draw(at.createTransformedShape(NodeShapeRenderer.outline(shape)));
+        }
+        g2d.setStroke(DEFAULT_STROKE);
     }
 
     /**
@@ -447,27 +679,21 @@ public class MapRenderer {
         g2d.setFont(textStyle.getFont());
 
         FontMetrics fm = g2d.getFontMetrics();
-        int textHeight = fm.getHeight();
-        double textY = nodeScreenY + (NODE_SIZE / 2.0) + textStyle.getYOffset();
+        ClusterBox.TextMetrics metrics = textMetrics(fm, textStyle);
 
-        for (String line : lines) {
+        // ClusterBox lays the strips out, so a cluster's box covers exactly what is drawn.
+        for (int i = 0; i < lines.size(); i++) {
+            String line = lines.get(i);
             int textWidth = fm.stringWidth(line);
             double textX = nodeScreenX - (textWidth / 2.0);
 
             // Render text background
             g2d.setColor(textStyle.getBackgroundColorWithAlpha());
-            g2d.fillRect(
-                (int)(textX - TEXT_BACKGROUND_PADDING),
-                (int)(textY - fm.getAscent() - TEXT_BACKGROUND_PADDING),
-                textWidth + (TEXT_BACKGROUND_PADDING * 2),
-                textHeight + TEXT_BACKGROUND_PADDING
-            );
+            g2d.fill(ClusterBox.labelStrip(nodeScreenX, nodeScreenY, i, textWidth, metrics));
 
             // Render text foreground
             g2d.setColor(textStyle.getTextColor());
-            g2d.drawString(line, (int)textX, (int)textY);
-
-            textY += textHeight + TEXT_BACKGROUND_PADDING;
+            g2d.drawString(line, (int) textX, (int) ClusterBox.baseline(nodeScreenY, i, metrics));
         }
 
         // Restore original font

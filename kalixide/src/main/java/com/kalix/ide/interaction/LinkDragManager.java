@@ -71,6 +71,9 @@ public class LinkDragManager {
         String nearest = null;
         double nearestDistance = reach;
         for (ModelNode node : model.getAllNodes()) {
+            if (mapPanel.isHidden(node.getName())) {
+                continue;
+            }
             double distance = screenPoint.distance(mapPanel.toScreenX(node.getX()), mapPanel.toScreenY(node.getY()));
             if (distance <= nearestDistance) {
                 nearest = node.getName();
@@ -106,7 +109,8 @@ public class LinkDragManager {
     /** Follows the mouse: snaps to the node under it and shows by cursor whether it can be linked. */
     public void updateDrag(Point screenPoint) {
         dragPoint = new Point(screenPoint);
-        String near = ringNodeAt(screenPoint);
+        // An icon covers whatever is under it, and takes no link (clusters.md rule 12).
+        String near = mapPanel.getIconAtPoint(screenPoint) == null ? ringNodeAt(screenPoint) : null;
         String target = dragSource.equals(near) ? null : near;
         if (!Objects.equals(target, dragTarget)) {
             dragTarget = target;
@@ -115,6 +119,11 @@ public class LinkDragManager {
             mapPanel.setCursor(dragCursor());
         }
         mapPanel.repaint();
+    }
+
+    /** The node a release would link to, allowed or not, or null — package-private, for tests. */
+    String dragTargetForTests() {
+        return dragTarget;
     }
 
     /** Crosshair over empty map; the platform's link drop / no-drop cursor over a node. */

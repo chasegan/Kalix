@@ -1286,6 +1286,18 @@
     "annotation_no_effect": {
       "severity": "warning",
       "description": "This annotation means nothing on this kind of section"
+    },
+    "annotation_duplicate_cluster": {
+      "severity": "warning",
+      "description": "A node has more than one cluster annotation; the last one counts"
+    },
+    "annotation_invalid_cluster": {
+      "severity": "warning",
+      "description": "A cluster name may contain only letters, digits and underscores; a node with an invalid one is in no cluster"
+    },
+    "annotation_mixed_case_cluster": {
+      "severity": "warning",
+      "description": "A cluster is spelled with different capitalisation; names that differ only in capitalisation are one cluster"
     }
   },
   "data_types": {

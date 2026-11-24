@@ -1,5 +1,6 @@
 package com.kalix.ide.linter.parsing;
 
+import com.kalix.ide.utils.ClusterKey;
 import com.kalix.ide.utils.EngineNames;
 
 import java.util.ArrayList;
@@ -37,6 +38,12 @@ public class INIModelParser {
     public static final String RULE_ANNOTATION_UNKNOWN_KEY = "annotation_unknown_key";
     /** Rule name for a known key on a section it means nothing to. */
     public static final String RULE_ANNOTATION_NO_EFFECT = "annotation_no_effect";
+    /** Rule name for a second {@code #@cluster} line above one node; the last one counts. */
+    public static final String RULE_ANNOTATION_DUPLICATE_CLUSTER = "annotation_duplicate_cluster";
+    /** Rule name for a {@code #@cluster} value that breaks the node-name rule (ADR-0010 §6.2). */
+    public static final String RULE_ANNOTATION_INVALID_CLUSTER = "annotation_invalid_cluster";
+    /** Rule name for a cluster spelled differently, in capitalisation only, from its first mention. */
+    public static final String RULE_ANNOTATION_MIXED_CASE_CLUSTER = "annotation_mixed_case_cluster";
 
     /**
      * A lexical problem found while parsing: something the engine would reject (or
@@ -163,6 +170,7 @@ public class INIModelParser {
         Section currentSection = null;
         // Annotations waiting for the header they attach to (ADR-0010 §3).
         List<PendingAnnotation> pending = new ArrayList<>();
+        Map<ClusterKey, PendingAnnotation> firstClusterMentions = new HashMap<>();
 
         for (int i = 0; i < lines.length; i++) {
             int lineNumber = i + 1;
@@ -193,7 +201,7 @@ public class INIModelParser {
             // ']') is an engine error, and it still closes the previous section.
             if (first == '[') {
                 String sectionName = IniSyntax.sectionName(line);
-                checkAnnotations(pending, sectionName, model);
+                checkAnnotations(pending, sectionName, firstClusterMentions, model);
                 if (sectionName == null) {
                     model.getSyntaxIssues().add(new SyntaxIssue(lineNumber,
                         "Malformed section header: expected '[name]' with only a '#' comment after it",
@@ -361,11 +369,24 @@ public class INIModelParser {
     /**
      * Checks the annotations above a header against the key registry: a bare key
      * Kalix does not know is a warning, as is a known key on a section it means
-     * nothing to. A dotted key belongs to another tool and is never checked.
-     * {@code sectionName} is {@code null} for a malformed header, which still
-     * consumes the annotations but cannot say what they apply to.
+     * nothing to. A second {@code cluster} on a node is a warning on the later
+     * line, naming the one before it: the last one counts. A cluster name that
+     * breaks the node-name rule is a warning on its line, earlier lines included:
+     * the node is drawn loose if it is the last. A dotted key belongs to another
+     * tool and is never checked. {@code sectionName} is {@code null} for a
+     * malformed header, which still consumes the annotations but cannot say what
+     * they apply to, so a warning about them names no section.
+     *
+     * <p>A node's last valid {@code cluster} line is a mention of that cluster. One
+     * spelled differently from the cluster's first mention, in capitalisation only,
+     * is a warning naming that first mention: they are one cluster, shown with the
+     * first spelling (the model's {@code ClusterIndex}). {@code firstClusterMentions} holds
+     * the first mention of each cluster so far, by {@link ClusterKey}.</p>
      */
-    private static void checkAnnotations(List<PendingAnnotation> pending, String sectionName, ParsedModel model) {
+    private static void checkAnnotations(List<PendingAnnotation> pending, String sectionName,
+                                         Map<ClusterKey, PendingAnnotation> firstClusterMentions, ParsedModel model) {
+        int earlierCluster = 0;
+        PendingAnnotation mention = null;
         for (PendingAnnotation p : pending) {
             String key = p.annotation().key();
             if (AnnotationKey.isToolKey(key)) {
@@ -382,6 +403,31 @@ public class INIModelParser {
             } else if (sectionName != null && !known.appliesTo(sectionName)) {
                 model.getSyntaxIssues().add(new SyntaxIssue(p.lineNumber(),
                     "'" + key + "' has no effect on [" + sectionName + "]", RULE_ANNOTATION_NO_EFFECT));
+            } else if (known == AnnotationKey.CLUSTER) {
+                String invalid = known.valueError(p.annotation().value());
+                if (invalid != null) {
+                    model.getSyntaxIssues().add(new SyntaxIssue(p.lineNumber(), invalid,
+                        RULE_ANNOTATION_INVALID_CLUSTER));
+                }
+                mention = invalid == null ? p : null;
+                if (earlierCluster > 0) {
+                    String on = sectionName == null ? "" : " on [" + sectionName + "]";
+                    model.getSyntaxIssues().add(new SyntaxIssue(p.lineNumber(),
+                        "Duplicate annotation '" + key + "'" + on + " (also on line "
+                            + earlierCluster + "); the last one counts",
+                        RULE_ANNOTATION_DUPLICATE_CLUSTER));
+                }
+                earlierCluster = p.lineNumber();
+            }
+        }
+        if (mention != null) {
+            String spelling = mention.annotation().value();
+            PendingAnnotation first = firstClusterMentions.putIfAbsent(new ClusterKey(spelling), mention);
+            if (first != null && !first.annotation().value().equals(spelling)) {
+                model.getSyntaxIssues().add(new SyntaxIssue(mention.lineNumber(),
+                    "Cluster spelled '" + spelling + "' here and '" + first.annotation().value()
+                        + "' on line " + first.lineNumber() + "; they are one cluster",
+                    RULE_ANNOTATION_MIXED_CASE_CLUSTER));
             }
         }
         pending.clear();

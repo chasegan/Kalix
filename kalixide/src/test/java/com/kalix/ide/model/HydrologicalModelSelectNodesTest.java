@@ -24,9 +24,9 @@ class HydrologicalModelSelectNodesTest {
     @BeforeEach
     void setUp() {
         model = new HydrologicalModel();
-        model.addNode(new ModelNode("a", "gr4j", 0, 0, null));
-        model.addNode(new ModelNode("b", "gr4j", 10, 0, null));
-        model.addNode(new ModelNode("c", "outlet", 20, 0, null));
+        model.addNode(new ModelNode("a", "gr4j", 0, 0, null, null));
+        model.addNode(new ModelNode("b", "gr4j", 10, 0, null, null));
+        model.addNode(new ModelNode("c", "outlet", 20, 0, null, null));
         events = new ArrayList<>();
         model.addChangeListener(events::add);
     }

@@ -49,13 +49,14 @@ public class ToolBarBuilder {
         public final JToggleButton autoReloadToggleButton;
         public final JToggleButton gridlinesToggleButton;
         public final JToggleButton labelsToggleButton;
+        public final JToggleButton clusterBoxesToggleButton;
         public final JButton backButton;
         public final JButton forwardButton;
 
         public ToolBarComponents(JToolBar toolBar, JToggleButton fileTreeToggleButton,
                                  JToggleButton lintingToggleButton,
                                  JToggleButton autoReloadToggleButton, JToggleButton gridlinesToggleButton,
-                                 JToggleButton labelsToggleButton,
+                                 JToggleButton labelsToggleButton, JToggleButton clusterBoxesToggleButton,
                                  JButton backButton, JButton forwardButton) {
             this.toolBar = toolBar;
             this.fileTreeToggleButton = fileTreeToggleButton;
@@ -63,6 +64,7 @@ public class ToolBarBuilder {
             this.autoReloadToggleButton = autoReloadToggleButton;
             this.gridlinesToggleButton = gridlinesToggleButton;
             this.labelsToggleButton = labelsToggleButton;
+            this.clusterBoxesToggleButton = clusterBoxesToggleButton;
             this.backButton = backButton;
             this.forwardButton = forwardButton;
         }
@@ -208,14 +210,16 @@ public class ToolBarBuilder {
         JToggleButton autoReloadButton = createAutoReloadToggleButton();
         JToggleButton gridlinesButton = createGridToggleButton();
         JToggleButton labelsButton = createLabelsToggleButton();
+        JToggleButton clusterBoxesButton = createClusterBoxesToggleButton();
 
         toolBar.add(lintingButton);
         toolBar.add(autoReloadButton);
         toolBar.add(gridlinesButton);
         toolBar.add(labelsButton);
+        toolBar.add(clusterBoxesButton);
 
         return new ToolBarComponents(toolBar, fileTreeButton, lintingButton, autoReloadButton,
-            gridlinesButton, labelsButton, backButton, forwardButton);
+            gridlinesButton, labelsButton, clusterBoxesButton, backButton, forwardButton);
     }
 
     /**
@@ -526,6 +530,36 @@ public class ToolBarBuilder {
         labelsButton.setIcon(icon);
         labelsButton.setSelected(mode.drawsLabels());
         labelsButton.setToolTipText(labelModeTooltip(mode));
+    }
+
+    /**
+     * Creates the cluster-boxes button: selected while expanded clusters draw their boxes
+     * (clusters.md rule 6). Built like {@link #createGridToggleButton()}.
+     */
+    private JToggleButton createClusterBoxesToggleButton() {
+        JToggleButton boxesButton = new JToggleButton();
+        boxesButton.setFocusPainted(false);
+        FontIcon icon = FontIcon.of(FontAwesomeSolid.OBJECT_GROUP, AppConstants.TOOLBAR_ICON_SIZE);
+        icon.setIconColor(getThemeAwareIconColor());
+        boxesButton.setIcon(icon);
+        applyClusterBoxes(boxesButton, callbacks.isClusterBoxesVisible());
+
+        boxesButton.addActionListener(e -> {
+            boolean shown = !callbacks.isClusterBoxesVisible();
+            callbacks.toggleClusterBoxes(shown);
+            applyClusterBoxes(boxesButton, shown);
+        });
+
+        boxesButton.getAccessibleContext().setAccessibleName("Cluster boxes");
+        return boxesButton;
+    }
+
+    /** Sets the button's selection and tooltip to match whether boxes are shown. */
+    public static void applyClusterBoxes(JToggleButton boxesButton, boolean shown) {
+        boxesButton.setSelected(shown);
+        boxesButton.setToolTipText(shown
+            ? "Cluster boxes visible - click to hide"
+            : "Cluster boxes hidden - click to show");
     }
 
     /** The current mode and what the next click does, e.g. "Node labels: akas only - click to hide". */

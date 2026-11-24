@@ -5,7 +5,12 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
+import java.awt.Polygon;
+import java.awt.Rectangle;
+import java.awt.Shape;
 import java.awt.geom.AffineTransform;
+import java.awt.geom.Ellipse2D;
+import java.awt.geom.Rectangle2D;
 import com.kalix.ide.themes.NodeTheme;
 import com.kalix.ide.constants.UIConstants;
 
@@ -19,6 +24,10 @@ import com.kalix.ide.constants.UIConstants;
  * @version 1.0
  */
 public class NodeShapeRenderer {
+
+    /** The border of a selected node: the widest border the map draws round a shape. */
+    public static final BasicStroke SELECTED_BORDER =
+            new BasicStroke(UIConstants.Selection.NODE_SELECTED_STROKE_WIDTH);
 
     // Shape sizing constants - all shapes fit within NODE_SIZE x NODE_SIZE box
     private static final int NODE_SIZE = UIConstants.Map.NODE_SIZE;
@@ -260,6 +269,79 @@ public class NodeShapeRenderer {
         8,    // leaf bottom / stem top left
         0     // leaf left point, on the text line
     };
+
+    /**
+     * How far a node's drawing can reach from its centre along either axis, over every shape,
+     * with its selected border: what anything that must stay clear of a node allows for. The
+     * shapes aren't all within the node's box (the comment above is older than most of them),
+     * and a mitred corner carries a border past its vertex: the water drop's tip, the furthest,
+     * by about three times the border's half-width. Pure geometry, no display, so safe here.
+     */
+    public static final double REACH = reach(SELECTED_BORDER);
+
+    /** The reach of every shape with {@code border}: the furthest any of them extends. */
+    static double reach(BasicStroke border) {
+        double reach = 0;
+        for (NodeTheme.NodeShape shape : NodeTheme.NodeShape.values()) {
+            reach = Math.max(reach, reach(shape, border));
+        }
+        return reach;
+    }
+
+    /**
+     * The furthest {@code shape}'s outline, drawn with {@code border}, extends from the node's
+     * centre along either axis.
+     */
+    static double reach(NodeTheme.NodeShape shape, BasicStroke border) {
+        Rectangle2D bounds = border.createStrokedShape(outline(shape)).getBounds2D();
+        return Math.max(Math.max(-bounds.getMinX(), bounds.getMaxX()),
+                        Math.max(-bounds.getMinY(), bounds.getMaxY()));
+    }
+
+    /**
+     * The outline of {@code shape} centred on (0, 0), as {@link #renderShape} draws it: the
+     * same points, offsets and sizes, so the reach is the drawing's.
+     */
+    static Shape outline(NodeTheme.NodeShape shape) {
+        switch (shape) {
+            case CIRCLE:
+                return new Ellipse2D.Double(-NODE_RADIUS, -NODE_RADIUS, 2 * NODE_RADIUS, 2 * NODE_RADIUS);
+            case SQUARE:
+                return new Rectangle(-SQUARE_SIZE / 2, -SQUARE_SIZE / 2, SQUARE_SIZE, SQUARE_SIZE);
+            case DIAMOND:
+                return AffineTransform.getRotateInstance(Math.PI / 4).createTransformedShape(
+                        new Rectangle(-DIAMOND_SIZE / 2, -DIAMOND_SIZE / 2, DIAMOND_SIZE, DIAMOND_SIZE));
+            case TRIANGLE_DOWN:
+                return polygon(0, 0, TRIANGLE_DOWN_X, TRIANGLE_DOWN_Y);
+            case TRIANGLE_UP:
+                return polygon(0, 0, TRIANGLE_UP_X, TRIANGLE_UP_Y);
+            case TRIANGLE_RIGHT:
+                return polygon(0, 0, TRIANGLE_RIGHT_X, TRIANGLE_RIGHT_Y);
+            case TRIANGLE_LEFT:
+                return polygon(0, 0, TRIANGLE_LEFT_X, TRIANGLE_LEFT_Y);
+            case WATER_DROP:
+                return polygon(0, 0, WATER_DROP_X, WATER_DROP_Y);
+            case HEXAGON:
+                return polygon(0, 0, HEXAGON_X, HEXAGON_Y);
+            case PODIUM:
+                return polygon(PODIUM_OFFSET[0], PODIUM_OFFSET[1], PODIUM_X, PODIUM_Y);
+            case ARROW_DOWN:
+                return polygon(0, 0, ARROW_DOWN_X, ARROW_DOWN_Y);
+            case SPROUT:
+                return polygon(0, 0, SPROUT_X, SPROUT_Y);
+            default:
+                throw new IllegalArgumentException("no outline for " + shape);
+        }
+    }
+
+    /** The polygon {@link #renderPolygon} draws at {@code (centerX, centerY)}, points truncated as it does. */
+    private static Polygon polygon(double centerX, double centerY, int[] xCoords, int[] yCoords) {
+        Polygon polygon = new Polygon();
+        for (int i = 0; i < xCoords.length; i++) {
+            polygon.addPoint((int) (centerX + xCoords[i]), (int) (centerY + yCoords[i]));
+        }
+        return polygon;
+    }
 
     /**
      * Renders a node shape with the specified parameters.

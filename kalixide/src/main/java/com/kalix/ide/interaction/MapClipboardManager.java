@@ -6,6 +6,8 @@ import com.kalix.ide.model.NodeInsertionPoint;
 import com.kalix.ide.model.NodeSectionLocator;
 import com.kalix.ide.model.SectionSplice;
 import com.kalix.ide.editor.EnhancedTextEditor;
+import com.kalix.ide.linter.parsing.AnnotationKey;
+import com.kalix.ide.linter.parsing.IniSyntax;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,15 +35,17 @@ public class MapClipboardManager {
     private final HydrologicalModel model;
     private final EnhancedTextEditor textEditor;
     private final TextCoordinateUpdater textUpdater;
+    private final ClusterCollapseManager collapseManager;
 
     // Clipboard storage
     private ClipboardEntry clipboard;
 
     public MapClipboardManager(HydrologicalModel model, EnhancedTextEditor textEditor,
-                                TextCoordinateUpdater textUpdater) {
+                                TextCoordinateUpdater textUpdater, ClusterCollapseManager collapseManager) {
         this.model = model;
         this.textEditor = textEditor;
         this.textUpdater = textUpdater;
+        this.collapseManager = collapseManager;
     }
 
     /**
@@ -123,6 +127,13 @@ public class MapClipboardManager {
         // written there belong to NodeInsertionPoint and SectionSplice, exactly as for
         // template insertion.
         insertSectionBlock(ClipboardBlock.build(sections, suffix, offsetX, offsetY));
+
+        // A pasted node joins the cluster its annotation names; expanding that cluster lets
+        // the modeller see it (clusters.md rule 16).
+        List<String> clusters = pastedClusters(sections);
+        if (!clusters.isEmpty()) {
+            collapseManager.expand(clusters);
+        }
 
         // Clear clipboard after cut paste (can only paste once)
         if (clipboard.isCut()) {
@@ -221,6 +232,24 @@ public class MapClipboardManager {
             names.add(node.getName());
         }
         return names;
+    }
+
+    /** The clusters the pasted sections' {@code #@cluster} lines name, the last line of each counting. */
+    static List<String> pastedClusters(List<ClipboardEntry.NodeSectionData> sections) {
+        List<String> clusters = new ArrayList<>();
+        for (ClipboardEntry.NodeSectionData section : sections) {
+            String cluster = null;
+            for (String line : section.sectionText().split("\\R")) {
+                IniSyntax.Annotation annotation = IniSyntax.annotation(line);
+                if (annotation != null && annotation.key().equals(AnnotationKey.CLUSTER.key())) {
+                    cluster = annotation.value();
+                }
+            }
+            if (cluster != null && !cluster.isEmpty() && !clusters.contains(cluster)) {
+                clusters.add(cluster);
+            }
+        }
+        return clusters;
     }
 
     /** The names of the sections being pasted. */

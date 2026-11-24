@@ -13,6 +13,7 @@ import java.awt.Cursor;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Point;
+import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
@@ -23,9 +24,15 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.geom.Arc2D;
 import java.awt.image.BufferedImage;
+import java.util.ArrayList;
+import java.util.List;
 
+import com.kalix.ide.model.ClusterCollapse;
+import com.kalix.ide.rendering.ClusterHandles;
+import com.kalix.ide.rendering.MapLayers;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelNode;
+import com.kalix.ide.interaction.ClusterCollapseManager;
 import com.kalix.ide.interaction.LinkDragManager;
 import com.kalix.ide.interaction.MapClipboardManager;
 import com.kalix.ide.interaction.MapContextMenuManager;
@@ -83,6 +90,8 @@ public class MapPanel extends JPanel {
     // Click tracking for node navigation
     private Point clickStartPoint = null;
     private String clickedNodeName = null;
+    // The cluster whose icon, box name or proxy was pressed, for its navigation on release
+    private String clickedClusterName = null;
 
     // Rectangle selection state
     private boolean isRectangleSelecting = false;
@@ -114,7 +123,14 @@ public class MapPanel extends JPanel {
 
     // Display settings
     private boolean showGridlines = true;
+    private boolean showClusterBoxes = true;
     private NodeLabelMode labelMode = NodeLabelMode.NAMES;
+
+    /** Which clusters are collapsed, for this panel's model, for the session. */
+    private final ClusterCollapse clusterCollapse = new ClusterCollapse();
+
+    /** The one writer of {@link #clusterCollapse}; the panel repaints on each of its changes. */
+    private final ClusterCollapseManager collapseManager;
 
     /**
      * Node whose label changes because the mouse is over it. Only ever set while
@@ -123,6 +139,9 @@ public class MapPanel extends JPanel {
      * discarded (mouseMoved fires continuously; getNodeAtPoint is a linear scan).
      */
     private String hoveredNodeName = null;
+
+    /** As {@link #hoveredNodeName}, for a collapsed cluster's icon (clusters.md rule 8). */
+    private String hoveredClusterName = null;
 
     // Theme management (optional - for enhanced unified theme support)
 
@@ -154,9 +173,11 @@ public class MapPanel extends JPanel {
 
         TextCoordinateUpdater textUpdater = new TextCoordinateUpdater(textEditor);
         this.interactionManager = new MapInteractionManager(this, model, textUpdater);
-        this.clipboardManager = new MapClipboardManager(model, textEditor, textUpdater);
+        this.collapseManager = new ClusterCollapseManager(model, clusterCollapse);
+        collapseManager.addListener(this::repaint);
+        this.clipboardManager = new MapClipboardManager(model, textEditor, textUpdater, collapseManager);
         this.mapSearchManager = new MapSearchManager(this, model);
-        this.contextMenuManager = new MapContextMenuManager(this, interactionManager, model);
+        this.contextMenuManager = new MapContextMenuManager(this, interactionManager, model, collapseManager);
         this.contextMenuManager.setMapSearchManager(mapSearchManager);
         this.contextMenuManager.setClipboardManager(clipboardManager);
         this.contextMenuManager.setTextEditor(textEditor);
@@ -294,16 +315,19 @@ public class MapPanel extends JPanel {
                     // Request focus for keyboard events (delete key)
                     requestFocusInWindow();
                     
-                    // Check if clicking on a node first
-                    String nodeAtPoint = getNodeAtPoint(e.getPoint());
-                    
+                    // In the order of clusters.md, "Hit-testing": an icon, a node, then a
+                    // box name or proxy, each of which stands for its cluster.
+                    String clusterAtPoint = getClusterAtPoint(e.getPoint());
+                    String nodeAtPoint = clusterAtPoint == null ? getNodeAtPoint(e.getPoint()) : null;
+
                     // Store click information for potential navigation
                     clickStartPoint = new Point(e.getPoint());
                     clickedNodeName = nodeAtPoint;
-                    
+                    clickedClusterName = clusterAtPoint;
+
                     // A press in the ring just outside a node (not on any node) drags out a
                     // new link. Shift keeps its meaning of rectangle selection.
-                    String ringNode = nodeAtPoint == null && !e.isShiftDown()
+                    String ringNode = nodeAtPoint == null && clusterAtPoint == null && !e.isShiftDown()
                         ? linkDragManager.ringNodeAt(e.getPoint()) : null;
 
                     // Check for Ctrl+click rotation start (anywhere on the map)
@@ -312,6 +336,12 @@ public class MapPanel extends JPanel {
                         // Ctrl held with multiple nodes selected — start rotation
                         interactionManager.startDrag(e.getPoint(), true);
                         setCursor(rotateCursor());
+                    } else if (clusterAtPoint != null) {
+                        // As a node: a click on a selected cluster keeps the selection, for
+                        // a drag; navigation waits for the release.
+                        if (e.isShiftDown() || !isClusterSelected(clusterAtPoint)) {
+                            handleClusterSelection(clusterAtPoint, e.isShiftDown());
+                        }
                     } else if (nodeAtPoint != null) {
                         // Check if clicking on an already selected node
                         boolean nodeWasSelected = model.isNodeSelected(nodeAtPoint);
@@ -384,6 +414,13 @@ public class MapPanel extends JPanel {
                     if (!wasDragging && clickedNodeName != null && interactionManager != null) {
                         interactionManager.handleNodeClick(clickedNodeName);
                     }
+                    // A cluster's: the section of its first member in the file (clusters.md rule 11)
+                    if (!wasDragging && clickedClusterName != null && interactionManager != null) {
+                        List<String> members = model.getClusters().members(clickedClusterName);
+                        if (!members.isEmpty()) {
+                            interactionManager.handleNodeClick(members.get(0));
+                        }
+                    }
 
                     // Handle rectangle selection completion
                     if (isRectangleSelecting) {
@@ -398,6 +435,7 @@ public class MapPanel extends JPanel {
                     // Clear click tracking
                     clickStartPoint = null;
                     clickedNodeName = null;
+                    clickedClusterName = null;
                 }
             }
             
@@ -407,8 +445,9 @@ public class MapPanel extends JPanel {
                 // Leaving the panel must retract a hover-revealed label or link ring,
                 // otherwise it stays painted with the mouse nowhere near it.
                 boolean linkHoverChanged = linkDragManager.updateHover(null);
-                if (hoveredNodeName != null || linkHoverChanged) {
+                if (hoveredNodeName != null || hoveredClusterName != null || linkHoverChanged) {
                     hoveredNodeName = null;
+                    hoveredClusterName = null;
                     repaint();
                 } else {
                     repaintCoordinateOverlay();
@@ -449,11 +488,11 @@ public class MapPanel extends JPanel {
                     return;
                 }
 
-                // Check if we should start node dragging. A drag only starts once the
-                // mouse has moved past the click tolerance, so small jitters while
-                // clicking never displace the node.
+                // Check if we should start node dragging, from a node or a cluster. A drag
+                // only starts once the mouse has moved past the click tolerance, so small
+                // jitters while clicking never displace the node.
                 if (interactionManager != null && !interactionManager.isDragging() &&
-                    clickedNodeName != null && clickStartPoint != null &&
+                    (clickedNodeName != null || clickedClusterName != null) && clickStartPoint != null &&
                     e.getPoint().distance(clickStartPoint) >= UIConstants.Map.DRAG_START_THRESHOLD_PX &&
                     interactionManager.canStartDrag(clickStartPoint)) {
                     // Start drag operation now that we know it's actually a drag
@@ -510,11 +549,14 @@ public class MapPanel extends JPanel {
         boolean hoverChanged = updateHoveredNode(e.getPoint());
 
         // With Shift (rectangle select) or a rotation modifier held, a press would not
-        // draw a link, so no ring is offered.
+        // draw a link, so no ring is offered; nor over an icon, box name or proxy, which a
+        // press selects first (clusters.md, "Hit-testing").
         boolean isCtrlDown = e.isControlDown() || e.isMetaDown();
         boolean rotating = isCtrlDown && interactionManager != null
             && interactionManager.canStartRotation();
-        hoverChanged |= linkDragManager.updateHover(rotating || e.isShiftDown() ? null : e.getPoint());
+        boolean noRing = rotating || e.isShiftDown()
+            || getIconAtPoint(e.getPoint()) != null || getBoxNameAtPoint(e.getPoint()) != null;
+        hoverChanged |= linkDragManager.updateHover(noRing ? null : e.getPoint());
 
         // Show rotation cursor when Ctrl is held and multiple nodes are selected,
         // and a crosshair over a node's link ring. Only touch the cursor on a state
@@ -619,8 +661,13 @@ public class MapPanel extends JPanel {
         Point selectionCurrent = isRectangleSelecting ? rectangleCurrentPoint : null;
 
         mapRenderer.renderMap(g2d, getWidth(), getHeight(), zoomLevel, panX, panY,
-                             showGridlines, model, nodeTheme, selectionStart, selectionCurrent,
-                             mouseWorldX, mouseWorldY, mouseInPanel, labelMode, hoveredNodeName);
+                             showGridlines, showClusterBoxes, model, nodeTheme, selectionStart, selectionCurrent,
+                             mouseWorldX, mouseWorldY, mouseInPanel, labelMode, hoveredNodeName, hoveredClusterName,
+                             clusterCollapse);
+        List<ModelNode> ghosts = ghostNodes();
+        if (!ghosts.isEmpty()) {
+            mapRenderer.renderGhosts(g2d, ghosts, nodeTheme, zoomLevel, panX, panY);
+        }
         linkDragManager.paint(g2d);
 
         g2d.dispose();
@@ -709,6 +756,20 @@ public class MapPanel extends JPanel {
     }
 
     /**
+     * Sets whether expanded clusters draw their boxes. Hidden, a box's name and proxy go with
+     * it, and can't be clicked; members and collapsed icons are unchanged (clusters.md rule 6).
+     */
+    public void setShowClusterBoxes(boolean showClusterBoxes) {
+        this.showClusterBoxes = showClusterBoxes;
+        repaint();
+    }
+
+    /** Whether expanded clusters draw their boxes. */
+    public boolean isShowClusterBoxes() {
+        return showClusterBoxes;
+    }
+
+    /**
      * Sets which text is drawn under each node (see {@link NodeLabelMode}). In every
      * mode but names, the node under the mouse still reveals its name on hover, so a
      * node can always be identified without changing mode.
@@ -718,12 +779,37 @@ public class MapPanel extends JPanel {
         // A mode change makes any pending hover reveal meaningless, and a mode that
         // reveals must not inherit a hover computed under one that did not.
         this.hoveredNodeName = null;
+        this.hoveredClusterName = null;
         repaint();
     }
 
     /** The text drawn under each node. */
     public NodeLabelMode getLabelMode() {
         return labelMode;
+    }
+
+    /** Which clusters are collapsed, to read; changes go through {@link #getCollapseManager()}. */
+    public ClusterCollapse getClusterCollapse() {
+        return clusterCollapse;
+    }
+
+    /** The one writer of the collapse state. Its changes repaint the map. */
+    public ClusterCollapseManager getCollapseManager() {
+        return collapseManager;
+    }
+
+    /**
+     * Whether a node is hidden in a collapsed cluster. Hidden nodes and their links drop out
+     * of every hit-test: click, hover, the link ring and rectangle selection (clusters.md,
+     * "Hit-testing").
+     */
+    public boolean isHidden(String node) {
+        return clusterCollapse.isHidden(node, model.getClusters());
+    }
+
+    /** Whether a link is hidden: an end of it is. */
+    private boolean isHidden(com.kalix.ide.model.ModelLink link) {
+        return isHidden(link.getUpstreamTerminus()) || isHidden(link.getDownstreamTerminus());
     }
 
     /**
@@ -737,12 +823,21 @@ public class MapPanel extends JPanel {
      * @return true if the revealed node changed and the map needs repainting
      */
     private boolean updateHoveredNode(Point screenPoint) {
-        String hovered = labelMode.revealsOnHover() ? getNodeAtPoint(screenPoint) : null;
-        if (java.util.Objects.equals(hovered, hoveredNodeName)) {
+        // An icon is over any node under it, as for a click (clusters.md, "Hit-testing").
+        String icon = labelMode.revealsOnHover() ? getIconAtPoint(screenPoint) : null;
+        String hovered = labelMode.revealsOnHover() && icon == null ? getNodeAtPoint(screenPoint) : null;
+        if (java.util.Objects.equals(hovered, hoveredNodeName)
+                && java.util.Objects.equals(icon, hoveredClusterName)) {
             return false;
         }
         hoveredNodeName = hovered;
+        hoveredClusterName = icon;
         return true;
+    }
+
+    /** The collapsed cluster whose icon the mouse is over, when the label mode reveals on hover. */
+    String getHoveredClusterName() {
+        return hoveredClusterName;
     }
     
     /**
@@ -838,7 +933,14 @@ public class MapPanel extends JPanel {
 
     /**
      * Selects a node and centers the view on it, without triggering the
-     * map→editor scroll callback. Used by the editor's "Show on Map" action.
+     * map→editor scroll callback. Used by the editor's "Show on Map" action and by Find….
+     *
+     * <p>A member of a collapsed cluster is hidden, so its cluster is expanded first:
+     * otherwise the map would pan to empty space with a node selected that isn't drawn, for
+     * Delete or Cut to act on unseen. The selection rule (clusters.md rule 10) would expand
+     * it anyway when the cluster has other members, which are left unselected; expanding
+     * here also covers a cluster of one, which the rule would leave collapsed and selected,
+     * since the modeller asked for the node.</p>
      *
      * @param nodeName The name of the node to select and center on
      */
@@ -850,6 +952,10 @@ public class MapPanel extends JPanel {
         ModelNode node = model.getNode(nodeName);
         if (node == null) {
             return;
+        }
+
+        if (isHidden(nodeName)) {
+            collapseManager.expand(List.of(model.getClusters().clusterOf(nodeName)));
         }
 
         // Select the node (replace selection)
@@ -865,7 +971,8 @@ public class MapPanel extends JPanel {
     // Hit testing for node interaction
     
     /**
-     * Find the node at the given screen coordinates.
+     * Find the node at the given screen coordinates: the one drawn on top, so the layers
+     * are scanned in reverse of their drawing order, and hidden nodes are never found.
      * @param screenPoint Screen coordinates (mouse position)
      * @return Node name if found, null if no node at that position
      */
@@ -873,9 +980,13 @@ public class MapPanel extends JPanel {
         if (model == null) {
             return null;
         }
-        
-        // Check each node to see if the screen point is within its bounds
-        for (ModelNode node : model.getAllNodes()) {
+
+        List<ModelNode> drawn = new ArrayList<>();
+        for (MapLayers.Layer layer : MapLayers.of(model, clusterCollapse)) {
+            drawn.addAll(layer.nodes());
+        }
+        // Check each node, topmost first, to see if the screen point is within its bounds
+        for (ModelNode node : drawn.reversed()) {
             // Transform node world coordinates to screen coordinates
             double screenX = toScreenX(node.getX());
             double screenY = toScreenY(node.getY());
@@ -894,6 +1005,84 @@ public class MapPanel extends JPanel {
         return null;
     }
 
+    /** The collapsed cluster whose icon is drawn on top at the screen point, or null. */
+    public String getIconAtPoint(Point screenPoint) {
+        return ClusterHandles.at(ClusterHandles.icons(model, clusterCollapse, zoomLevel, panX, panY), screenPoint);
+    }
+
+    /**
+     * The expanded cluster whose box name, or proxy, is drawn on top at the screen point, or
+     * null. Neither is drawn with boxes hidden or in hidden label mode, nor the proxy when
+     * boxes show none.
+     */
+    public String getBoxNameAtPoint(Point screenPoint) {
+        NodeTheme.TextStyle textStyle = nodeTheme.getCurrentTextStyle();
+        return ClusterHandles.at(ClusterHandles.boxNames(model, clusterCollapse,
+            getFontMetrics(textStyle.getFont()), textStyle, labelMode, showClusterBoxes,
+            zoomLevel, panX, panY), screenPoint);
+    }
+
+    /**
+     * The map's drag and rotation handling — package-private, for tests: a rotation through
+     * the mouse needs a display, for its cursor.
+     */
+    MapInteractionManager interactionManagerForTests() {
+        return interactionManager;
+    }
+
+    /**
+     * The nodes drawn as ghosts: those being dragged or rotated that are hidden in a collapsed
+     * cluster. A visible node moves with the mouse, so it needs none.
+     */
+    List<ModelNode> ghostNodes() {
+        if (interactionManager == null || !interactionManager.isDragging()) {
+            return List.of();
+        }
+        List<ModelNode> ghosts = new ArrayList<>();
+        for (String name : interactionManager.getDraggedNodes()) {
+            ModelNode node = model.getNode(name);
+            if (node != null && isHidden(name)) {
+                ghosts.add(node);
+            }
+        }
+        return ghosts;
+    }
+
+    /**
+     * The cluster a press at the screen point acts on, or null: an icon, else, when no node is
+     * there, a box name or proxy (clusters.md, "Hit-testing").
+     */
+    public String getClusterAtPoint(Point screenPoint) {
+        String icon = getIconAtPoint(screenPoint);
+        if (icon != null || getNodeAtPoint(screenPoint) != null) {
+            return icon;
+        }
+        return getBoxNameAtPoint(screenPoint);
+    }
+
+    /** Whether every member of the cluster is selected, as a collapsed one is when selected. */
+    public boolean isClusterSelected(String cluster) {
+        return model.getSelectedNodes().containsAll(model.getClusters().members(cluster));
+    }
+
+    /**
+     * A click on a cluster's icon, box name or proxy, as {@link #handleNodeSelection} is on a
+     * node: it selects all the members; Shift adds them, or removes them when all are
+     * selected. Each is one change, so the selection rule never sees a cluster half selected
+     * (clusters.md rules 10, 11).
+     */
+    private void handleClusterSelection(String cluster, boolean addToSelection) {
+        List<String> members = model.getClusters().members(cluster);
+        if (addToSelection && isClusterSelected(cluster)) {
+            model.deselectNodes(members);
+            return;
+        }
+        if (!addToSelection) {
+            model.clearSelection();
+        }
+        model.selectNodes(members);
+    }
+
     /**
      * Find the link at the given screen coordinates.
      * @param screenPoint Screen coordinates (mouse position)
@@ -906,8 +1095,12 @@ public class MapPanel extends JPanel {
 
         final double LINK_HIT_TOLERANCE = 8.0; // pixels
 
-        // Check each link to see if the screen point is near the line
+        // Check each link to see if the screen point is near the line; a link drawn to an
+        // icon can't be selected (clusters.md, settled decision 12)
         for (com.kalix.ide.model.ModelLink link : model.getAllLinks()) {
+            if (isHidden(link)) {
+                continue;
+            }
             // Get upstream and downstream nodes
             com.kalix.ide.model.ModelNode upstreamNode = model.getNode(link.getUpstreamTerminus());
             com.kalix.ide.model.ModelNode downstreamNode = model.getNode(link.getDownstreamTerminus());
@@ -1187,6 +1380,14 @@ public class MapPanel extends JPanel {
     }
 
 
+    /** Whether the world point is inside the screen rectangle, edges included. */
+    private boolean contains(Rectangle rect, double worldX, double worldY) {
+        double screenX = toScreenX(worldX);
+        double screenY = toScreenY(worldY);
+        return screenX >= rect.x && screenX <= rect.x + rect.width
+            && screenY >= rect.y && screenY <= rect.y + rect.height;
+    }
+
     /**
      * Completes the rectangle selection by selecting all nodes and links within the rectangle.
      */
@@ -1211,22 +1412,28 @@ public class MapPanel extends JPanel {
             return; // Too small to be a meaningful selection
         }
 
-        // Find all nodes within the rectangle
+        // The nodes whose centre is inside, and every member of an icon drawn at a point
+        // inside, selected in one batch so the selection rule never sees an icon half
+        // selected (clusters.md rule 10).
+        Rectangle rect = new Rectangle(rectX, rectY, rectWidth, rectHeight);
+        List<String> inside = new ArrayList<>();
         for (ModelNode node : model.getAllNodes()) {
-            // Transform node world coordinates to screen coordinates
-            double screenX = toScreenX(node.getX());
-            double screenY = toScreenY(node.getY());
-
-            // Check if node center is within the rectangle
-            if (screenX >= rectX && screenX <= rectX + rectWidth &&
-                screenY >= rectY && screenY <= rectY + rectHeight) {
-                // Add to selection
-                model.selectNode(node.getName(), true); // Add to selection
+            if (!isHidden(node.getName()) && contains(rect, node.getX(), node.getY())) {
+                inside.add(node.getName());
             }
         }
+        for (MapLayers.Icon icon : MapLayers.icons(model, clusterCollapse)) {
+            if (contains(rect, icon.x(), icon.y())) {
+                inside.addAll(model.getClusters().members(icon.clusterName()));
+            }
+        }
+        model.selectNodes(inside);
 
         // Find all links within the rectangle (check if link midpoint or any part intersects)
         for (com.kalix.ide.model.ModelLink link : model.getAllLinks()) {
+            if (isHidden(link)) {
+                continue;
+            }
             // Get upstream and downstream nodes
             com.kalix.ide.model.ModelNode upstreamNode = model.getNode(link.getUpstreamTerminus());
             com.kalix.ide.model.ModelNode downstreamNode = model.getNode(link.getDownstreamTerminus());
