@@ -172,10 +172,10 @@ public class MapPanel extends JPanel {
 
         TextCoordinateUpdater textUpdater = new TextCoordinateUpdater(textEditor);
         this.interactionManager = new MapInteractionManager(this, model, textUpdater);
-        this.clipboardManager = new MapClipboardManager(model, textEditor, textUpdater);
-        this.mapSearchManager = new MapSearchManager(this, model);
         this.collapseManager = new ClusterCollapseManager(model, clusterCollapse);
         collapseManager.addListener(this::repaint);
+        this.clipboardManager = new MapClipboardManager(model, textEditor, textUpdater, collapseManager);
+        this.mapSearchManager = new MapSearchManager(this, model);
         this.contextMenuManager = new MapContextMenuManager(this, interactionManager, model, collapseManager);
         this.contextMenuManager.setMapSearchManager(mapSearchManager);
         this.contextMenuManager.setClipboardManager(clipboardManager);

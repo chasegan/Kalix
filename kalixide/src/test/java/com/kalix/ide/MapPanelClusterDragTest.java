@@ -121,10 +121,22 @@ class MapPanelClusterDragTest {
 
     /** The centre of north's box name, the last of its box handle shapes. */
     private Point boxName() {
+        return boxHandle(-1);
+    }
+
+    /** The centre of north's proxy, the first of its box handle shapes. */
+    private Point proxy() {
+        Point proxy = boxHandle(0);
+        Point name = boxName();
+        assertFalse(proxy.equals(name), "a proxy is drawn, apart from the name");
+        return proxy;
+    }
+
+    private Point boxHandle(int index) {
         NodeTheme.TextStyle style = new NodeTheme().getCurrentTextStyle();
         List<Rectangle2D> shapes = ClusterHandles.boxNames(model, panel.getClusterCollapse(),
                 panel.getFontMetrics(style.getFont()), style, NodeLabelMode.NAMES, 1, 0, 0).get(0).shapes();
-        Rectangle2D shape = shapes.get(shapes.size() - 1);
+        Rectangle2D shape = shapes.get(index < 0 ? shapes.size() - 1 : index);
         return new Point((int) shape.getCenterX(), (int) shape.getCenterY());
     }
 
@@ -180,6 +192,20 @@ class MapPanelClusterDragTest {
             assertEquals(80, x("n1"), 1e-9);
             assertEquals(120, x("n2"), 1e-9);
             assertEquals(0, x("x"), 1e-9);
+        });
+    }
+
+    @Test
+    void aDragFromAProxyMovesTheExpandedCluster() {
+        onEdt(() -> {
+            collapse(false);
+            Point proxy = proxy();
+
+            drag(proxy, offset(proxy, 0, 20));
+
+            assertEquals(120, model.getNode("n1").getY(), 1e-9);
+            assertEquals(120, model.getNode("n2").getY(), 1e-9);
+            assertEquals(100, model.getNode("x").getY(), 1e-9);
         });
     }
 

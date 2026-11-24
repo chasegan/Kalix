@@ -1,9 +1,10 @@
 # Node Clusters
 
-Status: **design settled; V1a (model and rules) and V1b (drawing) done: `#@cluster` is
-parsed and indexed, the map's menu offers Create, Add, Remove, Rename and Disband, and the
-map draws boxes and collapsed icons, with Collapse, Collapse all and Expand all on its
-menu; selecting, dragging and expanding one cluster wait for V1c** (stages below).
+Status: **design settled; the model, rules, drawing and interaction are done:
+`#@cluster` is parsed and indexed, the map's menu offers every cluster item, the map draws
+boxes, proxies and collapsed icons, and a cluster is selected and dragged from its icon,
+box name or proxy, rotated and deleted; the boxes toolbar button is still to come** (stages
+below).
 Issue [#476](https://github.com/chasegan/Kalix/issues/476).
 The present tense below describes the design. A few choices are marked for checking at
 user testing (see Context menu).
@@ -25,7 +26,7 @@ type = user
 
 A modeller works with clusters through the map's context menu: create, add to, remove
 from, rename, disband, collapse and expand, one cluster or all. A collapsed cluster can be
-dragged like a node, and an expanded one by its name. A toolbar button hides cluster
+dragged like a node, and an expanded one by its name or proxy. A toolbar button hides cluster
 boxes.
 
 A collapsed cluster draws as one icon at its members' centroid, a small stacked-card
@@ -148,8 +149,9 @@ small copy of its icon and its name at the box's top left.
 
 16. **Paste keeps the annotation,** so a pasted node joins the cluster of that name. Cut
     then Paste, or a paste into another model, recreates a cluster; Copy then Paste in the
-    same model adds to it; a model that already has the name joins it. A paste into a
-    collapsed cluster expands it, so the new node can be seen.
+    same model adds to it; a model that already has the name joins it. A paste on the map
+    expands every cluster it pastes into, so the new nodes can be seen (rule 3): a collapsed
+    one, and one the paste recreates, which would otherwise start collapsed (rule 5).
 
 17. **Rotate moves locations only,** as if the cluster were disbanded, the nodes rotated
     and the cluster put back. The rotation centre is computed from every member, not from
@@ -241,7 +243,8 @@ capitalisation keeps its state; entries are **never removed when a cluster vanis
 is the editor's own text undo followed by a reparse, so a cluster that undo brings back
 finds its old state. Create and Rename write entries explicitly: a new name starts
 collapsed, a rename to a new name copies the old name's state, and joining an existing
-cluster leaves its state alone. **The state has one writer**, `ClusterCollapseManager` on the
+cluster leaves its state alone. A paste on the map expands the clusters it pastes into
+(rule 16). **The state has one writer**, `ClusterCollapseManager` on the
 map panel: every collapse or expand, from the menu or from the selection rule, goes through
 it. It listens to the model and runs rule 10 after every selection event and reparse; a
 command writes the state, keeps the selection to rule 10, and tells the map once, after the
@@ -294,9 +297,12 @@ cards are hit as rectangles though drawn with rounded corners. No link ring is o
 an icon, box name or proxy.
 
 **Locations** (`TextCoordinateUpdater.updateNodeCoordinates`). A drag moves each member by
-the same offset, as one atomic edit, with dotted ghosts of the members while dragging or
-rotating. For now that writes the `loc` property; once the IDE implements ADR-0010 §8, it
-writes whichever form each member has.
+the same offset, as one atomic edit. It starts from a selected node, or from the icon, box
+name or proxy of a selected cluster, and the release after it doesn't move the editor. While
+dragging or rotating, members hidden in a collapsed cluster show as dotted ghosts in their
+shapes; an expanded cluster's members are visible, so they need none. For now a drag writes
+the `loc` property; once the IDE implements ADR-0010 §8, it writes whichever form each
+member has.
 
 ## Stages
 
@@ -309,8 +315,9 @@ writes whichever form each member has.
   `Collapse all clusters` and `Expand all clusters` came forward from V1c, so both states
   can be reached; hidden members drop out of hit-tests.
 - **V1c: interaction.** The rest of the menu (`Select nodes ▸ Cluster`, `Expand
-  cluster(s)`), selection (rule 10 in full), icon hit-testing (and so the icon label on
-  hover in hidden mode, rule 8), drag, rotate, Delete.
+  cluster(s)`), selection (rule 10 in full), the proxy, icon hit-testing (and so the icon
+  label on hover in hidden mode, rule 8), drag, rotate, Delete, and a paste expanding the
+  cluster it joins (rule 16).
 - **V1d: toolbar and menu bar.** The boxes setting and its preference. The last code stage,
   since nothing depends on it.
 - **V1e: docs.** A clusters section in `website/docs/docs/ide.md`, a release-note bullet.
@@ -326,7 +333,9 @@ writes whichever form each member has.
   undo twice, and the old `farm` returns collapsed, because the new one wrote over its entry.
 - Hand edits change how clusters show: renaming a cluster by find-and-replace makes a name
   with no entry, so it shows collapsed; typing a name passes through partial names at each
-  reparse; swapping two names swaps how they show.
+  reparse; swapping two names swaps how they show. Text pasted into the editor is a hand
+  edit too: a node pasted there into a collapsed cluster joins it hidden. Only a paste on the
+  map expands (rule 16).
 - A `#@region` above a member is cut or deleted with it, invisibly when the cluster is
   collapsed. True for single nodes today.
 
