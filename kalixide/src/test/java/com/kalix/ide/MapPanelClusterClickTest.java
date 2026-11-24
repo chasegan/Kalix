@@ -7,12 +7,15 @@ import com.kalix.ide.rendering.NodeLabelMode;
 import com.kalix.ide.themes.NodeTheme;
 import org.junit.jupiter.api.Test;
 
+import javax.swing.SwingUtilities;
+
 import java.awt.Cursor;
 import java.awt.Point;
 import java.awt.event.InputEvent;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.awt.geom.Rectangle2D;
+import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 import java.util.Set;
 
@@ -62,6 +65,21 @@ class MapPanelClusterClickTest {
         model.parseFromIniText(MODEL);
     }
 
+    /**
+     * Runs a test on the event thread. The editor queues a reparse there, and after it a zoom
+     * to fit; run from the test thread, they could land mid-test and move every point.
+     */
+    private static void onEdt(Runnable test) {
+        try {
+            SwingUtilities.invokeAndWait(test);
+        } catch (InvocationTargetException e) {
+            if (e.getCause() instanceof Error error) throw error;
+            throw new RuntimeException(e.getCause());
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     private void collapse(boolean collapsed) {
         panel.getClusterCollapse().setCollapsed(List.of("north"), collapsed);
     }
@@ -94,78 +112,92 @@ class MapPanelClusterClickTest {
 
     @Test
     void aClickOnAnIconSelectsItWholeAndGoesToItsFirstMember() {
-        collapse(true);
+        onEdt(() -> {
+            collapse(true);
 
-        click(ICON, false);
+            click(ICON, false);
 
-        assertEquals(Set.of("n1", "n2"), model.getSelectedNodes(), "the icon, over y");
-        assertTrue(panel.getClusterCollapse().isCollapsed("north"));
-        assertEquals(NORTH_SECTION, caret());
+            assertEquals(Set.of("n1", "n2"), model.getSelectedNodes(), "the icon, over y");
+            assertTrue(panel.getClusterCollapse().isCollapsed("north"));
+            assertEquals(NORTH_SECTION, caret());
+        });
     }
 
     @Test
     void aClickOnAnIconReplacesTheSelection() {
-        collapse(true);
-        model.selectNode("x", false);
+        onEdt(() -> {
+            collapse(true);
+            model.selectNode("x", false);
 
-        click(ICON, false);
+            click(ICON, false);
 
-        assertEquals(Set.of("n1", "n2"), model.getSelectedNodes());
+            assertEquals(Set.of("n1", "n2"), model.getSelectedNodes());
+        });
     }
 
     @Test
     void aClickOnASelectedIconKeepsTheSelection() {
-        collapse(true);
-        model.selectNodes(List.of("x", "n1", "n2"));
+        onEdt(() -> {
+            collapse(true);
+            model.selectNodes(List.of("x", "n1", "n2"));
 
-        click(ICON, false);
+            click(ICON, false);
 
-        assertEquals(Set.of("x", "n1", "n2"), model.getSelectedNodes(), "kept for a drag");
+            assertEquals(Set.of("x", "n1", "n2"), model.getSelectedNodes(), "kept for a drag");
+        });
     }
 
     @Test
     void shiftClickAddsAnIconThenTakesItAwayInOneChange() {
-        collapse(true);
-        model.selectNode("x", false);
+        onEdt(() -> {
+            collapse(true);
+            model.selectNode("x", false);
 
-        click(ICON, true);
-        assertEquals(Set.of("x", "n1", "n2"), model.getSelectedNodes());
+            click(ICON, true);
+            assertEquals(Set.of("x", "n1", "n2"), model.getSelectedNodes());
 
-        click(ICON, true);
-        assertEquals(Set.of("x"), model.getSelectedNodes());
-        assertTrue(panel.getClusterCollapse().isCollapsed("north"), "never half selected, so not expanded");
+            click(ICON, true);
+            assertEquals(Set.of("x"), model.getSelectedNodes());
+            assertTrue(panel.getClusterCollapse().isCollapsed("north"), "never half selected, so not expanded");
+        });
     }
 
     @Test
     void aClickOnABoxNameSelectsTheExpandedClusterAndGoesToItsFirstMember() {
-        collapse(false);
+        onEdt(() -> {
+            collapse(false);
 
-        click(boxHandle(-1), false);
+            click(boxHandle(-1), false);
 
-        assertEquals(Set.of("n1", "n2"), model.getSelectedNodes());
-        assertFalse(panel.getClusterCollapse().isCollapsed("north"));
-        assertEquals(NORTH_SECTION, caret());
+            assertEquals(Set.of("n1", "n2"), model.getSelectedNodes());
+            assertFalse(panel.getClusterCollapse().isCollapsed("north"));
+            assertEquals(NORTH_SECTION, caret());
+        });
     }
 
     @Test
     void aClickOnAProxySelectsTheExpandedCluster() {
-        collapse(false);
+        onEdt(() -> {
+            collapse(false);
 
-        click(boxHandle(0), false);
+            click(boxHandle(0), false);
 
-        assertEquals(Set.of("n1", "n2"), model.getSelectedNodes());
+            assertEquals(Set.of("n1", "n2"), model.getSelectedNodes());
+        });
     }
 
     @Test
     void shiftClickOnABoxNameAddsThenTakesAway() {
-        collapse(false);
-        model.selectNode("x", false);
+        onEdt(() -> {
+            collapse(false);
+            model.selectNode("x", false);
 
-        click(boxHandle(-1), true);
-        assertEquals(Set.of("x", "n1", "n2"), model.getSelectedNodes());
+            click(boxHandle(-1), true);
+            assertEquals(Set.of("x", "n1", "n2"), model.getSelectedNodes());
 
-        click(boxHandle(-1), true);
-        assertEquals(Set.of("x"), model.getSelectedNodes());
+            click(boxHandle(-1), true);
+            assertEquals(Set.of("x"), model.getSelectedNodes());
+        });
     }
 
     private void moveTo(Point point) {
@@ -175,61 +207,71 @@ class MapPanelClusterClickTest {
 
     @Test
     void inHiddenLabelModeTheIconUnderTheMouseIsHovered() {
-        collapse(true);
-        panel.setLabelMode(NodeLabelMode.HIDDEN);
+        onEdt(() -> {
+            collapse(true);
+            panel.setLabelMode(NodeLabelMode.HIDDEN);
 
-        moveTo(ICON);
-        assertEquals("north", panel.getHoveredClusterName(), "the icon, over y");
+            moveTo(ICON);
+            assertEquals("north", panel.getHoveredClusterName(), "the icon, over y");
 
-        moveTo(new Point(0, 100));
-        assertEquals(null, panel.getHoveredClusterName(), "x");
+            moveTo(new Point(0, 100));
+            assertEquals(null, panel.getHoveredClusterName(), "x");
+        });
     }
 
     @Test
     void noLinkRingIsOfferedOverAnIcon() {
-        // 11 px below y's centre: in its link ring, clear of every node, on north's icon.
-        Point nearY = new Point(120, 111);
-        Cursor crosshair = Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR);
+        onEdt(() -> {
+            // 11 px below y's centre: in its link ring, clear of every node, on north's icon.
+            Point nearY = new Point(120, 111);
+            Cursor crosshair = Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR);
 
-        collapse(false);
-        moveTo(nearY);
-        assertEquals(crosshair, panel.getCursor(), "y's ring, with no icon there");
+            collapse(false);
+            moveTo(nearY);
+            assertEquals(crosshair, panel.getCursor(), "y's ring, with no icon there");
 
-        collapse(true);
-        moveTo(nearY);
-        assertNotEquals(crosshair, panel.getCursor(), "the icon is over the ring");
+            collapse(true);
+            moveTo(nearY);
+            assertNotEquals(crosshair, panel.getCursor(), "the icon is over the ring");
+        });
     }
 
     @Test
     void aNodeDrawnOverABoxNameIsClickedFirst() {
-        collapse(false);
-        Point name = boxHandle(-1);
-        String withZ = MODEL + "\n[node.z]\ntype = gauge\nloc = " + name.x + ", " + name.y + "\n";
-        model.parseFromIniText(withZ);
+        onEdt(() -> {
+            collapse(false);
+            Point name = boxHandle(-1);
+            String withZ = MODEL + "\n[node.z]\ntype = gauge\nloc = " + name.x + ", " + name.y + "\n";
+            model.parseFromIniText(withZ);
 
-        click(name, false);
+            click(name, false);
 
-        assertEquals(Set.of("z"), model.getSelectedNodes());
+            assertEquals(Set.of("z"), model.getSelectedNodes());
+        });
     }
 
     @Test
     void inNamesModeNoIconIsHovered() {
-        collapse(true);
+        onEdt(() -> {
+            collapse(true);
 
-        moveTo(ICON);
+            moveTo(ICON);
 
-        assertEquals(null, panel.getHoveredClusterName(), "its name is always drawn");
+            assertEquals(null, panel.getHoveredClusterName(), "its name is always drawn");
+        });
     }
 
     @Test
     void inHiddenLabelModeABoxHasNoNameToClick() {
-        collapse(false);
-        Point name = boxHandle(-1);
-        panel.setLabelMode(NodeLabelMode.HIDDEN);
-        model.selectNode("x", false);
+        onEdt(() -> {
+            collapse(false);
+            Point name = boxHandle(-1);
+            panel.setLabelMode(NodeLabelMode.HIDDEN);
+            model.selectNode("x", false);
 
-        click(name, false);
+            click(name, false);
 
-        assertEquals(Set.of(), model.getSelectedNodes(), "empty map: the selection is cleared");
+            assertEquals(Set.of(), model.getSelectedNodes(), "empty map: the selection is cleared");
+        });
     }
 }

@@ -316,10 +316,8 @@ public class MapPanel extends JPanel {
                     
                     // In the order of clusters.md, "Hit-testing": an icon, a node, then a
                     // box name or proxy, each of which stands for its cluster.
-                    String iconAtPoint = getIconAtPoint(e.getPoint());
-                    String nodeAtPoint = iconAtPoint == null ? getNodeAtPoint(e.getPoint()) : null;
-                    String clusterAtPoint = iconAtPoint != null || nodeAtPoint != null
-                        ? iconAtPoint : getBoxNameAtPoint(e.getPoint());
+                    String clusterAtPoint = getClusterAtPoint(e.getPoint());
+                    String nodeAtPoint = clusterAtPoint == null ? getNodeAtPoint(e.getPoint()) : null;
 
                     // Store click information for potential navigation
                     clickStartPoint = new Point(e.getPoint());
@@ -489,11 +487,11 @@ public class MapPanel extends JPanel {
                     return;
                 }
 
-                // Check if we should start node dragging. A drag only starts once the
-                // mouse has moved past the click tolerance, so small jitters while
-                // clicking never displace the node.
+                // Check if we should start node dragging, from a node or a cluster. A drag
+                // only starts once the mouse has moved past the click tolerance, so small
+                // jitters while clicking never displace the node.
                 if (interactionManager != null && !interactionManager.isDragging() &&
-                    clickedNodeName != null && clickStartPoint != null &&
+                    (clickedNodeName != null || clickedClusterName != null) && clickStartPoint != null &&
                     e.getPoint().distance(clickStartPoint) >= UIConstants.Map.DRAG_START_THRESHOLD_PX &&
                     interactionManager.canStartDrag(clickStartPoint)) {
                     // Start drag operation now that we know it's actually a drag
@@ -665,6 +663,10 @@ public class MapPanel extends JPanel {
                              showGridlines, model, nodeTheme, selectionStart, selectionCurrent,
                              mouseWorldX, mouseWorldY, mouseInPanel, labelMode, hoveredNodeName, hoveredClusterName,
                              clusterCollapse);
+        List<ModelNode> ghosts = ghostNodes();
+        if (!ghosts.isEmpty()) {
+            mapRenderer.renderGhosts(g2d, ghosts, nodeTheme, zoomLevel, panX, panY);
+        }
         linkDragManager.paint(g2d);
 
         g2d.dispose();
@@ -1003,8 +1005,46 @@ public class MapPanel extends JPanel {
             getFontMetrics(textStyle.getFont()), textStyle, labelMode, zoomLevel, panX, panY), screenPoint);
     }
 
+    /**
+     * The map's drag and rotation handling — package-private, for tests: a rotation through
+     * the mouse needs a display, for its cursor.
+     */
+    MapInteractionManager interactionManagerForTests() {
+        return interactionManager;
+    }
+
+    /**
+     * The nodes drawn as ghosts: those being dragged or rotated that are hidden in a collapsed
+     * cluster. A visible node moves with the mouse, so it needs none.
+     */
+    List<ModelNode> ghostNodes() {
+        if (interactionManager == null || !interactionManager.isDragging()) {
+            return List.of();
+        }
+        List<ModelNode> ghosts = new ArrayList<>();
+        for (String name : interactionManager.getDraggedNodes()) {
+            ModelNode node = model.getNode(name);
+            if (node != null && isHidden(name)) {
+                ghosts.add(node);
+            }
+        }
+        return ghosts;
+    }
+
+    /**
+     * The cluster a press at the screen point acts on, or null: an icon, else, when no node is
+     * there, a box name or proxy (clusters.md, "Hit-testing").
+     */
+    public String getClusterAtPoint(Point screenPoint) {
+        String icon = getIconAtPoint(screenPoint);
+        if (icon != null || getNodeAtPoint(screenPoint) != null) {
+            return icon;
+        }
+        return getBoxNameAtPoint(screenPoint);
+    }
+
     /** Whether every member of the cluster is selected, as a collapsed one is when selected. */
-    private boolean isClusterSelected(String cluster) {
+    public boolean isClusterSelected(String cluster) {
         return model.getSelectedNodes().containsAll(model.getClusters().members(cluster));
     }
 

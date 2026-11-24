@@ -13,6 +13,7 @@ import java.awt.geom.AffineTransform;
 import java.awt.geom.Rectangle2D;
 import java.awt.geom.RoundRectangle2D;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -82,6 +83,11 @@ public class MapRenderer {
     private static final Color LINK_DRAG_COLOR = UIConstants.Selection.RECTANGLE_BORDER;
     private static final Color LINK_DRAG_REFUSED_COLOR = UIConstants.Selection.LINK_DRAG_REFUSED;
     private static final BasicStroke LINK_HANDLE_STROKE = new BasicStroke(2.0f);
+
+    // Ghosts of a collapsed cluster's members while it is dragged: the icon border's grey, dotted
+    static final Color GHOST_COLOR = ClusterIcon.BORDER;
+    static final BasicStroke GHOST_STROKE = new BasicStroke(1.5f, BasicStroke.CAP_BUTT,
+            BasicStroke.JOIN_MITER, 10.0f, new float[]{3.0f, 3.0f}, 0.0f);
 
     // Chevron arrow constants
     private static final double CHEVRON_SIZE = 8.0; // Size of chevron in pixels
@@ -622,6 +628,26 @@ public class MapRenderer {
         shapeRenderer.renderShapeText(g2d, shapeText, screenX, screenY, nodeShape, nodeColor, nodeTheme);
 
         // Reset stroke for next node
+        g2d.setStroke(DEFAULT_STROKE);
+    }
+
+    /**
+     * Draws a ghost of each node: its shape's outline, dotted and unfilled, where it is now.
+     * While a collapsed cluster is dragged or rotated, its hidden members are drawn this way
+     * so the modeller sees where they will land (clusters.md, "Locations"). In screen space,
+     * over everything else.
+     */
+    public void renderGhosts(Graphics2D g2d, Collection<ModelNode> nodes, NodeTheme nodeTheme,
+                             double zoomLevel, double panX, double panY) {
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2d.setColor(GHOST_COLOR);
+        g2d.setStroke(GHOST_STROKE);
+        for (ModelNode node : nodes) {
+            AffineTransform at = AffineTransform.getTranslateInstance(
+                    node.getX() * zoomLevel + panX, node.getY() * zoomLevel + panY);
+            NodeTheme.NodeShape shape = nodeTheme.getShapeForNodeType(node.getType());
+            g2d.draw(at.createTransformedShape(NodeShapeRenderer.outline(shape)));
+        }
         g2d.setStroke(DEFAULT_STROKE);
     }
 

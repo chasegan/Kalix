@@ -45,23 +45,37 @@ public class MapInteractionManager {
 
 
     /**
-     * Check if a drag operation can start at the given screen point.
-     * Dragging can start if clicking on a selected node.
+     * Check if a drag operation can start at the given screen point: on a selected node, or
+     * on the icon, box name or proxy of a selected cluster (clusters.md rule 11).
      * @param screenPoint Mouse press location
      * @return true if drag can start
      */
     public boolean canStartDrag(Point screenPoint) {
+        String clusterAtPoint = mapPanel.getClusterAtPoint(screenPoint);
+        if (clusterAtPoint != null) {
+            return mapPanel.isClusterSelected(clusterAtPoint);
+        }
         String nodeAtPoint = mapPanel.getNodeAtPoint(screenPoint);
         return nodeAtPoint != null && model.isNodeSelected(nodeAtPoint);
     }
 
     /**
-     * Check if a rotation operation can start.
-     * Rotation requires at least 2 selected nodes.
+     * Check if a rotation operation can start: at least two things selected, a collapsed
+     * cluster counting as one (clusters.md rule 17), as the menu decides it.
      * @return true if rotation can start
      */
     public boolean canStartRotation() {
-        return model.getSelectedNodeCount() >= 2;
+        // Every idle mouse move asks, so the usual case skips the rules.
+        if (model.getSelectedNodeCount() < 2) {
+            return false;
+        }
+        return ClusterMenuRules.of(model.getSelectedNodes(), model.getClusters(),
+            mapPanel.getCollapseManager().collapsedKeys(model.getClusters())).offersRotate();
+    }
+
+    /** The nodes being dragged or rotated, empty when no drag is on. */
+    public Set<String> getDraggedNodes() {
+        return Set.copyOf(originalNodePositions.keySet());
     }
 
     /**
