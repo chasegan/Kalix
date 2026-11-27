@@ -8,6 +8,7 @@ import com.kalix.ide.linter.parsing.INIModelParser;
 import com.kalix.ide.linter.schema.NodeTypeDefinition;
 import com.kalix.ide.linter.schema.ParameterDefinition;
 import com.kalix.ide.linter.schema.SectionDefinition;
+import com.kalix.ide.utils.EngineNames;
 import org.fife.ui.autocomplete.BasicCompletion;
 import org.fife.ui.autocomplete.Completion;
 import org.fife.ui.autocomplete.DefaultCompletionProvider;
@@ -17,8 +18,10 @@ import org.slf4j.LoggerFactory;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.JTextComponent;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -603,40 +606,55 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
             inputDataRegistry.refresh(inputFiles);
         }
 
+        Set<String> offered = new HashSet<>();
         for (String filePath : inputFiles) {
-            String cleansedName = cleanseFileName(filePath);
-            if (cleansedName.isEmpty()) {
-                continue;
-            }
+            addDataSourceCompletions(cleanseFileName(filePath), filePath, offered);
+        }
 
-            // by_index.1 completion (always available)
-            String byIndexText = "data." + cleansedName + ".by_index.1";
-            BasicCompletion byIndexCompletion = new BasicCompletion(this, byIndexText,
+        // The engine also registers each source under its sanitised alias.
+        for (Map.Entry<String, String> alias : model.getInputFileAliases().entrySet()) {
+            String filePath = alias.getValue();
+            if (filePath.isEmpty()) {
+                continue; // a bare declaration has no file behind it
+            }
+            addDataSourceCompletions(EngineNames.sanitize(alias.getKey()), filePath, offered);
+        }
+    }
+
+    // Offers by_index and by_name references for one source name, once per name.
+    private void addDataSourceCompletions(String sourceName, String filePath, Set<String> offered) {
+        if (sourceName.isEmpty() || !offered.add(sourceName)) {
+            return;
+        }
+
+        // by_index.1 completion (always available)
+        String byIndexText = "data." + sourceName + ".by_index.1";
+        BasicCompletion byIndexCompletion = new BasicCompletion(this, byIndexText,
+                null,
+                "<html><b>" + byIndexText + "</b>"
+                        + "<br><br>Data source: " + sourceName
+                        + "<br>File: " + filePath
+                        + "<br><br>Change the index number to select"
+                        + "<br>a different series from this file.</html>");
+        addCompletion(byIndexCompletion);
+
+        // by_name completions from cached file headers
+        if (inputDataRegistry == null) {
+            return;
+        }
+        InputDataRegistry.CachedDataSource cached = inputDataRegistry.getDataSources().get(filePath);
+        if (cached == null) {
+            return;
+        }
+        for (String seriesName : cached.getSeriesNames()) {
+            String byNameText = "data." + sourceName + ".by_name." + seriesName;
+            BasicCompletion byNameCompletion = new BasicCompletion(this, byNameText,
                     null,
-                    "<html><b>" + byIndexText + "</b>"
-                            + "<br><br>Data source: " + cleansedName
+                    "<html><b>" + byNameText + "</b>"
+                            + "<br><br>Data source: " + sourceName
                             + "<br>File: " + filePath
-                            + "<br><br>Change the index number to select"
-                            + "<br>a different series from this file.</html>");
-            addCompletion(byIndexCompletion);
-
-            // by_name completions from cached file headers
-            if (inputDataRegistry != null) {
-                InputDataRegistry.CachedDataSource cached =
-                        inputDataRegistry.getDataSources().get(filePath);
-                if (cached != null) {
-                    for (String seriesName : cached.getSeriesNames()) {
-                        String byNameText = "data." + cleansedName + ".by_name." + seriesName;
-                        BasicCompletion byNameCompletion = new BasicCompletion(this, byNameText,
-                                null,
-                                "<html><b>" + byNameText + "</b>"
-                                        + "<br><br>Data source: " + cleansedName
-                                        + "<br>File: " + filePath
-                                        + "<br>Series: " + seriesName + "</html>");
-                        addCompletion(byNameCompletion);
-                    }
-                }
-            }
+                            + "<br>Series: " + seriesName + "</html>");
+            addCompletion(byNameCompletion);
         }
     }
 
