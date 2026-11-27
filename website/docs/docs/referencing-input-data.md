@@ -43,6 +43,22 @@ Column indices start at 1 (the first data column after the date column).
 - `data.climate_csv.by_index.1` - also references the Rainfall column
 - `data.climate_csv.by_index.2` - references the Evaporation column
 
+### Aliases
+
+Write `alias = path` in `[data]` to give a file a shorter name:
+
+```
+[data]
+./data/climate.csv
+gauge = ./data/G8170008_MLd_avg_cleaned.csv
+```
+
+A file with an alias can be referenced by its alias or by its file name. The alias is sanitised like a file name (see below). If `G8170008_MLd_avg_cleaned.csv` has the header `Date,Value (ML/d)`, these references all name the same series:
+
+- `data.gauge.by_name.value__ml_d_`
+- `data.gauge.by_index.1`
+- `data.g8170008_mld_avg_cleaned_csv.by_name.value__ml_d_`
+
 ### Name Sanitisation
 
 Kalix sanitises filenames and column names to ensure valid references:
