@@ -1,8 +1,8 @@
 //! Simulation context tracking for panic error reporting
 //!
-//! This module provides thread-local storage for tracking the current simulation state.
-//! When a panic occurs during simulation, this context is used to provide helpful
-//! error messages indicating where the failure occurred.
+//! The phase is held in a thread-local, which the CLI's panic hook reads; the
+//! item that is running is held in `DataCache::context_item`. When a run
+//! panics, both name where it failed.
 
 use std::any::Any;
 use std::cell::Cell;
@@ -31,26 +31,22 @@ impl SimPhase {
     }
 }
 
-// Two independent Cells rather than a RefCell<struct>: the setters run per
-// node per timestep (hundreds of millions of times on a big run) and a Cell
-// store is a plain write - no borrow-flag check, no branch, nothing to poison
-// (per ADR-0004 §3.5: the context is written hot, read only
-// on the cold panic path).
+// The phase is set three times a step. The item is written per item into
+// `DataCache::context_item`, a plain field, not a thread-local.
 thread_local! {
     static SIM_PHASE: Cell<SimPhase> = const { Cell::new(SimPhase::Unknown) };
-    static SIM_NODE: Cell<usize> = const { Cell::new(NO_NODE) };
 }
 
-/// Sentinel value indicating no node is set (usize::MAX is never a valid node index)
-const NO_NODE: usize = usize::MAX;
+/// No item is running (usize::MAX is never a valid item, tagged or not)
+pub const NO_ITEM: usize = usize::MAX;
 
-/// A var block shares the node cell, tagged by the top bit (no model has 2^62 nodes)
+/// A var block's item is its index tagged by the top bit (no model has 2^62 nodes)
 const VAR_BLOCK_TAG: usize = 1 << (usize::BITS - 1);
 
-/// A [ras.*] section shares it too, tagged by the next bit
+/// A [ras.*] section's is tagged by the next bit
 const RAS_SECTION_TAG: usize = 1 << (usize::BITS - 2);
 
-/// What was running when the context was last set
+/// What was running when the item was last written
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ContextItem {
     Node(usize),
@@ -64,35 +60,27 @@ pub fn set_context_phase(phase: SimPhase) {
     SIM_PHASE.with(|c| c.set(phase));
 }
 
-/// Set the current node index
-#[inline]
-pub fn set_context_node(node_idx: usize) {
-    SIM_NODE.with(|c| c.set(node_idx));
+/// The raw item for a node
+#[inline(always)]
+pub const fn node_item(node_idx: usize) -> usize {
+    node_idx
 }
 
-/// Set the current var block index, so an error inside it names the block, not the last node
-#[inline]
-pub fn set_context_var_block(vb_idx: usize) {
-    SIM_NODE.with(|c| c.set(VAR_BLOCK_TAG | vb_idx));
+/// The raw item for a var block, so an error inside it names the block, not the last node
+#[inline(always)]
+pub const fn var_block_item(vb_idx: usize) -> usize {
+    VAR_BLOCK_TAG | vb_idx
 }
 
-/// Set the current [ras.*] section index
-#[inline]
-pub fn set_context_ras_section(ras_idx: usize) {
-    SIM_NODE.with(|c| c.set(RAS_SECTION_TAG | ras_idx));
+/// The raw item for a [ras.*] section
+#[inline(always)]
+pub const fn ras_section_item(ras_idx: usize) -> usize {
+    RAS_SECTION_TAG | ras_idx
 }
 
-/// Clear the current item, for work that is none of them (the step's accounting)
-#[inline]
-pub fn clear_context_item() {
-    SIM_NODE.with(|c| c.set(NO_NODE));
-}
-
-/// Get the raw context for error formatting
-pub fn get_context() -> (SimPhase, Option<ContextItem>) {
-    let phase = SIM_PHASE.with(|c| c.get());
-    let raw = SIM_NODE.with(|c| c.get());
-    let item = if raw == NO_NODE {
+/// Decode a raw item
+fn decode_item(raw: usize) -> Option<ContextItem> {
+    if raw == NO_ITEM {
         None
     } else if raw & VAR_BLOCK_TAG != 0 {
         Some(ContextItem::VarBlock(raw & !VAR_BLOCK_TAG))
@@ -100,14 +88,12 @@ pub fn get_context() -> (SimPhase, Option<ContextItem>) {
         Some(ContextItem::RasSection(raw & !RAS_SECTION_TAG))
     } else {
         Some(ContextItem::Node(raw))
-    };
-    (phase, item)
+    }
 }
 
-/// Clear the simulation context (called when simulation completes or before starting)
+/// Clear the simulation phase (called before a run, and when it completes or fails)
 pub fn clear_context() {
     SIM_PHASE.with(|c| c.set(SimPhase::Unknown));
-    SIM_NODE.with(|c| c.set(NO_NODE));
 }
 
 /// Check if we're currently inside a simulation (phase is not Unknown)
@@ -138,18 +124,21 @@ fn extract_panic_message(panic_info: Box<dyn Any + Send>) -> String {
     }
 }
 
-/// Format a simulation error with context information. `name_fn` gives the
-/// name of the node, var block or [ras.*] section the context points at.
+/// Format a simulation error with context information. `raw_item` is the
+/// last item written; `name_fn` gives the name of the node, var block or
+/// [ras.*] section it points at.
 pub fn format_simulation_error<F>(
     panic_info: Box<dyn Any + Send>,
     timestamp: u64,
+    raw_item: usize,
     name_fn: F,
 ) -> String
 where
     F: Fn(ContextItem) -> Option<String>,
 {
     let panic_msg = extract_panic_message(panic_info);
-    let (phase, item) = get_context();
+    let phase = SIM_PHASE.with(|c| c.get());
+    let item = decode_item(raw_item);
     let timestamp_str = u64_to_auto_datetime_string(timestamp);
 
     let item_str = match item {

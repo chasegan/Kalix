@@ -30,7 +30,7 @@
 
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
-use crate::misc::simulation_context::set_context_node;
+use crate::misc::simulation_context::node_item;
 use crate::nodes::{Link, Node, NodeEnum};
 use crate::numerical::fifo_buffer::FifoBuffer;
 
@@ -450,8 +450,8 @@ impl SimpleNodewiseOrderingSystem {
         let node_idx = entry.node_idx;
         let incoming = &self.flat_incoming_links[entry.links_start..entry.links_end];
 
-        // Set node context for error reporting
-        set_context_node(node_idx);
+        // Name this node if it fails
+        data_cache.context_item = node_item(node_idx);
 
         // Every link points down the file (check_execution_order), so the nodes this one
         // sends orders to all sit before it. Splitting the slice there lets this node be

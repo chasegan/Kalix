@@ -137,6 +137,9 @@ mod test_fn_section_io;
 mod test_fn_inline;
 
 #[cfg(test)]
+mod test_error_context;
+
+#[cfg(test)]
 mod test_var_blocks;
 
 #[cfg(test)]

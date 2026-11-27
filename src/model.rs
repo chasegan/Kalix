@@ -7,8 +7,8 @@ use crate::io::error::KalixIoError;
 use crate::io::pixie_io;
 use crate::misc::configuration::Configuration;
 use crate::misc::simulation_context::{
-    clear_context, clear_context_item, format_simulation_error, set_context_node,
-    set_context_phase, set_context_ras_section, set_context_var_block, ContextItem, SimPhase,
+    clear_context, format_simulation_error, node_item, ras_section_item, set_context_phase,
+    var_block_item, ContextItem, SimPhase, NO_ITEM,
 };
 use crate::model_inputs::DynamicInput;
 use crate::nodes::node_enum::MAX_OUTLETS;
@@ -842,6 +842,7 @@ impl Model {
 
         // Clear any stale simulation context
         clear_context();
+        self.data_cache.context_item = NO_ITEM;
 
         //Calculate total steps for progress reporting
         let total_steps = ((self.configuration.sim_end_timestamp
@@ -851,9 +852,9 @@ impl Model {
 
         //Run all timesteps. catch_unwind wraps the WHOLE loop, not each step:
         //one landing pad instead of one per timestep, and no per-step
-        //optimisation barrier. Error reporting is unchanged - the simulation
-        //context is thread-local, and data_cache.current_timestamp still holds
-        //the failing step's timestamp after the unwind.
+        //optimisation barrier. Error reporting is unchanged - the phase is
+        //thread-local, and data_cache still holds the failing item and the
+        //step's timestamp after the unwind.
         self.data_cache.expr_state.reset(); // expression state to init templates (fresh run)
         self.data_cache.set_current_step(0);
         let outcome = catch_unwind(AssertUnwindSafe(|| {
@@ -884,15 +885,20 @@ impl Model {
                 clear_context();
                 Ok(completed)
             }
-            Err(panic_info) => Err(format_simulation_error(
-                panic_info,
-                self.data_cache.current_timestamp,
-                |item| match item {
-                    ContextItem::Node(idx) => self.nodes.get(idx).map(|n| n.get_name().to_string()),
-                    ContextItem::VarBlock(idx) => self.var_blocks.get(idx).map(|vb| vb.name.clone()),
-                    ContextItem::RasSection(idx) => self.ras_systems.get(idx).map(|r| r.name.clone()),
-                },
-            )),
+            Err(panic_info) => {
+                let message = format_simulation_error(
+                    panic_info,
+                    self.data_cache.current_timestamp,
+                    self.data_cache.context_item,
+                    |item| match item {
+                        ContextItem::Node(idx) => self.nodes.get(idx).map(|n| n.get_name().to_string()),
+                        ContextItem::VarBlock(idx) => self.var_blocks.get(idx).map(|vb| vb.name.clone()),
+                        ContextItem::RasSection(idx) => self.ras_systems.get(idx).map(|r| r.name.clone()),
+                    },
+                );
+                clear_context();
+                Err(message)
+            }
         }
     }
 
@@ -1117,7 +1123,7 @@ impl Model {
             for i in 0..self.ras_slot.len() {
                 match self.ras_slot[i] {
                     RasSlotItem::VarBlock(vb_idx) => {
-                        set_context_var_block(vb_idx);
+                        self.data_cache.context_item = var_block_item(vb_idx);
                         for def_idx in 0..self.var_blocks[vb_idx].defs.len() {
                             let value = self.var_blocks[vb_idx].defs[def_idx]
                                 .input
@@ -1127,13 +1133,13 @@ impl Model {
                         }
                     }
                     RasSlotItem::Ras(ras_idx) => {
-                        set_context_ras_section(ras_idx);
+                        self.data_cache.context_item = ras_section_item(ras_idx);
                         self.ras_systems[ras_idx].run(&mut self.data_cache, &mut self.account_manager);
                     }
                 }
             }
             // The step's accounting below is no slot item
-            clear_context_item();
+            self.data_cache.context_item = NO_ITEM;
         }
 
         // Post-policy, pre-take snapshot: publishes acc.*.opening_balance and
@@ -1158,7 +1164,7 @@ impl Model {
                 &mut self.data_cache,
                 &mut self.account_manager,
                 |vb_idx, data_cache| {
-                    set_context_var_block(vb_idx);
+                    data_cache.context_item = var_block_item(vb_idx);
                     for def in &var_blocks[vb_idx].defs {
                         let value = def.input.get_value(data_cache);
                         data_cache.add_value_at_index(def.series_idx, value);
@@ -1184,8 +1190,8 @@ impl Model {
             for &step in &self.execution_order {
                 let node_idx = step.node as usize;
 
-                // Set node context for error reporting (just stores the index)
-                set_context_node(node_idx);
+                // Name this node if it fails (a plain store)
+                self.data_cache.context_item = node_item(node_idx);
 
                 // Run the node's flow phase
                 self.nodes[node_idx]
@@ -1213,7 +1219,7 @@ impl Model {
                 match exec_item {
                     FlowExecItem::Node(step) => {
                         let node_idx = step.node as usize;
-                        set_context_node(node_idx);
+                        self.data_cache.context_item = node_item(node_idx);
                         self.nodes[node_idx]
                             .run_flow_phase(&mut self.data_cache, &mut self.account_manager);
                         while next_transfer < step.transfers_end as usize {
@@ -1233,7 +1239,7 @@ impl Model {
                         // Evaluate the block's definitions top to bottom,
                         // each written to its series — computed exactly once
                         // per step, so every reader observes one value.
-                        set_context_var_block(vb_idx);
+                        self.data_cache.context_item = var_block_item(vb_idx);
                         for def_idx in 0..self.var_blocks[vb_idx].defs.len() {
                             let value = self.var_blocks[vb_idx].defs[def_idx]
                                 .input
